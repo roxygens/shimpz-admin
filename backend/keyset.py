@@ -62,6 +62,15 @@ SCHEMA = (
         "help": "Comma-separated zones Shimpz manages (optional allowlist).",
     },
     {
+        "key": "SHIMPZ_CF_TUNNEL_ID",
+        "group": "cloudflare",
+        "required": False,
+        "generate": False,
+        "secret": False,
+        "validator": "re:[0-9a-f-]{36}",
+        "help": "Pin this Space's Tunnel id (needed only when the account owns more than one tunnel).",
+    },
+    {
         "key": "CF_TUNNEL_TOKEN",
         "group": "cloudflare",
         "required": False,
