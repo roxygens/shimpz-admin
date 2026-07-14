@@ -84,16 +84,6 @@ export const messages = {
       enable: 'Enable',
       disable: 'Disable',
     },
-    claudeLogin: {
-      signIn: 'Sign in with your Claude subscription',
-      authorize: 'Open this link to authorize',
-      pasteCode: 'Paste the authorization code',
-      connect: 'Connect',
-      connectedAs: 'Connected as {email}',
-      orApiKey: 'or paste an API key below',
-      pending: 'Starting sign-in…',
-      failed: 'Sign-in failed — please try again.',
-    },
     fields: {
       TELEGRAM_BOT_TOKEN: {
         help: 'The token @BotFather gives you when you create a bot.',
@@ -113,17 +103,8 @@ export const messages = {
           'Paste it here; add more IDs comma-separated to allow other people.',
         ],
       },
-      ANTHROPIC_API_KEY: {
-        help: 'Optional pay-per-token brain key — or skip it and log in with your Claude subscription.',
-        linkLabel: 'Anthropic Console → API Keys',
-        steps: [
-          'Sign in at console.anthropic.com → Settings → API Keys.',
-          'Create a key, name it “shimpz-brain”, copy the sk-ant-… value.',
-          'Or skip this and run `claude` once inside the container to use your subscription.',
-        ],
-      },
-      OPENAI_API_KEY: {
-        help: 'Optional — powers Telegram voice (speech ↔ text) and image generation.',
+      SHIMPZ_OPENAI_MEDIA_API_KEY: {
+        help: 'Optional platform media key — powers Telegram voice and image generation only; never a Brain or Capsule.',
         linkLabel: 'OpenAI → API keys',
         steps: [
           'Sign in at platform.openai.com → API keys.',
@@ -153,14 +134,6 @@ export const messages = {
         steps: [
           'Zero Trust → Networks → Tunnels → create a tunnel named “shimpz-brain”.',
           'On “Install connector”, copy the long string after --token.',
-        ],
-      },
-      GITHUB_TOKEN: {
-        help: 'Optional — lets Shimpz push its own project repositories.',
-        linkLabel: 'GitHub → Tokens',
-        steps: [
-          'Settings → Developer settings → Personal access tokens.',
-          'Generate a token with `repo` scope and copy it.',
         ],
       },
       R2_ACCOUNT_ID: {
@@ -261,16 +234,6 @@ export const messages = {
       enable: 'Ativar',
       disable: 'Desativar',
     },
-    claudeLogin: {
-      signIn: 'Entrar com sua assinatura Claude',
-      authorize: 'Abra este link para autorizar',
-      pasteCode: 'Cole o código de autorização',
-      connect: 'Conectar',
-      connectedAs: 'Conectado como {email}',
-      orApiKey: 'ou cole uma chave de API abaixo',
-      pending: 'Iniciando o login…',
-      failed: 'Falha no login — tente novamente.',
-    },
     fields: {
       TELEGRAM_BOT_TOKEN: {
         help: 'O token que o @BotFather te dá ao criar um bot.',
@@ -290,17 +253,8 @@ export const messages = {
           'Cole aqui; separe por vírgula para autorizar mais pessoas.',
         ],
       },
-      ANTHROPIC_API_KEY: {
-        help: 'Chave do cérebro por token (opcional) — ou pule e faça login com sua assinatura Claude.',
-        linkLabel: 'Console Anthropic → API Keys',
-        steps: [
-          'Entre em console.anthropic.com → Settings → API Keys.',
-          'Crie uma chave “shimpz-brain” e copie o valor sk-ant-… .',
-          'Ou pule e rode `claude` uma vez dentro do container para usar sua assinatura.',
-        ],
-      },
-      OPENAI_API_KEY: {
-        help: 'Opcional — habilita voz no Telegram (fala ↔ texto) e geração de imagens.',
+      SHIMPZ_OPENAI_MEDIA_API_KEY: {
+        help: 'Chave opcional de mídia da plataforma — só habilita voz e imagens; nunca um Cérebro ou Cápsula.',
         linkLabel: 'OpenAI → API keys',
         steps: [
           'Entre em platform.openai.com → API keys.',
@@ -330,14 +284,6 @@ export const messages = {
         steps: [
           'Zero Trust → Networks → Tunnels → crie um túnel “shimpz-brain”.',
           'Em “Install connector”, copie a string longa após --token.',
-        ],
-      },
-      GITHUB_TOKEN: {
-        help: 'Opcional — permite o Shimpz dar push nos repositórios dos próprios projetos.',
-        linkLabel: 'GitHub → Tokens',
-        steps: [
-          'Settings → Developer settings → Personal access tokens.',
-          'Gere um token com escopo `repo` e copie.',
         ],
       },
       R2_ACCOUNT_ID: {
@@ -438,16 +384,6 @@ export const messages = {
       enable: 'Activar',
       disable: 'Desactivar',
     },
-    claudeLogin: {
-      signIn: 'Inicia sesión con tu suscripción Claude',
-      authorize: 'Abre este enlace para autorizar',
-      pasteCode: 'Pega el código de autorización',
-      connect: 'Conectar',
-      connectedAs: 'Conectado como {email}',
-      orApiKey: 'o pega una clave de API abajo',
-      pending: 'Iniciando sesión…',
-      failed: 'Error al iniciar sesión — inténtalo de nuevo.',
-    },
     fields: {
       TELEGRAM_BOT_TOKEN: {
         help: 'El token que te da @BotFather al crear un bot.',
@@ -467,17 +403,8 @@ export const messages = {
           'Pégalo aquí; separa por comas para autorizar a más personas.',
         ],
       },
-      ANTHROPIC_API_KEY: {
-        help: 'Clave del cerebro por token (opcional) — u omítela e inicia sesión con tu suscripción Claude.',
-        linkLabel: 'Consola Anthropic → API Keys',
-        steps: [
-          'Entra en console.anthropic.com → Settings → API Keys.',
-          'Crea una clave “shimpz-brain” y copia el valor sk-ant-… .',
-          'O omítela y ejecuta `claude` una vez dentro del contenedor para usar tu suscripción.',
-        ],
-      },
-      OPENAI_API_KEY: {
-        help: 'Opcional — habilita voz en Telegram (voz ↔ texto) y generación de imágenes.',
+      SHIMPZ_OPENAI_MEDIA_API_KEY: {
+        help: 'Clave multimedia opcional de la plataforma — solo voz e imágenes; nunca un Cerebro ni una Cápsula.',
         linkLabel: 'OpenAI → API keys',
         steps: [
           'Entra en platform.openai.com → API keys.',
@@ -507,14 +434,6 @@ export const messages = {
         steps: [
           'Zero Trust → Networks → Tunnels → crea un túnel “shimpz-brain”.',
           'En “Install connector”, copia la cadena larga tras --token.',
-        ],
-      },
-      GITHUB_TOKEN: {
-        help: 'Opcional — deja que Shimpz haga push de sus propios repositorios.',
-        linkLabel: 'GitHub → Tokens',
-        steps: [
-          'Settings → Developer settings → Personal access tokens.',
-          'Genera un token con alcance `repo` y cópialo.',
         ],
       },
       R2_ACCOUNT_ID: {
@@ -615,16 +534,6 @@ export const messages = {
       enable: '启用',
       disable: '停用',
     },
-    claudeLogin: {
-      signIn: '使用你的 Claude 订阅登录',
-      authorize: '打开此链接进行授权',
-      pasteCode: '粘贴授权码',
-      connect: '连接',
-      connectedAs: '已连接为 {email}',
-      orApiKey: '或在下方粘贴 API 密钥',
-      pending: '正在开始登录…',
-      failed: '登录失败——请重试。',
-    },
     fields: {
       TELEGRAM_BOT_TOKEN: {
         help: '创建机器人时 @BotFather 给你的令牌。',
@@ -644,17 +553,8 @@ export const messages = {
           '粘贴到此处；用逗号分隔可授权更多人。',
         ],
       },
-      ANTHROPIC_API_KEY: {
-        help: '可选的按量计费大脑密钥——或跳过，用你的 Claude 订阅登录。',
-        linkLabel: 'Anthropic 控制台 → API Keys',
-        steps: [
-          '登录 console.anthropic.com → Settings → API Keys。',
-          '创建一个名为 “shimpz-brain” 的密钥，复制 sk-ant-… 值。',
-          '或跳过，在容器内运行一次 `claude` 以使用订阅。',
-        ],
-      },
-      OPENAI_API_KEY: {
-        help: '可选——用于 Telegram 语音（语音↔文字）和图像生成。',
+      SHIMPZ_OPENAI_MEDIA_API_KEY: {
+        help: '可选的平台媒体密钥——仅用于 Telegram 语音和图像；绝不会注入大脑或胶囊。',
         linkLabel: 'OpenAI → API keys',
         steps: [
           '登录 platform.openai.com → API keys。',
@@ -684,14 +584,6 @@ export const messages = {
         steps: [
           'Zero Trust → Networks → Tunnels → 创建名为 “shimpz-brain” 的隧道。',
           '在 “Install connector” 处，复制 --token 后的长字符串。',
-        ],
-      },
-      GITHUB_TOKEN: {
-        help: '可选——让 Shimpz 推送自己项目的仓库。',
-        linkLabel: 'GitHub → Tokens',
-        steps: [
-          'Settings → Developer settings → Personal access tokens。',
-          '生成带 `repo` 权限的令牌并复制。',
         ],
       },
       R2_ACCOUNT_ID: {
@@ -792,16 +684,6 @@ export const messages = {
       enable: 'Activer',
       disable: 'Désactiver',
     },
-    claudeLogin: {
-      signIn: 'Se connecter avec votre abonnement Claude',
-      authorize: 'Ouvrez ce lien pour autoriser',
-      pasteCode: 'Collez le code d’autorisation',
-      connect: 'Connecter',
-      connectedAs: 'Connecté en tant que {email}',
-      orApiKey: 'ou collez une clé API ci-dessous',
-      pending: 'Démarrage de la connexion…',
-      failed: 'Échec de la connexion — réessayez.',
-    },
     fields: {
       TELEGRAM_BOT_TOKEN: {
         help: 'Le jeton que @BotFather vous donne à la création d’un bot.',
@@ -821,17 +703,8 @@ export const messages = {
           'Collez-le ici ; séparez par des virgules pour autoriser d’autres personnes.',
         ],
       },
-      ANTHROPIC_API_KEY: {
-        help: 'Clé cerveau à l’usage (optionnelle) — ou ignorez et connectez-vous avec votre abonnement Claude.',
-        linkLabel: 'Console Anthropic → API Keys',
-        steps: [
-          'Connectez-vous à console.anthropic.com → Settings → API Keys.',
-          'Créez une clé « shimpz-brain » et copiez la valeur sk-ant-… .',
-          'Ou ignorez et lancez `claude` une fois dans le conteneur pour l’abonnement.',
-        ],
-      },
-      OPENAI_API_KEY: {
-        help: 'Optionnel — active la voix Telegram (voix ↔ texte) et la génération d’images.',
+      SHIMPZ_OPENAI_MEDIA_API_KEY: {
+        help: 'Clé média de plateforme facultative — voix et images uniquement, jamais un Cerveau ou une Capsule.',
         linkLabel: 'OpenAI → API keys',
         steps: [
           'Connectez-vous à platform.openai.com → API keys.',
@@ -861,14 +734,6 @@ export const messages = {
         steps: [
           'Zero Trust → Networks → Tunnels → créez un tunnel « shimpz-brain ».',
           'Sur « Install connector », copiez la longue chaîne après --token.',
-        ],
-      },
-      GITHUB_TOKEN: {
-        help: 'Optionnel — laisse Shimpz pousser ses propres dépôts de projets.',
-        linkLabel: 'GitHub → Tokens',
-        steps: [
-          'Settings → Developer settings → Personal access tokens.',
-          'Générez un jeton avec la portée `repo` et copiez-le.',
         ],
       },
       R2_ACCOUNT_ID: {
@@ -969,16 +834,6 @@ export const messages = {
       enable: 'Aktivieren',
       disable: 'Deaktivieren',
     },
-    claudeLogin: {
-      signIn: 'Mit deinem Claude-Abo anmelden',
-      authorize: 'Öffne diesen Link zum Autorisieren',
-      pasteCode: 'Füge den Autorisierungscode ein',
-      connect: 'Verbinden',
-      connectedAs: 'Verbunden als {email}',
-      orApiKey: 'oder füge unten einen API-Schlüssel ein',
-      pending: 'Anmeldung wird gestartet…',
-      failed: 'Anmeldung fehlgeschlagen — bitte erneut versuchen.',
-    },
     fields: {
       TELEGRAM_BOT_TOKEN: {
         help: 'Das Token, das dir @BotFather beim Erstellen eines Bots gibt.',
@@ -998,17 +853,8 @@ export const messages = {
           'Hier einfügen; mit Kommas trennen, um weitere Personen zu erlauben.',
         ],
       },
-      ANTHROPIC_API_KEY: {
-        help: 'Optionaler Pay-per-Token-Hirnschlüssel — oder überspringen und mit dem Claude-Abo anmelden.',
-        linkLabel: 'Anthropic-Konsole → API Keys',
-        steps: [
-          'Melde dich bei console.anthropic.com → Settings → API Keys an.',
-          'Erstelle einen Schlüssel „shimpz-brain“ und kopiere den sk-ant-…-Wert.',
-          'Oder überspringen und einmal `claude` im Container ausführen fürs Abo.',
-        ],
-      },
-      OPENAI_API_KEY: {
-        help: 'Optional — treibt Telegram-Sprache (Sprache ↔ Text) und Bildgenerierung an.',
+      SHIMPZ_OPENAI_MEDIA_API_KEY: {
+        help: 'Optionaler Plattform-Medienschlüssel — nur Sprache und Bilder, nie ein Brain oder eine Capsule.',
         linkLabel: 'OpenAI → API keys',
         steps: [
           'Melde dich bei platform.openai.com → API keys an.',
@@ -1038,14 +884,6 @@ export const messages = {
         steps: [
           'Zero Trust → Networks → Tunnels → erstelle einen Tunnel „shimpz-brain“.',
           'Bei „Install connector“ die lange Zeichenkette nach --token kopieren.',
-        ],
-      },
-      GITHUB_TOKEN: {
-        help: 'Optional — lässt Shimpz seine eigenen Projekt-Repos pushen.',
-        linkLabel: 'GitHub → Tokens',
-        steps: [
-          'Settings → Developer settings → Personal access tokens.',
-          'Erzeuge ein Token mit `repo`-Scope und kopiere es.',
         ],
       },
       R2_ACCOUNT_ID: {
@@ -1146,16 +984,6 @@ export const messages = {
       enable: '有効化',
       disable: '無効化',
     },
-    claudeLogin: {
-      signIn: 'Claude サブスクリプションでサインイン',
-      authorize: 'このリンクを開いて承認',
-      pasteCode: '認証コードを貼り付け',
-      connect: '接続',
-      connectedAs: '{email} として接続済み',
-      orApiKey: 'または下に API キーを貼り付け',
-      pending: 'サインインを開始中…',
-      failed: 'サインインに失敗しました——もう一度お試しください。',
-    },
     fields: {
       TELEGRAM_BOT_TOKEN: {
         help: 'ボット作成時に @BotFather が渡すトークン。',
@@ -1175,17 +1003,8 @@ export const messages = {
           'ここに貼り付け。カンマ区切りで他の人も許可できます。',
         ],
       },
-      ANTHROPIC_API_KEY: {
-        help: '従量課金の頭脳キー（任意）——またはスキップして Claude サブスクでログイン。',
-        linkLabel: 'Anthropic コンソール → API Keys',
-        steps: [
-          'console.anthropic.com → Settings → API Keys にサインイン。',
-          'キー「shimpz-brain」を作成し sk-ant-… の値をコピー。',
-          'またはスキップし、コンテナ内で一度 `claude` を実行してサブスクを使用。',
-        ],
-      },
-      OPENAI_API_KEY: {
-        help: '任意——Telegram の音声（音声↔テキスト）と画像生成に使用。',
+      SHIMPZ_OPENAI_MEDIA_API_KEY: {
+        help: '任意のプラットフォーム用メディアキー——音声と画像専用で、Brain や Capsule には入りません。',
         linkLabel: 'OpenAI → API keys',
         steps: [
           'platform.openai.com → API keys にサインイン。',
@@ -1215,14 +1034,6 @@ export const messages = {
         steps: [
           'Zero Trust → Networks → Tunnels →「shimpz-brain」というトンネルを作成。',
           '「Install connector」で --token の後の長い文字列をコピー。',
-        ],
-      },
-      GITHUB_TOKEN: {
-        help: '任意——Shimpz が自身のプロジェクトのリポジトリを push できます。',
-        linkLabel: 'GitHub → Tokens',
-        steps: [
-          'Settings → Developer settings → Personal access tokens。',
-          '`repo` スコープのトークンを生成してコピー。',
         ],
       },
       R2_ACCOUNT_ID: {
@@ -1323,16 +1134,6 @@ export const messages = {
       enable: 'تفعيل',
       disable: 'تعطيل',
     },
-    claudeLogin: {
-      signIn: 'سجّل الدخول باشتراك Claude',
-      authorize: 'افتح هذا الرابط للتفويض',
-      pasteCode: 'الصق رمز التفويض',
-      connect: 'اتصال',
-      connectedAs: 'متصل باسم {email}',
-      orApiKey: 'أو الصق مفتاح API في الأسفل',
-      pending: 'جارٍ بدء تسجيل الدخول…',
-      failed: 'فشل تسجيل الدخول — حاول مرة أخرى.',
-    },
     fields: {
       TELEGRAM_BOT_TOKEN: {
         help: 'الرمز الذي يمنحك إياه @BotFather عند إنشاء بوت.',
@@ -1352,17 +1153,8 @@ export const messages = {
           'الصقه هنا؛ افصل بفواصل للسماح لأشخاص آخرين.',
         ],
       },
-      ANTHROPIC_API_KEY: {
-        help: 'مفتاح عقل بالدفع حسب الاستخدام (اختياري) — أو تخطَّ وسجّل الدخول باشتراك Claude.',
-        linkLabel: 'وحدة تحكّم Anthropic → API Keys',
-        steps: [
-          'سجّل الدخول إلى console.anthropic.com → Settings → API Keys.',
-          'أنشئ مفتاحًا باسم «shimpz-brain» وانسخ القيمة ‎sk-ant-… .',
-          'أو تخطَّ وشغّل ‎`claude`‎ مرة داخل الحاوية لاستخدام اشتراكك.',
-        ],
-      },
-      OPENAI_API_KEY: {
-        help: 'اختياري — يُشغّل صوت تيليجرام (صوت ↔ نص) وتوليد الصور.',
+      SHIMPZ_OPENAI_MEDIA_API_KEY: {
+        help: 'مفتاح وسائط اختياري للمنصة — للصوت والصور فقط، ولا يُحقن في أي عقل أو كبسولة.',
         linkLabel: 'OpenAI → API keys',
         steps: [
           'سجّل الدخول إلى platform.openai.com → API keys.',
@@ -1392,14 +1184,6 @@ export const messages = {
         steps: [
           'Zero Trust → Networks → Tunnels → أنشئ نفقًا باسم «shimpz-brain».',
           'في «Install connector»، انسخ السلسلة الطويلة بعد ‎--token.',
-        ],
-      },
-      GITHUB_TOKEN: {
-        help: 'اختياري — يتيح لـ Shimpz دفع مستودعات مشاريعه.',
-        linkLabel: 'GitHub → Tokens',
-        steps: [
-          'Settings → Developer settings → Personal access tokens.',
-          'ولّد رمزًا بنطاق ‎`repo`‎ وانسخه.',
         ],
       },
       R2_ACCOUNT_ID: {

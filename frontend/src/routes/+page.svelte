@@ -22,15 +22,6 @@
   let saveMsg = $state(''); // '' | 'ok' | 'error'
   let saveNote = $state(''); // recreate note (ok) or error detail
   let generated = $state([]);
-  // ── Claude-subscription OAuth (only the `anthropic` card) ───────────────────────────────────
-  let claudePhase = $state('idle'); // idle | starting | awaitingAuth | connecting | connected | failed
-  let claudeUrl = $state('');
-  let claudeCode = $state('');
-  let claudeEmail = $state('');
-  let claudeError = $state('');
-  let claudeBusy = $state(false);
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
   let currentLocale = $derived($locale);
   let shown = $derived(integrations.filter((i) => i.category === activeCat));
 
@@ -146,66 +137,9 @@
     results = {};
     generated = [];
     saveMsg = saveNote = '';
-    claudePhase = 'idle';
-    claudeUrl = claudeCode = claudeEmail = claudeError = '';
-    claudeBusy = false;
-    if (integ.oauth) refreshClaudeStatus(); // reflect an existing subscription login
   }
   function closeDrawer() {
     drawer = null;
-  }
-
-  // ── Claude-subscription OAuth: start → poll for the URL → paste code → poll status until connected ──
-  async function refreshClaudeStatus() {
-    const b = await (await fetch('/api/claude/login/status')).json().catch(() => ({}));
-    if (b.loggedIn) {
-      claudePhase = 'connected';
-      claudeEmail = b.email ?? '';
-    }
-  }
-  async function signInClaude() {
-    claudeError = '';
-    claudeBusy = true;
-    claudePhase = 'starting';
-    try {
-      const b = await (await fetch('/api/claude/login/start', { method: 'POST' })).json().catch(() => ({}));
-      if (!b.ok) return ((claudePhase = 'failed'), (claudeError = b.error ?? $t('claudeLogin.failed')));
-      for (let i = 0; i < 80 && drawer?.oauth; i++) {
-        await sleep(1500);
-        const u = await (await fetch('/api/claude/login/url')).json().catch(() => ({}));
-        if (u.url) return ((claudeUrl = u.url), (claudePhase = 'awaitingAuth'));
-      }
-      claudePhase = 'failed';
-      claudeError = $t('claudeLogin.failed');
-    } finally {
-      claudeBusy = false;
-    }
-  }
-  async function connectClaude() {
-    const code = (claudeCode ?? '').trim();
-    if (!code) return;
-    claudeError = '';
-    claudeBusy = true;
-    claudePhase = 'connecting';
-    try {
-      const b = await (
-        await fetch('/api/claude/login/code', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code }),
-        })
-      ).json().catch(() => ({}));
-      if (!b.ok) return ((claudePhase = 'awaitingAuth'), (claudeError = b.error ?? $t('claudeLogin.failed')));
-      for (let i = 0; i < 80 && drawer?.oauth; i++) {
-        await sleep(1500);
-        const st = await (await fetch('/api/claude/login/status')).json().catch(() => ({}));
-        if (st.loggedIn) return ((claudePhase = 'connected'), (claudeEmail = st.email ?? ''), (claudeCode = ''));
-      }
-      claudePhase = 'failed';
-      claudeError = $t('claudeLogin.failed');
-    } finally {
-      claudeBusy = false;
-    }
   }
 
   // Save one integration's credentials → .env (+ generated internals). The recreate to make it
@@ -389,37 +323,6 @@
           <button class="btn small" onclick={() => doToggle(!drawer.enabled)} disabled={saveBusy}>
             {drawer.enabled ? $t('integration.disable') : $t('integration.enable')}
           </button>
-        </div>
-      {/if}
-      {#if drawer.oauth}
-        <div class="oauth">
-          {#if claudePhase === 'connected'}
-            <div class="banner ok">✅ {$t('claudeLogin.connectedAs', { email: claudeEmail })}</div>
-          {:else}
-            {#if claudePhase === 'idle' || claudePhase === 'failed'}
-              <button class="btn primary" onclick={signInClaude} disabled={claudeBusy}>{$t('claudeLogin.signIn')}</button>
-            {/if}
-            {#if claudePhase === 'starting'}
-              <div class="verdict working"><span class="spinner"></span><span>{$t('claudeLogin.pending')}</span></div>
-            {/if}
-            {#if claudePhase === 'awaitingAuth' || claudePhase === 'connecting'}
-              <a class="steps-link" href={claudeUrl} target="_blank" rel="noopener noreferrer">{$t('claudeLogin.authorize')} ↗</a>
-              <div class="row">
-                <input
-                  type="text"
-                  placeholder={$t('claudeLogin.pasteCode')}
-                  bind:value={claudeCode}
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <button class="btn small" onclick={connectClaude} disabled={claudeBusy || !(claudeCode ?? '').trim()}>
-                  {$t('claudeLogin.connect')}
-                </button>
-              </div>
-            {/if}
-            {#if claudeError}<div class="banner err">⚠️ {claudeError}</div>{/if}
-          {/if}
-          <p class="hint">{$t('claudeLogin.orApiKey')}</p>
         </div>
       {/if}
       {#each drawer.fields.filter((f) => !f.generated) as f (f.key)}
@@ -1095,21 +998,5 @@
   }
   .tstatus.on {
     color: var(--accent);
-  }
-  .oauth {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    padding: 0.9rem;
-    margin: 0.6rem 0 0.3rem;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-  }
-  .oauth .row {
-    align-items: center;
-  }
-  .oauth .hint {
-    margin: 0.1rem 0 0;
   }
 </style>

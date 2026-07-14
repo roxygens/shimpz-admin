@@ -66,17 +66,6 @@ def _live_cloudflare(value):
     return False, f"Cloudflare rejected the token (verify HTTP {status}, zones HTTP {zstatus})"
 
 
-def _live_anthropic(value):
-    # GET /v1/models is the cheapest key check: zero tokens, 200 = valid, 401 = invalid.
-    status, _ = _http_json(
-        "https://api.anthropic.com/v1/models?limit=1",
-        {"x-api-key": value, "anthropic-version": "2023-06-01"},
-    )
-    if status == 200:
-        return True, "key accepted"
-    return False, f"Anthropic rejected the key (HTTP {status})"
-
-
 def _live_openai(value):
     status, _ = _http_json("https://api.openai.com/v1/models", {"Authorization": f"Bearer {value}"})
     if status == 200:
@@ -105,7 +94,6 @@ def _tunnel_token(value):
 _LIVE = {
     "live_telegram": _live_telegram,
     "live_cloudflare": _live_cloudflare,
-    "live_anthropic": _live_anthropic,
     "live_openai": _live_openai,
     "live_github": _live_github,
     "tunnel_token": _tunnel_token,

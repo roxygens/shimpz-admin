@@ -98,26 +98,16 @@ SCHEMA = (
         "validator": "re:\\d+(,\\d+)*",
         "help": "Comma-separated numeric Telegram user IDs allowed to talk to Shimpz (from @userinfobot).",
     },
-    # ── Anthropic (the brain) ────────────────────────────────────────────────────────────────
-    {
-        "key": "ANTHROPIC_API_KEY",
-        "group": "anthropic",
-        "required": False,
-        "generate": False,
-        "secret": True,
-        "validator": "live_anthropic",
-        "help": "Optional: pay-per-token brain auth. Alternative: run `claude` login once inside the container "
-        "(subscription, cost-capped).",
-    },
     # ── OpenAI (voice STT/TTS + imagegen) ────────────────────────────────────────────────────
     {
-        "key": "OPENAI_API_KEY",
+        "key": "SHIMPZ_OPENAI_MEDIA_API_KEY",
         "group": "openai",
         "required": False,
         "generate": False,
         "secret": True,
         "validator": "live_openai",
-        "help": "Optional: powers Telegram voice + imagegen (held only by openai-driver).",
+        "help": "Optional freshly rotated platform media key: powers Telegram voice + imagegen only in "
+        "openai-driver; never copy a legacy root OPENAI_API_KEY and never inject it into Brains or Capsules.",
     },
     {
         "key": "VOICE_TOOLS_OPENAI_KEY",
@@ -126,7 +116,7 @@ SCHEMA = (
         "generate": False,
         "secret": True,
         "validator": "live_openai",
-        "help": "Optional override for separate voice billing; defaults to OPENAI_API_KEY.",
+        "help": "Optional override for separate voice billing; defaults to SHIMPZ_OPENAI_MEDIA_API_KEY.",
     },
     # ── Cloudflare R2 (uploads / links / backup) ─────────────────────────────────────────────
     {
@@ -164,26 +154,6 @@ SCHEMA = (
         "secret": False,
         "validator": "re:[a-z0-9][a-z0-9-]{1,61}[a-z0-9]",
         "help": "Bucket name the token is scoped to.",
-    },
-    # ── GitHub (repo auto-push) ──────────────────────────────────────────────────────────────
-    {
-        "key": "GITHUB_TOKEN",
-        "group": "github",
-        "required": False,
-        "generate": False,
-        "secret": True,
-        "validator": "live_github",
-        "help": "Optional PAT for pushing Shimpz's own repos.",
-    },
-    # ── ShimpzPay (the Shimpz payment rail — held ONLY by pay-driver) ────────────────
-    {
-        "key": "SHIMPZ_PAY_KEY",
-        "group": "shimpzpay",
-        "required": False,
-        "generate": False,
-        "secret": True,
-        "validator": None,
-        "help": "ShimpzPay merchant credential — held ONLY by pay-driver; enables live checkout.",
     },
     # ── IPRoyal residential proxy (browser stealth) ──────────────────────────────────────────
     {
@@ -248,34 +218,6 @@ SCHEMA = (
         "secret": False,
         "validator": "re:\\d{2,5}",
         "help": "SOCKS5 proxy port.",
-    },
-    # ── extra model keys (optional integrations) ─────────────────────────────────────────────
-    {
-        "key": "DEEPSEEK_API_KEY",
-        "group": "extra-models",
-        "required": False,
-        "generate": False,
-        "secret": True,
-        "validator": None,
-        "help": "Optional.",
-    },
-    {
-        "key": "MINIMAX_API_KEY",
-        "group": "extra-models",
-        "required": False,
-        "generate": False,
-        "secret": True,
-        "validator": None,
-        "help": "Optional.",
-    },
-    {
-        "key": "OPENROUTER_API_KEY",
-        "group": "extra-models",
-        "required": False,
-        "generate": False,
-        "secret": True,
-        "validator": None,
-        "help": "Optional.",
     },
     # ── desktop / advanced ───────────────────────────────────────────────────────────────────
     {
@@ -358,7 +300,8 @@ SCHEMA = (
         "generate": False,
         "secret": False,
         "validator": "re:/[A-Za-z0-9._/-]+",
-        "help": "Host data dir bound to /config (default /opt/shimpz; a second instance needs its own, e.g. /opt/shimpz-t).",
+        "help": "Host data dir bound to /config (default /opt/shimpz; a second instance needs its own, "
+        "e.g. /opt/shimpz-t).",
     },
     {
         "key": "CHROME_EXTRA_ARGS",
@@ -395,22 +338,13 @@ GUIDES = {
             "Paste that number here. Add more IDs comma-separated to allow other people.",
         ],
     },
-    "ANTHROPIC_API_KEY": {
-        "link": "https://console.anthropic.com/settings/keys",
-        "link_label": "Anthropic Console → API Keys",
-        "steps": [
-            "Sign in at console.anthropic.com and open Settings → API Keys.",
-            "Click “Create Key”, name it “shimpz-brain”, and copy the sk-ant-… value.",
-            "Optional: skip this and instead run `claude` once inside the container to use your "
-            "Claude subscription (cost-capped) instead of pay-per-token.",
-        ],
-    },
-    "OPENAI_API_KEY": {
+    "SHIMPZ_OPENAI_MEDIA_API_KEY": {
         "link": "https://platform.openai.com/api-keys",
         "link_label": "OpenAI → API keys",
         "steps": [
             "Sign in at platform.openai.com and open API keys.",
-            "Create a new secret key and copy the sk-… value.",
+            "Create a new least-privilege media-only secret key and copy the sk-… value.",
+            "Never reuse a legacy root OPENAI_API_KEY; remove and rotate that old credential first.",
             "Needed only for Telegram voice (speech-to-text / text-to-speech) and image generation.",
         ],
     },
@@ -442,15 +376,6 @@ GUIDES = {
             "On the “Install connector” screen, copy the token from the shown command "
             "(the long string after `--token`).",
             "Optional — this is what exposes the live desktop publicly behind Zero Trust Access.",
-        ],
-    },
-    "GITHUB_TOKEN": {
-        "link": "https://github.com/settings/tokens",
-        "link_label": "GitHub → Tokens",
-        "steps": [
-            "Open Settings → Developer settings → Personal access tokens.",
-            "Generate a token with `repo` scope and copy it.",
-            "Optional — only needed if Shimpz should push its own project repos.",
         ],
     },
     "R2_ACCOUNT_ID": {

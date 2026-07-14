@@ -27,7 +27,6 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Red
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import adminstore
 import auth
-import brainlogin
 import capsules
 import catalog
 import envfile
@@ -48,6 +47,10 @@ EXAMPLE_PATH = REPO / ".env.example"  # the scaffolding baseline (mounted :ro); 
 UI_DIR = Path(__file__).resolve().parent.parent / "frontend" / "build"
 COOKIE = "shimpz_admin"
 MIN_PASSWORD_LEN = 12
+
+# Boot preflight: an upgraded install must explicitly remove and rotate deprecated global Brain keys.
+# The exception names only offending variable names, never their values.
+envfile.read(ENV_PATH)
 
 # Open surface: the SPA shell (served for any non-/api path) + these auth endpoints. Everything
 # else under /api/ needs a session.
@@ -243,7 +246,6 @@ async def integrations_list():
                 "blurb": meta["blurb"],
                 "reconfigurable": meta["reconfigurable"],
                 "auto_apply": meta["recreate_target"] is not None,
-                "oauth": meta.get("oauth", False),  # only `anthropic` → the subscription sign-in block
                 "configured": configured,
                 "enabled": store.get(group, {}).get("enabled", configured),
                 "fields": fields,
@@ -281,34 +283,6 @@ async def integrations_toggle(group: str, payload: dict):
     integrations.set_group(group, enabled=enabled)
     log.info("integration %s toggled -> enabled=%s", group, enabled)
     return {"enabled": enabled, "recreate": _maybe_recreate(group, enabled=enabled)}
-
-
-# ── Claude-subscription OAuth (the `anthropic` card's alternative to an API key) ──────────────────
-# Session-gated (they're /api/…, so `_gate` requires the `shimpz_admin` cookie). Each just relays to the
-# brainlogin client → the driver → the brain's `shimpz-login`. NEVER a 500: an unreachable
-# driver surfaces as {"ok": false, "error": …} for the UI to show. The code is never logged.
-@app.post("/api/claude/login/start")
-async def claude_login_start():
-    ok, body = brainlogin.start()
-    return {"ok": ok, **body}
-
-
-@app.get("/api/claude/login/url")
-async def claude_login_url():
-    ok, body = brainlogin.url()
-    return {"ok": ok, **body}
-
-
-@app.post("/api/claude/login/code")
-async def claude_login_code(payload: dict):
-    ok, body = brainlogin.code(str(payload.get("code", "")))
-    return {"ok": ok, **body}
-
-
-@app.get("/api/claude/login/status")
-async def claude_login_status():
-    ok, body = brainlogin.status()
-    return {"ok": ok, **body}
 
 
 @app.post("/api/validate")

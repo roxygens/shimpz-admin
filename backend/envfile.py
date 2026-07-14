@@ -12,6 +12,24 @@ from pathlib import Path
 
 import keyset
 
+LEGACY_ROOT_BRAIN_CREDENTIALS = frozenset({"ANTHROPIC_API_KEY", "OPENAI_API_KEY"})
+
+
+class LegacyRootCredentialError(ValueError):
+    """A deprecated root credential would bypass the account-owned Brain boundary."""
+
+
+def reject_legacy_root_credentials(values):
+    """Fail without exposing values when a nonempty legacy global Brain key is present."""
+    present = sorted(key for key in LEGACY_ROOT_BRAIN_CREDENTIALS if str(values.get(key, "")).strip())
+    if present:
+        names = ", ".join(present)
+        raise LegacyRootCredentialError(
+            f"nonempty legacy root Brain credential(s) are forbidden: {names}; remove and rotate them, "
+            "configure Brain credentials per account, and use SHIMPZ_OPENAI_MEDIA_API_KEY only for media"
+        )
+    return values
+
 
 def read(path):
     """Parse KEY=VALUE lines → dict. Missing file → {} (fresh install); comments/blanks ignored."""
@@ -25,7 +43,7 @@ def read(path):
             continue
         k, _, v = line.partition("=")
         values[k.strip()] = v.strip()
-    return values
+    return reject_legacy_root_credentials(values)
 
 
 def merge(existing, updates):
@@ -33,6 +51,8 @@ def merge(existing, updates):
 
     Empty-string updates are skipped (an untouched form field must not erase a stored value).
     """
+    reject_legacy_root_credentials(existing)
+    reject_legacy_root_credentials(updates)
     for k in updates:
         keyset.field(k)  # raises on unknown — never silently write a stray key
     merged = dict(existing)
@@ -42,6 +62,7 @@ def merge(existing, updates):
 
 def render(values):
     """Serialize schema-ordered with group headers; unmanaged keys preserved at the end."""
+    reject_legacy_root_credentials(values)
     lines = ["# Managed by apps/admin (shimpz-setup wizard). Git-ignored — never commit."]
     group = None
     for f in keyset.SCHEMA:
