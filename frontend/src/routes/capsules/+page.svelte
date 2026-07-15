@@ -158,7 +158,10 @@
         <span>{$t('capsules.count', { count: capsules.length })}</span>
         <strong>{$t('capsules.running', { count: runningCount })}</strong>
       </div>
-      <p><i aria-hidden="true"></i> Space control plane connected</p>
+      <p class:offline={error}>
+        <i aria-hidden="true"></i>
+        {error ? 'Capsule Driver unavailable' : 'Space control plane connected'}
+      </p>
     </section>
 
     {#if error}
@@ -393,6 +396,15 @@
     background: var(--success);
     border-radius: 50%;
     box-shadow: 0 0 8px rgba(5, 255, 161, 0.55);
+  }
+
+  .runtime-bar .offline {
+    color: var(--danger);
+  }
+
+  .runtime-bar .offline i {
+    background: var(--danger);
+    box-shadow: 0 0 8px rgba(255, 96, 125, 0.45);
   }
 
   .capsule-grid {
