@@ -118,6 +118,7 @@
   .actions {
     display: flex;
     min-width: 0;
+    grid-column: 3;
     align-items: center;
     justify-content: flex-end;
     gap: 0.55rem;

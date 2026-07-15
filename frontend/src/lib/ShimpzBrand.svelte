@@ -29,6 +29,7 @@
     width: 2.75rem;
     height: 2.75rem;
     flex: none;
+    mix-blend-mode: screen;
     object-fit: contain;
   }
 
@@ -65,7 +66,6 @@
   .hero img {
     width: clamp(7rem, 18vw, 11rem);
     height: clamp(7rem, 18vw, 11rem);
-    filter: drop-shadow(0 0 18px rgba(0, 240, 255, 0.15));
   }
 
   .hero .brand-type {

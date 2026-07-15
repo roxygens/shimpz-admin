@@ -270,15 +270,22 @@
   }
 
   .primary {
+    position: relative;
     display: flex;
     min-height: 3.15rem;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     padding: 0 1.1rem;
     margin-top: 0.75rem;
     background: linear-gradient(100deg, var(--accent), var(--accent-alt));
     clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
     color: var(--accent-ink);
+    text-align: center;
+  }
+
+  .primary span:last-child {
+    position: absolute;
+    inset-inline-end: 1.1rem;
   }
 
   .primary:hover:not(:disabled) {
