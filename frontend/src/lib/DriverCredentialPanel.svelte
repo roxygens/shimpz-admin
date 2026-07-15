@@ -369,31 +369,50 @@
 <style>
   .driver-panel {
     border-top: 1px solid var(--border);
-    margin-top: 0.7rem;
-    padding-top: 0.7rem;
+    margin-top: 0.85rem;
+    padding-top: 0.75rem;
   }
+
   summary {
-    align-items: baseline;
-    cursor: pointer;
     display: flex;
-    gap: 0.65rem;
+    min-height: 2.55rem;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-mono);
     list-style: none;
   }
+
   summary::-webkit-details-marker {
     display: none;
   }
+
   summary::before {
+    display: grid;
+    width: 1.55rem;
+    height: 1.55rem;
+    place-items: center;
+    border: 1px solid var(--border-strong);
     color: var(--accent);
-    content: "+";
-    font-family: ui-monospace, monospace;
+    content: '+';
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
   }
+
   details[open] summary::before {
-    content: "−";
+    border-color: rgba(0, 240, 255, 0.5);
+    content: '−';
   }
+
   .driver-name {
     color: var(--text);
-    font-weight: 650;
+    font-size: 0.73rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
+
   .driver-purpose,
   .muted,
   .summary,
@@ -402,19 +421,29 @@
   small {
     color: var(--text-dim);
   }
+
   .driver-purpose,
   .credential-meta span,
   small {
-    font-size: 0.82rem;
+    font-size: 0.7rem;
   }
+
+  .driver-purpose {
+    margin-inline-start: auto;
+    color: var(--text-faint);
+  }
+
   .panel-body {
-    padding: 0.9rem 0 0.15rem 1.4rem;
+    padding: 0.85rem 0 0.1rem;
   }
+
   .summary,
   .profile-summary {
-    line-height: 1.5;
-    margin: 0 0 0.8rem;
+    margin: 0 0 0.75rem;
+    font-size: 0.75rem;
+    line-height: 1.55;
   }
+
   .credential-heading,
   .form-heading,
   .credentials li,
@@ -422,15 +451,21 @@
     align-items: center;
     display: flex;
   }
+
   .credential-heading,
   .form-heading {
     justify-content: space-between;
   }
+
   .credential-heading {
     color: var(--text-dim);
-    font-size: 0.82rem;
-    margin-bottom: 0.65rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.6rem;
+    text-transform: uppercase;
   }
+
   .credentials {
     display: grid;
     gap: 0.55rem;
@@ -438,110 +473,153 @@
     margin: 0;
     padding: 0;
   }
+
   .credentials li {
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
     gap: 0.8rem;
     justify-content: space-between;
-    padding: 0.65rem;
+    padding: 0.7rem;
+    background: var(--bg);
+    clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+    box-shadow: inset 0 0 0 1px var(--border);
   }
+
   .credential-meta {
     display: grid;
     gap: 0.1rem;
+    min-width: 0;
   }
+
+  .credential-meta strong {
+    overflow-wrap: anywhere;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+  }
+
   .credential-actions {
     gap: 0.35rem;
   }
+
   form {
-    background: var(--surface-1);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--r-md);
     display: grid;
     gap: 0.85rem;
     margin-top: 0.9rem;
     padding: 0.9rem;
+    background: var(--bg);
+    clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+    box-shadow: inset 0 0 0 1px var(--border-strong);
   }
+
   .form-heading div {
     display: grid;
     gap: 0.1rem;
   }
+
+  .form-heading strong {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+  }
+
   .form-heading span {
     color: var(--text-dim);
-    font-size: 0.8rem;
+    font-size: 0.7rem;
   }
+
   .field {
     display: grid;
     gap: 0.35rem;
   }
+
   .field > span {
     color: var(--text-dim);
-    font-size: 0.78rem;
-    font-weight: 650;
-    letter-spacing: 0.04em;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
   }
+
   input,
   select {
-    background: var(--bg);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--r-sm);
-    color: var(--text);
-    font: inherit;
-    min-width: 0;
-    padding: 0.62rem 0.72rem;
     width: 100%;
-  }
-  input:focus,
-  select:focus {
-    border-color: var(--accent);
-    box-shadow: var(--ring);
+    min-width: 0;
+    min-height: 2.7rem;
+    border: 0;
+    padding: 0.62rem 0.72rem;
+    background: var(--surface-1);
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+    clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
     outline: none;
   }
+
+  input:focus,
+  select:focus {
+    box-shadow: inset 0 0 0 1px var(--accent);
+    filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.18));
+  }
+
   button {
-    background: var(--accent);
+    min-height: 2.35rem;
     border: 0;
-    border-radius: var(--r-sm);
+    padding: 0.4rem 0.65rem;
+    background: linear-gradient(100deg, var(--accent), var(--accent-alt));
+    clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
     color: var(--accent-ink);
     cursor: pointer;
-    font: inherit;
-    font-size: 0.82rem;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
     font-weight: 700;
-    padding: 0.45rem 0.7rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
   }
+
   button.secondary,
   button.quiet,
   button.danger {
     background: transparent;
   }
+
   button.secondary,
   button.quiet {
     border: 1px solid var(--border-strong);
-    color: var(--text);
+    color: var(--text-dim);
   }
+
+  button.secondary:hover:not(:disabled),
+  button.quiet:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
   button.danger {
     border: 1px solid color-mix(in srgb, var(--danger), transparent 60%);
     color: var(--danger);
   }
+
   button:disabled {
     cursor: default;
     opacity: 0.5;
   }
+
   .error,
   .notice {
-    font-size: 0.86rem;
+    padding-inline-start: 0.6rem;
+    border-inline-start: 2px solid currentColor;
+    font-size: 0.72rem;
     margin: 0.75rem 0 0;
   }
+
   .error {
     color: var(--danger);
   }
+
   .notice {
-    color: var(--accent);
+    color: var(--success);
   }
+
   @media (max-width: 640px) {
-    .panel-body {
-      padding-left: 0;
-    }
     .credentials li {
       align-items: stretch;
       flex-direction: column;
