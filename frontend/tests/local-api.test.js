@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   LocalApiError,
   evaluateHelloPulse,
+  listInstalledAssistants,
   safeApiError,
 } from '../src/lib/localApi.js';
 
@@ -24,7 +25,7 @@ test('always posts idempotent install before hello without an inventory prefligh
 
   const result = await evaluateHelloPulse(fetcher, 'capsule_1');
 
-  assert.deepEqual(result, { message: 'Hello, Captain!' });
+  assert.deepEqual(result, { message: 'Hello, Captain!', installed: true });
   assert.deepEqual(
     calls.map(({ url, options }) => [options.method, url, JSON.parse(options.body)]),
     [
@@ -41,7 +42,10 @@ test('a concurrent install conflict still proceeds to the declared hello proof',
     return call === 1 ? response(409, { detail: 'already installed' }) : response(200, { message: 'Ready.' });
   };
 
-  assert.deepEqual(await evaluateHelloPulse(fetcher, 'capsule_1'), { message: 'Ready.' });
+  assert.deepEqual(
+    await evaluateHelloPulse(fetcher, 'capsule_1'),
+    { message: 'Ready.', installed: false },
+  );
   assert.equal(call, 2);
 });
 
@@ -58,4 +62,48 @@ test('safe driver errors stop before invoke and prefer error over detail', async
   );
   assert.equal(calls.length, 1);
   assert.equal(safeApiError({ error: 'specific', detail: 'generic' }, 'fallback'), 'specific');
+});
+
+test('loads the controller-owned installed Assistant inventory without weakening its shape', async () => {
+  const calls = [];
+  const fetcher = async (url, options) => {
+    calls.push({ url, options });
+    return response(200, {
+      assistants: [
+        { assistant: 'hello-pulse', status: 'running' },
+        { assistant: 'salesnator', status: 'created' },
+      ],
+    });
+  };
+
+  assert.deepEqual(await listInstalledAssistants(fetcher, 'capsule_1'), [
+    { assistant: 'hello-pulse', status: 'running' },
+    { assistant: 'salesnator', status: 'created' },
+  ]);
+  assert.deepEqual(calls, [{
+    url: '/api/capsules/capsule_1/assistants',
+    options: { cache: 'no-store', headers: { Accept: 'application/json' } },
+  }]);
+});
+
+test('installed inventory errors and malformed records fail honestly instead of looking empty', async () => {
+  await assert.rejects(
+    listInstalledAssistants(async () => response(503, { detail: 'controller unavailable' }), 'capsule_1'),
+    (error) => error instanceof LocalApiError && error.status === 503 && error.message === 'controller unavailable',
+  );
+
+  for (const assistants of [
+    null,
+    [{ assistant: '../escape', status: 'running' }],
+    [{ assistant: 'hello-pulse', status: 'RUNNING' }],
+    [
+      { assistant: 'hello-pulse', status: 'running' },
+      { assistant: 'hello-pulse', status: 'running' },
+    ],
+  ]) {
+    await assert.rejects(
+      listInstalledAssistants(async () => response(200, { assistants }), 'capsule_1'),
+      (error) => error instanceof LocalApiError && error.message === 'The installed Assistant inventory is invalid.',
+    );
+  }
 });
