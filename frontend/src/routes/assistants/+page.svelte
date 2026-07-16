@@ -3,7 +3,7 @@
   import AdminShell from '$lib/AdminShell.svelte';
   import LocaleMenu from '$lib/LocaleMenu.svelte';
   import { INSTALL_INTENT, acceptsStoreInstallIntent } from '$lib/assistantIntent.js';
-  import { evaluateHelloPulse, safeApiError } from '$lib/localApi.js';
+  import { evaluateHelloPulse, listInstalledAssistants, safeApiError } from '$lib/localApi.js';
   import { t, locale } from '$lib/i18n.js';
 
   const HELLO_ID = INSTALL_INTENT.assistant;
@@ -16,6 +16,14 @@
       available: 'Ready in this Space',
       unavailable: 'Unavailable in this Space',
       evaluate: 'Install and run hello',
+      runHello: 'Run hello',
+      installed: 'Installed',
+      installedTitle: 'Installed in this Capsule',
+      installedEmpty: 'No Assistants installed in this Capsule.',
+      inventoryLoading: 'Reading installed Assistants…',
+      installedNow: 'Installed now',
+      alreadyInstalled: 'Already installed',
+      installedAt: 'Hello Pulse is installed in {capsule}.',
       noCapsules: 'Create a running Capsule before evaluating an Assistant.',
       createCapsule: 'Create a Capsule',
       confirmTitle: 'Install Hello Pulse?',
@@ -27,8 +35,8 @@
       working: 'Installing and running…',
       result: 'Hello result',
       uninstall: 'Uninstall from Capsule',
-      uninstallConfirm: 'Uninstall Hello Pulse from {capsule}?',
-      removed: 'Hello Pulse was uninstalled from {capsule}.',
+      uninstallConfirm: 'Uninstall {assistant} from {capsule}?',
+      removed: '{assistant} was uninstalled from {capsule}.',
       loadFailed: 'The local Assistant control plane is unavailable.',
       retry: 'Retry local data',
       genericFailure: 'The local evaluation could not be completed.',
@@ -40,6 +48,14 @@
       available: 'Pronto neste Space',
       unavailable: 'Indisponível neste Space',
       evaluate: 'Instalar e executar hello',
+      runHello: 'Executar hello',
+      installed: 'Instalado',
+      installedTitle: 'Instalados nesta Cápsula',
+      installedEmpty: 'Nenhum Assistant instalado nesta Cápsula.',
+      inventoryLoading: 'Lendo Assistants instalados…',
+      installedNow: 'Instalado agora',
+      alreadyInstalled: 'Já estava instalado',
+      installedAt: 'O Hello Pulse está instalado em {capsule}.',
       noCapsules: 'Crie uma Cápsula em execução antes de avaliar um Assistant.',
       createCapsule: 'Criar uma Cápsula',
       confirmTitle: 'Instalar o Hello Pulse?',
@@ -51,8 +67,8 @@
       working: 'Instalando e executando…',
       result: 'Resultado do hello',
       uninstall: 'Desinstalar da Cápsula',
-      uninstallConfirm: 'Desinstalar o Hello Pulse de {capsule}?',
-      removed: 'O Hello Pulse foi desinstalado de {capsule}.',
+      uninstallConfirm: 'Desinstalar {assistant} de {capsule}?',
+      removed: '{assistant} foi desinstalado de {capsule}.',
       loadFailed: 'O plano de controle local de Assistants está indisponível.',
       retry: 'Tentar dados locais novamente',
       genericFailure: 'Não foi possível concluir a avaliação local.',
@@ -65,10 +81,14 @@
   let localError = $state('');
   let dialogError = $state('');
   let busy = $state(false);
+  let activeCapsule = $state('');
   let selectedCapsule = $state('');
+  let installedAssistants = $state([]);
+  let inventoryPhase = $state('idle');
+  let inventoryError = $state('');
+  let inventoryAttempt = 0;
   let pendingAssistant = $state('');
   let evaluation = $state(null);
-  let lastCapsule = $state(null);
   let iframeElement = $state();
   let confirmDialog = $state();
 
@@ -79,6 +99,8 @@
   let runningCapsules = $derived(capsules.filter((capsule) => capsule.status === 'running'));
   let helloEntry = $derived(catalog.find((entry) => entry.id === HELLO_ID));
   let helloAvailable = $derived(Boolean(helloEntry && declaresHello(helloEntry)));
+  let activeCapsuleRecord = $derived(runningCapsules.find((capsule) => capsule.id === activeCapsule) ?? null);
+  let helloInstalled = $derived(installedAssistants.some((entry) => entry.assistant === HELLO_ID));
 
   function declaresHello(entry) {
     if (Array.isArray(entry?.operations)) {
@@ -114,6 +136,33 @@
     return output;
   }
 
+  async function loadInstalled(capsuleId = activeCapsule) {
+    const attempt = ++inventoryAttempt;
+    installedAssistants = [];
+    inventoryError = '';
+    if (!capsuleId) {
+      inventoryPhase = 'idle';
+      return;
+    }
+    inventoryPhase = 'loading';
+    try {
+      const inventory = await listInstalledAssistants(fetch, capsuleId);
+      if (attempt !== inventoryAttempt || capsuleId !== activeCapsule) return;
+      installedAssistants = inventory;
+      inventoryPhase = 'ready';
+    } catch (error) {
+      if (attempt !== inventoryAttempt || capsuleId !== activeCapsule) return;
+      inventoryError = error instanceof Error ? error.message : copy.loadFailed;
+      inventoryPhase = 'error';
+    }
+  }
+
+  async function selectCapsule(event) {
+    activeCapsule = event.currentTarget.value;
+    evaluation = null;
+    await loadInstalled(activeCapsule);
+  }
+
   async function loadLocalData() {
     localError = '';
     try {
@@ -133,6 +182,10 @@
       if (!catalogResponse.ok) throw new Error(safeApiError(catalogBody, copy.loadFailed));
       capsules = normalizeCapsules(capsuleBody);
       catalog = normalizeCatalog(catalogBody);
+      if (!capsules.some((capsule) => capsule.id === activeCapsule && capsule.status === 'running')) {
+        activeCapsule = capsules.find((capsule) => capsule.status === 'running')?.id ?? '';
+      }
+      await loadInstalled(activeCapsule);
     } catch (error) {
       localError = error instanceof Error ? error.message : copy.loadFailed;
       catalog = [];
@@ -156,9 +209,17 @@
   }
 
   function beginInstall(assistantId) {
-    if (assistantId !== HELLO_ID) return;
+    if (assistantId !== HELLO_ID || !activeCapsuleRecord) return;
+    if (helloInstalled) {
+      evaluation = {
+        kind: 'installed',
+        note: copy.alreadyInstalled,
+        message: format(copy.installedAt, { capsule: activeCapsuleRecord.name }),
+      };
+      return;
+    }
     pendingAssistant = assistantId;
-    selectedCapsule = '';
+    selectedCapsule = activeCapsuleRecord.id;
     dialogError = '';
     confirmDialog?.showModal();
   }
@@ -176,10 +237,10 @@
     dialogError = '';
     evaluation = null;
     try {
-      const { message } = await evaluateHelloPulse(fetch, capsule.id);
-
-      lastCapsule = capsule;
-      evaluation = { kind: 'success', message };
+      const { message, installed } = await evaluateHelloPulse(fetch, capsule.id);
+      evaluation = { kind: 'success', note: installed ? copy.installedNow : copy.alreadyInstalled, message };
+      activeCapsule = capsule.id;
+      await loadInstalled(capsule.id);
       confirmDialog?.close();
     } catch (error) {
       dialogError = error instanceof Error ? error.message : copy.genericFailure;
@@ -188,24 +249,47 @@
     }
   }
 
-  async function uninstallLast() {
-    if (busy || !lastCapsule) return;
-    const question = format(copy.uninstallConfirm, { capsule: lastCapsule.name });
+  async function runHello() {
+    if (busy || !activeCapsuleRecord || !helloInstalled) return;
+    busy = true;
+    localError = '';
+    evaluation = null;
+    try {
+      const { message } = await evaluateHelloPulse(fetch, activeCapsuleRecord.id);
+      evaluation = { kind: 'success', note: copy.alreadyInstalled, message };
+      await loadInstalled(activeCapsuleRecord.id);
+    } catch (error) {
+      localError = error instanceof Error ? error.message : copy.genericFailure;
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function uninstallInstalled(assistant) {
+    if (busy || !activeCapsuleRecord) return;
+    const question = format(copy.uninstallConfirm, {
+      assistant: assistant.assistant,
+      capsule: activeCapsuleRecord.name,
+    });
     if (!window.confirm(question)) return;
     busy = true;
     localError = '';
     try {
       const response = await fetch(
-        `/api/capsules/${encodeURIComponent(lastCapsule.id)}/assistants/${HELLO_ID}`,
+        `/api/capsules/${encodeURIComponent(activeCapsuleRecord.id)}/assistants/${encodeURIComponent(assistant.assistant)}`,
         { method: 'DELETE', headers: { Accept: 'application/json' } },
       );
       const body = await jsonObject(response);
       if (!response.ok) throw new Error(safeApiError(body, copy.genericFailure));
       evaluation = {
         kind: 'removed',
-        message: format(copy.removed, { capsule: lastCapsule.name }),
+        note: copy.uninstall,
+        message: format(copy.removed, {
+          assistant: assistant.assistant,
+          capsule: activeCapsuleRecord.name,
+        }),
       };
-      lastCapsule = null;
+      await loadInstalled(activeCapsuleRecord.id);
     } catch (error) {
       localError = error instanceof Error ? error.message : copy.genericFailure;
     } finally {
@@ -264,14 +348,26 @@
         <p class="kicker">{copy.localKicker}</p>
         <h2 id="hello-pulse-title">{copy.localTitle}</h2>
         <p>{copy.localLead}</p>
-        <div class:ready={helloAvailable} class="availability">
-          <i aria-hidden="true"></i>{helloAvailable ? copy.available : copy.unavailable}
+        <div class:ready={helloAvailable} class:installed={helloInstalled} class="availability">
+          <i aria-hidden="true"></i>{helloInstalled ? copy.installed : helloAvailable ? copy.available : copy.unavailable}
         </div>
       </div>
       <div class="evaluation-actions">
         {#if runningCapsules.length}
-          <button type="button" disabled={!helloAvailable || busy} onclick={() => beginInstall(HELLO_ID)}>
-            {copy.evaluate}<span aria-hidden="true">→</span>
+          <label class="capsule-picker" for="assistant-active-capsule">
+            <span>{copy.capsuleLabel}</span>
+            <select id="assistant-active-capsule" value={activeCapsule} disabled={busy} onchange={selectCapsule}>
+              {#each runningCapsules as capsule (capsule.id)}
+                <option value={capsule.id}>{capsule.name}</option>
+              {/each}
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={!helloAvailable || busy || inventoryPhase === 'loading'}
+            onclick={helloInstalled ? runHello : () => beginInstall(HELLO_ID)}
+          >
+            {helloInstalled ? copy.runHello : copy.evaluate}<span aria-hidden="true">→</span>
           </button>
         {:else}
           <p>{copy.noCapsules}</p>
@@ -284,13 +380,42 @@
           <button type="button" onclick={loadLocalData}>{copy.retry}</button>
         </div>
       {/if}
+      <div class="installed-inventory" aria-live="polite">
+        <header>
+          <strong>{copy.installedTitle}</strong>
+          <span>{installedAssistants.length}</span>
+        </header>
+        {#if inventoryPhase === 'loading'}
+          <p>{copy.inventoryLoading}</p>
+        {:else if inventoryPhase === 'error'}
+          <div class="inventory-error" role="alert">
+            <span>{inventoryError}</span>
+            <button type="button" disabled={!activeCapsule} onclick={() => loadInstalled(activeCapsule)}>{copy.retry}</button>
+          </div>
+        {:else if installedAssistants.length}
+          <ul>
+            {#each installedAssistants as assistant (assistant.assistant)}
+              <li>
+                <span class="installed-mark" aria-hidden="true">✓</span>
+                <strong>{assistant.assistant}</strong>
+                <small>{assistant.status}</small>
+                {#if assistant.assistant === HELLO_ID}
+                  <button type="button" disabled={busy} onclick={runHello}>{copy.runHello}</button>
+                {/if}
+                <button class="remove-assistant" type="button" disabled={busy} onclick={() => uninstallInstalled(assistant)}>
+                  {copy.uninstall}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p>{copy.installedEmpty}</p>
+        {/if}
+      </div>
       {#if evaluation}
         <div class:removed={evaluation.kind === 'removed'} class="hello-result" role="status">
-          <span>{copy.result}</span>
+          <span>{evaluation.note ?? copy.result}</span>
           <strong>{evaluation.message}</strong>
-          {#if lastCapsule}
-            <button type="button" disabled={busy} onclick={uninstallLast}>{copy.uninstall}</button>
-          {/if}
         </div>
       {/if}
     </section>
@@ -320,13 +445,13 @@
       <h2 id="assistant-confirm-title">{copy.confirmTitle}</h2>
       <p>{copy.confirmLead}</p>
     </header>
-    <label for="assistant-capsule">{copy.capsuleLabel}</label>
-    <select id="assistant-capsule" bind:value={selectedCapsule} disabled={busy} required>
-      <option value="" disabled>{copy.capsulePlaceholder}</option>
-      {#each runningCapsules as capsule (capsule.id)}
-        <option value={capsule.id}>{capsule.name} · {capsule.id}</option>
-      {/each}
-    </select>
+    {#if activeCapsuleRecord}
+      <div class="dialog-target">
+        <span>{copy.capsuleLabel}</span>
+        <strong>{activeCapsuleRecord.name}</strong>
+        <code>{activeCapsuleRecord.id}</code>
+      </div>
+    {/if}
     {#if dialogError}<p class="dialog-error" role="alert">{dialogError}</p>{/if}
     <footer>
       <button type="button" class="dialog-secondary" disabled={busy} onclick={() => confirmDialog?.close()}>
@@ -459,9 +584,13 @@
   .availability i { width: 0.42rem; height: 0.42rem; border-radius: 50%; background: var(--danger); }
   .availability.ready { color: var(--success); }
   .availability.ready i { background: var(--success); box-shadow: 0 0 8px rgba(5, 255, 161, 0.55); }
+  .availability.installed { font-weight: 700; }
   .evaluation-actions { display: flex; align-items: flex-end; flex-direction: column; gap: 0.75rem; }
   .evaluation-actions > p { max-width: 25ch; margin: 0; color: var(--text-dim); font-size: 0.78rem; line-height: 1.5; text-align: right; }
-  .evaluation-actions button, .dialog-primary, .dialog-secondary, .hello-result button, .local-error button {
+  .capsule-picker { display: grid; width: min(100%, 17rem); gap: 0.35rem; }
+  .capsule-picker span { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.09em; text-transform: uppercase; }
+  .capsule-picker select { width: 100%; min-height: 2.55rem; border: 1px solid var(--border-strong); padding: 0 2rem 0 0.75rem; background: #050708; color: var(--text); font-family: var(--font-mono); font-size: 0.68rem; }
+  .evaluation-actions button, .dialog-primary, .dialog-secondary, .local-error button {
     min-height: 2.8rem;
     border: 0;
     padding: 0 1rem;
@@ -483,7 +612,20 @@
   .hello-result.removed { border-left-color: var(--accent-alt); background: rgba(255, 61, 242, 0.04); }
   .hello-result span { color: var(--success); font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; }
   .hello-result strong { font-size: 0.9rem; }
-  .hello-result button { min-height: 2.25rem; background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--text-dim); }
+
+  .installed-inventory { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .installed-inventory > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .installed-inventory > header strong { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .installed-inventory > header span { display: grid; min-width: 1.55rem; height: 1.55rem; place-items: center; border: 1px solid var(--border-strong); color: var(--accent); font-family: var(--font-mono); font-size: 0.65rem; }
+  .installed-inventory > p { margin: 0.7rem 0 0; color: var(--text-faint); font-size: 0.76rem; }
+  .installed-inventory ul { display: grid; gap: 0.45rem; margin: 0.75rem 0 0; padding: 0; list-style: none; }
+  .installed-inventory li { display: grid; min-width: 0; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.7rem; border: 1px solid var(--border); padding: 0.55rem 0.65rem; background: rgba(0, 0, 0, 0.24); }
+  .installed-mark { color: var(--success); font-family: var(--font-mono); }
+  .installed-inventory li strong { overflow: hidden; font-family: var(--font-mono); font-size: 0.76rem; text-overflow: ellipsis; white-space: nowrap; }
+  .installed-inventory li small { color: var(--success); font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.07em; text-transform: uppercase; }
+  .installed-inventory button, .inventory-error button { min-height: 2rem; border: 1px solid var(--border-strong); padding: 0 0.6rem; background: transparent; color: var(--accent); cursor: pointer; font-family: var(--font-mono); font-size: 0.56rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .installed-inventory .remove-assistant { border-color: rgba(255, 96, 125, 0.35); color: var(--danger); }
+  .inventory-error { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 0.7rem; color: var(--danger); font-size: 0.75rem; }
 
   .store-frame {
     overflow: hidden;
@@ -504,8 +646,10 @@
   .dialog-panel { padding: clamp(1.4rem, 4vw, 2.2rem); background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--border-strong), 0 24px 80px rgba(0, 0, 0, 0.65); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
   .dialog-panel h2 { margin: 0; font-size: clamp(1.6rem, 4vw, 2.5rem); letter-spacing: -0.05em; }
   .dialog-panel header > p:last-child { margin: 0.8rem 0 1.5rem; color: var(--text-dim); line-height: 1.6; }
-  .dialog-panel label { display: block; margin-bottom: 0.5rem; color: var(--text-faint); font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
-  .dialog-panel select { width: 100%; min-height: 3rem; border: 1px solid var(--border-strong); padding: 0 0.8rem; background: #050708; color: var(--text); font-family: var(--font-mono); }
+  .dialog-target { display: grid; gap: 0.2rem; border: 1px solid var(--border-strong); padding: 0.8rem; background: #050708; }
+  .dialog-target span { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .dialog-target strong { font-size: 0.9rem; }
+  .dialog-target code { color: var(--accent); font-size: 0.65rem; }
   .dialog-error { margin: 0.8rem 0 0; color: var(--danger); font-size: 0.78rem; line-height: 1.5; }
   .dialog-panel footer { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; }
   .dialog-secondary { background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--text-dim); }
@@ -530,12 +674,18 @@
     .external { width: 100%; }
     iframe { min-height: 36rem; }
     .hello-result { grid-template-columns: 1fr; }
+    .installed-inventory li { grid-template-columns: auto minmax(0, 1fr) auto; }
+    .installed-inventory li button { grid-column: span 1; }
   }
   @media (max-width: 520px) {
     .evaluation-card { grid-template-columns: 1fr; }
     .assistant-mark { width: 4rem; height: 4rem; }
     .evaluation-actions, .local-error, .hello-result { grid-column: 1; }
     .local-error { align-items: stretch; flex-direction: column; }
+    .installed-inventory li { grid-template-columns: auto minmax(0, 1fr); }
+    .installed-inventory li small { text-align: right; }
+    .installed-inventory li button { grid-column: 1 / -1; }
+    .inventory-error { align-items: stretch; flex-direction: column; }
     .dialog-panel footer { align-items: stretch; flex-direction: column-reverse; }
   }
 </style>
