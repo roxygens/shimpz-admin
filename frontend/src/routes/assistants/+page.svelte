@@ -10,20 +10,12 @@
   const CID_RE = /^[a-z0-9_]{1,40}$/;
   const LOCAL_COPY = {
     en: {
-      localKicker: 'Local evaluation // trusted',
-      localTitle: 'Meet Hello Pulse.',
-      localLead: 'Install the first released Assistant in one Capsule and run its declared hello operation. No Store login is required.',
-      available: 'Ready in this Space',
-      unavailable: 'Unavailable in this Space',
-      evaluate: 'Install and run hello',
       runHello: 'Run hello',
-      installed: 'Installed',
       installedTitle: 'Installed in this Capsule',
       installedEmpty: 'No Assistants installed in this Capsule.',
       inventoryLoading: 'Reading installed Assistants…',
       installedNow: 'Installed now',
       alreadyInstalled: 'Already installed',
-      installedAt: 'Hello Pulse is installed in {capsule}.',
       noCapsules: 'Create a running Capsule before evaluating an Assistant.',
       createCapsule: 'Create a Capsule',
       confirmTitle: 'Install Hello Pulse?',
@@ -58,20 +50,12 @@
       genericFailure: 'The local evaluation could not be completed.',
     },
     pt: {
-      localKicker: 'Avaliação local // confiável',
-      localTitle: 'Conheça o Hello Pulse.',
-      localLead: 'Instale o primeiro Assistant publicado em uma Cápsula e execute a operação hello declarada. Nenhum login da Store é necessário.',
-      available: 'Pronto neste Space',
-      unavailable: 'Indisponível neste Space',
-      evaluate: 'Instalar e executar hello',
       runHello: 'Executar hello',
-      installed: 'Instalado',
       installedTitle: 'Instalados nesta Cápsula',
       installedEmpty: 'Nenhum Assistant instalado nesta Cápsula.',
       inventoryLoading: 'Lendo Assistants instalados…',
       installedNow: 'Instalado agora',
       alreadyInstalled: 'Já estava instalado',
-      installedAt: 'O Hello Pulse está instalado em {capsule}.',
       noCapsules: 'Crie uma Cápsula em execução antes de avaliar um Assistant.',
       createCapsule: 'Criar uma Cápsula',
       confirmTitle: 'Instalar o Hello Pulse?',
@@ -445,25 +429,22 @@
     <header class="store-header">
       <div>
         <p class="kicker">{$t('store.kicker')}</p>
-        <h1>{$t('store.title')}</h1>
-        <p class="lead">{$t('store.lead')}</p>
+        <h1>{$t('store.nav')}</h1>
       </div>
       <a class="external" href={storeUrl.replace('/embed', '')} target="_blank" rel="noopener noreferrer">
         {$t('store.open')} <span aria-hidden="true">↗</span>
       </a>
     </header>
 
-    <section id="local-evaluation" class="evaluation-card" aria-labelledby="hello-pulse-title">
-      <div class="assistant-mark" aria-hidden="true"><span>H</span><i></i></div>
-      <div class="evaluation-copy">
-        <p class="kicker">{copy.localKicker}</p>
-        <h2 id="hello-pulse-title">{copy.localTitle}</h2>
-        <p>{copy.localLead}</p>
-        <div class:ready={helloAvailable} class:installed={helloInstalled} class="availability">
-          <i aria-hidden="true"></i>{helloInstalled ? copy.installed : helloAvailable ? copy.available : copy.unavailable}
-        </div>
-      </div>
-      <div class="evaluation-actions">
+    <section class="store-workspace" aria-label={$t('store.frameTitle')}>
+      <aside class="local-panel" aria-labelledby="local-inventory-title">
+        <header>
+          <div>
+            <span>Local // Capsule</span>
+            <strong id="local-inventory-title">{copy.installedTitle}</strong>
+          </div>
+          <b>{installedAssistants.length}</b>
+        </header>
         {#if runningCapsules.length}
           <label class="capsule-picker" for="assistant-active-capsule">
             <span>{copy.capsuleLabel}</span>
@@ -473,76 +454,74 @@
               {/each}
             </select>
           </label>
-          <button
-            type="button"
-            disabled={!helloAvailable || busy || inventoryPhase === 'loading'}
-            onclick={helloInstalled ? runHello : () => beginInstall(HELLO_ID)}
-          >
-            {helloInstalled ? copy.runHello : copy.evaluate}<span aria-hidden="true">→</span>
-          </button>
         {:else}
-          <p>{copy.noCapsules}</p>
-          <a href="/capsules/">{copy.createCapsule}<span aria-hidden="true">→</span></a>
-        {/if}
-      </div>
-      {#if localError}
-        <div class="local-error" role="alert">
-          <span>{localError}</span>
-          <button type="button" onclick={refreshLocalData}>{copy.retry}</button>
-        </div>
-      {/if}
-      <div class="installed-inventory" aria-live="polite">
-        <header>
-          <strong>{copy.installedTitle}</strong>
-          <span>{installedAssistants.length}</span>
-        </header>
-        {#if inventoryPhase === 'loading'}
-          <p>{copy.inventoryLoading}</p>
-        {:else if inventoryPhase === 'error'}
-          <div class="inventory-error" role="alert">
-            <span>{inventoryError}</span>
-            <button type="button" disabled={!activeCapsule} onclick={() => loadInstalled(activeCapsule)}>{copy.retry}</button>
+          <div class="no-capsule">
+            <p>{copy.noCapsules}</p>
+            <a href="/capsules/">{copy.createCapsule}<span aria-hidden="true">→</span></a>
           </div>
-        {:else if installedAssistants.length}
-          <ul>
-            {#each installedAssistants as assistant (assistant.assistant)}
-              <li>
-                <span class="installed-mark" aria-hidden="true">✓</span>
-                <strong>{assistant.assistant}</strong>
-                <small>{assistant.status}</small>
-                {#if assistant.assistant === HELLO_ID}
-                  <button type="button" disabled={busy} onclick={runHello}>{copy.runHello}</button>
-                {/if}
-                <button class="remove-assistant" type="button" disabled={busy} onclick={() => uninstallInstalled(assistant)}>
-                  {copy.uninstall}
-                </button>
-              </li>
-            {/each}
-          </ul>
-        {:else}
-          <p>{copy.installedEmpty}</p>
         {/if}
-      </div>
-      {#if evaluation}
-        <div class:removed={evaluation.kind === 'removed'} class="hello-result" role="status">
-          <span>{evaluation.note ?? copy.result}</span>
-          <strong>{evaluation.message}</strong>
-        </div>
-      {/if}
-    </section>
 
-    <section class="store-frame" aria-labelledby="store-source">
-      <header>
-        <span id="store-source"><i aria-hidden="true"></i>{$t('store.source')}</span>
-        <code>SHIMPZ // STORE</code>
-      </header>
-      <iframe
-        bind:this={iframeElement}
-        src={storeUrl}
-        title={$t('store.frameTitle')}
-        sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-        referrerpolicy="origin"
-      ></iframe>
+        {#if localError}
+          <div class="local-error" role="alert">
+            <span>{localError}</span>
+            <button type="button" onclick={refreshLocalData}>{copy.retry}</button>
+          </div>
+        {/if}
+
+        <div class="installed-inventory" aria-live="polite">
+          {#if inventoryPhase === 'loading'}
+            <p>{copy.inventoryLoading}</p>
+          {:else if inventoryPhase === 'error'}
+            <div class="inventory-error" role="alert">
+              <span>{inventoryError}</span>
+              <button type="button" disabled={!activeCapsule} onclick={() => loadInstalled(activeCapsule)}>{copy.retry}</button>
+            </div>
+          {:else if installedAssistants.length}
+            <ul>
+              {#each installedAssistants as assistant (assistant.assistant)}
+                <li>
+                  <div class="installed-name">
+                    <span class="installed-mark" aria-hidden="true">✓</span>
+                    <strong>{assistant.assistant}</strong>
+                    <small>{assistant.status}</small>
+                  </div>
+                  <div class="installed-actions">
+                    {#if assistant.assistant === HELLO_ID}
+                      <button type="button" disabled={busy} onclick={runHello}>{copy.runHello}</button>
+                    {/if}
+                    <button class="remove-assistant" type="button" disabled={busy} onclick={() => uninstallInstalled(assistant)}>
+                      {copy.uninstall}
+                    </button>
+                  </div>
+                </li>
+              {/each}
+            </ul>
+          {:else if activeCapsule}
+            <p>{copy.installedEmpty}</p>
+          {/if}
+        </div>
+
+        {#if evaluation}
+          <div class:removed={evaluation.kind === 'removed'} class="sidebar-result" role="status">
+            <span>{evaluation.note ?? copy.result}</span>
+            <strong>{evaluation.message}</strong>
+          </div>
+        {/if}
+      </aside>
+
+      <section class="store-frame" aria-labelledby="store-source">
+        <header>
+          <span id="store-source"><i aria-hidden="true"></i>{$t('store.source')}</span>
+          <code>SHIMPZ // STORE</code>
+        </header>
+        <iframe
+          bind:this={iframeElement}
+          src={storeUrl}
+          title={$t('store.frameTitle')}
+          sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+          referrerpolicy="origin"
+        ></iframe>
+      </section>
     </section>
 
     <p class="trust-boundary"><span aria-hidden="true">◇</span>{$t('store.boundary')}</p>
@@ -628,9 +607,9 @@
   .store-header {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
-    gap: 2rem;
-    margin-bottom: 2rem;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.9rem;
   }
   .kicker, .dialog-kicker {
     margin: 0 0 0.9rem;
@@ -644,21 +623,14 @@
   h1 {
     max-width: 12ch;
     margin: 0;
-    font-size: clamp(2.65rem, 7vw, 5.25rem);
-    line-height: 0.96;
-    letter-spacing: -0.08em;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    line-height: 1;
+    letter-spacing: -0.065em;
     text-wrap: balance;
   }
-  .lead {
-    max-width: 65ch;
-    margin: 1.1rem 0 0;
-    color: var(--text-dim);
-    font-size: 1rem;
-    line-height: 1.7;
-  }
-  .external, .sign-in, .evaluation-actions a {
+  .external, .sign-in, .no-capsule a {
     display: inline-flex;
-    min-height: 2.9rem;
+    min-height: 2.65rem;
     align-items: center;
     justify-content: space-between;
     gap: 1.3rem;
@@ -676,51 +648,33 @@
   }
   .external:hover, .sign-in:hover { filter: drop-shadow(0 0 9px rgba(0, 240, 255, 0.32)); }
 
-  .evaluation-card {
+  .store-workspace {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) minmax(13rem, auto);
-    align-items: center;
-    gap: clamp(1rem, 3vw, 2rem);
-    margin-bottom: 1.25rem;
-    padding: clamp(1.2rem, 3vw, 2rem);
-    background: radial-gradient(circle at 10% 50%, rgba(0, 240, 255, 0.08), transparent 30%), var(--surface-1);
+    grid-template-columns: minmax(15.5rem, 19rem) minmax(0, 1fr);
+    align-items: start;
+    gap: 1rem;
+  }
+  .local-panel {
+    display: grid;
+    gap: 0.9rem;
+    min-width: 0;
+    padding: 1rem;
+    background: radial-gradient(circle at 0 0, rgba(0, 240, 255, 0.07), transparent 35%), var(--surface-1);
     box-shadow: inset 0 0 0 1px var(--border-strong);
     clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   }
-  .assistant-mark {
-    position: relative;
-    display: grid;
-    width: 4.8rem;
-    height: 4.8rem;
-    place-items: center;
-    border: 1px solid var(--border-strong);
-    border-radius: 50%;
-    color: var(--accent);
-    font-family: var(--font-mono);
-    font-size: 1.5rem;
-    font-weight: 700;
-  }
-  .assistant-mark::before, .assistant-mark i {
-    position: absolute;
-    inset: 0.5rem;
-    border: 1px dashed rgba(0, 240, 255, 0.35);
-    border-radius: 50%;
-    content: '';
-  }
-  .assistant-mark i { inset: -0.35rem; border-color: rgba(255, 61, 242, 0.22); }
-  .evaluation-copy h2 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.3rem); letter-spacing: -0.05em; }
-  .evaluation-copy > p:not(.kicker) { max-width: 58ch; margin: 0.65rem 0 0; color: var(--text-dim); line-height: 1.6; }
-  .availability { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 0.9rem; color: var(--text-faint); font-family: var(--font-mono); font-size: 0.62rem; text-transform: uppercase; }
-  .availability i { width: 0.42rem; height: 0.42rem; border-radius: 50%; background: var(--danger); }
-  .availability.ready { color: var(--success); }
-  .availability.ready i { background: var(--success); box-shadow: 0 0 8px rgba(5, 255, 161, 0.55); }
-  .availability.installed { font-weight: 700; }
-  .evaluation-actions { display: flex; align-items: flex-end; flex-direction: column; gap: 0.75rem; }
-  .evaluation-actions > p { max-width: 25ch; margin: 0; color: var(--text-dim); font-size: 0.78rem; line-height: 1.5; text-align: right; }
-  .capsule-picker { display: grid; width: min(100%, 17rem); gap: 0.35rem; }
+  .local-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .local-panel > header div { display: grid; min-width: 0; gap: 0.25rem; }
+  .local-panel > header span { color: var(--accent); font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .local-panel > header strong { overflow: hidden; font-size: 0.82rem; text-overflow: ellipsis; white-space: nowrap; }
+  .local-panel > header b { display: grid; min-width: 1.6rem; height: 1.6rem; place-items: center; border: 1px solid var(--border-strong); color: var(--accent); font-family: var(--font-mono); font-size: 0.65rem; }
+  .capsule-picker { display: grid; width: 100%; gap: 0.35rem; }
   .capsule-picker span { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.09em; text-transform: uppercase; }
   .capsule-picker select { width: 100%; min-height: 2.55rem; border: 1px solid var(--border-strong); padding: 0 2rem 0 0.75rem; background: #050708; color: var(--text); font-family: var(--font-mono); font-size: 0.68rem; }
-  .evaluation-actions button, .dialog-primary, .dialog-secondary, .local-error button {
+  .no-capsule { display: grid; gap: 0.7rem; }
+  .no-capsule p { margin: 0; color: var(--text-dim); font-size: 0.75rem; line-height: 1.5; }
+  .no-capsule a { min-height: 2.4rem; }
+  .dialog-primary, .dialog-secondary, .local-error button {
     min-height: 2.8rem;
     border: 0;
     padding: 0 1rem;
@@ -733,29 +687,25 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
-  .evaluation-actions button { display: inline-flex; align-items: center; gap: 1rem; }
   button:disabled { cursor: not-allowed; opacity: 0.42; }
-  .local-error, .hello-result { grid-column: 1 / -1; }
-  .local-error { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--danger); color: var(--danger); font-size: 0.78rem; }
-  .local-error button { min-height: 2.2rem; background: transparent; box-shadow: inset 0 0 0 1px var(--danger); color: var(--danger); }
-  .hello-result { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding: 1rem; border-left: 2px solid var(--success); background: rgba(5, 255, 161, 0.045); }
-  .hello-result.removed { border-left-color: var(--accent-alt); background: rgba(255, 61, 242, 0.04); }
-  .hello-result span { color: var(--success); font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; }
-  .hello-result strong { font-size: 0.9rem; }
-
-  .installed-inventory { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 1rem; }
-  .installed-inventory > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-  .installed-inventory > header strong { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
-  .installed-inventory > header span { display: grid; min-width: 1.55rem; height: 1.55rem; place-items: center; border: 1px solid var(--border-strong); color: var(--accent); font-family: var(--font-mono); font-size: 0.65rem; }
-  .installed-inventory > p { margin: 0.7rem 0 0; color: var(--text-faint); font-size: 0.76rem; }
-  .installed-inventory ul { display: grid; gap: 0.45rem; margin: 0.75rem 0 0; padding: 0; list-style: none; }
-  .installed-inventory li { display: grid; min-width: 0; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.7rem; border: 1px solid var(--border); padding: 0.55rem 0.65rem; background: rgba(0, 0, 0, 0.24); }
+  .local-error { display: grid; gap: 0.55rem; border-left: 2px solid var(--danger); padding: 0.65rem 0.7rem; background: rgba(255, 96, 125, 0.04); color: var(--danger); font-size: 0.7rem; line-height: 1.45; }
+  .local-error button { min-height: 2rem; background: transparent; box-shadow: inset 0 0 0 1px var(--danger); color: var(--danger); }
+  .installed-inventory { min-width: 0; border-top: 1px solid var(--border); padding-top: 0.8rem; }
+  .installed-inventory > p { margin: 0; color: var(--text-faint); font-size: 0.72rem; line-height: 1.5; }
+  .installed-inventory ul { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+  .installed-inventory li { display: grid; min-width: 0; gap: 0.55rem; border: 1px solid var(--border); padding: 0.6rem; background: rgba(0, 0, 0, 0.24); }
+  .installed-name { display: grid; min-width: 0; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.45rem; }
   .installed-mark { color: var(--success); font-family: var(--font-mono); }
-  .installed-inventory li strong { overflow: hidden; font-family: var(--font-mono); font-size: 0.76rem; text-overflow: ellipsis; white-space: nowrap; }
-  .installed-inventory li small { color: var(--success); font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.07em; text-transform: uppercase; }
+  .installed-name strong { overflow: hidden; font-family: var(--font-mono); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+  .installed-name small { color: var(--success); font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.06em; text-transform: uppercase; }
+  .installed-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .installed-inventory button, .inventory-error button { min-height: 2rem; border: 1px solid var(--border-strong); padding: 0 0.6rem; background: transparent; color: var(--accent); cursor: pointer; font-family: var(--font-mono); font-size: 0.56rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
   .installed-inventory .remove-assistant { border-color: rgba(255, 96, 125, 0.35); color: var(--danger); }
-  .inventory-error { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 0.7rem; color: var(--danger); font-size: 0.75rem; }
+  .inventory-error { display: grid; gap: 0.55rem; color: var(--danger); font-size: 0.7rem; line-height: 1.45; }
+  .sidebar-result { display: grid; gap: 0.3rem; border-left: 2px solid var(--success); padding: 0.65rem 0.7rem; background: rgba(5, 255, 161, 0.045); }
+  .sidebar-result.removed { border-left-color: var(--accent-alt); background: rgba(255, 61, 242, 0.04); }
+  .sidebar-result span { color: var(--success); font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .sidebar-result strong { font-size: 0.72rem; line-height: 1.45; }
 
   .store-frame {
     overflow: hidden;
@@ -767,7 +717,7 @@
   .store-frame > header span { display: inline-flex; align-items: center; gap: 0.5rem; }
   .store-frame > header i { width: 0.42rem; height: 0.42rem; background: var(--success); border-radius: 50%; box-shadow: 0 0 8px rgba(5, 255, 161, 0.55); }
   .store-frame code { color: var(--accent); font-size: inherit; }
-  iframe { display: block; width: 100%; height: min(72rem, calc(100vh - 12rem)); min-height: 42rem; border: 0; background: #000; }
+  iframe { display: block; width: 100%; height: 34rem; border: 0; background: #000; }
   .trust-boundary { display: flex; max-width: 78ch; align-items: flex-start; gap: 0.65rem; margin: 1rem 0 0; color: var(--text-faint); font-size: 0.76rem; line-height: 1.6; }
   .trust-boundary span { color: var(--accent-alt); }
 
@@ -799,28 +749,17 @@
   .pulse span { inset: 0; animation-delay: 0.7s; }
   @keyframes pulse { 0% { opacity: 0.8; transform: scale(0.7); } 100% { opacity: 0; transform: scale(1.12); } }
 
-  @media (max-width: 820px) {
-    .evaluation-card { grid-template-columns: auto minmax(0, 1fr); }
-    .evaluation-actions { grid-column: 1 / -1; align-items: stretch; }
-    .evaluation-actions > p { max-width: none; text-align: left; }
+  @media (max-width: 960px) {
+    .store-workspace { grid-template-columns: 1fr; }
   }
   @media (max-width: 720px) {
     .store-header { grid-template-columns: 1fr; align-items: start; }
     .external { width: 100%; }
-    iframe { min-height: 36rem; }
-    .hello-result { grid-template-columns: 1fr; }
-    .installed-inventory li { grid-template-columns: auto minmax(0, 1fr) auto; }
-    .installed-inventory li button { grid-column: span 1; }
+    iframe { height: 32rem; }
   }
   @media (max-width: 520px) {
-    .evaluation-card { grid-template-columns: 1fr; }
-    .assistant-mark { width: 4rem; height: 4rem; }
-    .evaluation-actions, .local-error, .hello-result { grid-column: 1; }
-    .local-error { align-items: stretch; flex-direction: column; }
-    .installed-inventory li { grid-template-columns: auto minmax(0, 1fr); }
-    .installed-inventory li small { text-align: right; }
-    .installed-inventory li button { grid-column: 1 / -1; }
-    .inventory-error { align-items: stretch; flex-direction: column; }
+    .installed-actions { display: grid; }
+    .installed-actions button { width: 100%; }
     .dialog-panel footer { align-items: stretch; flex-direction: column-reverse; }
   }
 </style>
