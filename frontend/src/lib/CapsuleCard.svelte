@@ -2,7 +2,7 @@
   import DriverCredentialPanel from '$lib/DriverCredentialPanel.svelte';
   import { t } from '$lib/i18n.js';
 
-  let { capsule, busy = false, onDelete } = $props();
+  let { capsule, busy = false, showCredentials = true, onDelete } = $props();
   let running = $derived(capsule.status === 'running');
 </script>
 
@@ -32,16 +32,18 @@
     </div>
   </dl>
 
-  <section class="drivers" aria-label={$t('capsules.drivers')}>
-    <div class="drivers-heading">
-      <div>
-        <h3>{$t('capsules.drivers')}</h3>
-        <p>{$t('capsules.driversLead')}</p>
+  {#if showCredentials}
+    <section class="drivers" aria-label={$t('capsules.drivers')}>
+      <div class="drivers-heading">
+        <div>
+          <h3>{$t('capsules.drivers')}</h3>
+          <p>{$t('capsules.driversLead')}</p>
+        </div>
+        <span>BYOK</span>
       </div>
-      <span>BYOK</span>
-    </div>
-    <DriverCredentialPanel capsuleId={capsule.id} driverId="r2" />
-  </section>
+      <DriverCredentialPanel capsuleId={capsule.id} driverId="r2" />
+    </section>
+  {/if}
 
   <footer>
     <span>Capsule boundary // {capsule.id.slice(0, 8)}</span>

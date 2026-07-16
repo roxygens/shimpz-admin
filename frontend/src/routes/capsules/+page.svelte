@@ -12,6 +12,7 @@
   let busy = $state(false);
   let error = $state('');
   let mutationError = $state('');
+  let showCredentials = $state(false);
   let pendingDelete = $state(null);
   let createDialog;
   let deleteDialog;
@@ -43,6 +44,7 @@
       const response = await fetch('/api/session', { cache: 'no-store' });
       if (!response.ok) throw new Error('session unavailable');
       const session = await response.json();
+      showCredentials = session.features?.capsuleCredentials === true;
       if (!session.authenticated) {
         phase = 'needauth';
         return;
@@ -177,7 +179,7 @@
     {#if capsules.length}
       <div class="capsule-grid">
         {#each capsules as capsule (capsule.id)}
-          <CapsuleCard {capsule} {busy} onDelete={requestDestroy} />
+          <CapsuleCard {capsule} {busy} {showCredentials} onDelete={requestDestroy} />
         {/each}
       </div>
     {:else if !error}

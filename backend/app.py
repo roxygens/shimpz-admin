@@ -43,6 +43,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 # Optional bootstrap token: shimpz-setup mints one; the shimpz-admin container normally does not. Its
 # ONLY power is bridging `?token=` → a session while no password is set. Never a raise if absent.
 SETUP_TOKEN = os.environ.get("SHIMPZ_SETUP_TOKEN", "").strip()
+CAPSULE_CREDENTIALS_ENABLED = os.environ.get("SHIMPZ_CAPSULE_CREDENTIALS_ENABLED", "1").strip() == "1"
 
 REPO = Path(os.environ.get("SHIMPZ_REPO") or Path(__file__).resolve().parents[3])
 ENV_PATH = REPO / ".env"
@@ -103,7 +104,11 @@ async def _gate(request: Request, call_next):
 
 @app.get("/api/session")
 async def session(request: Request):
-    return {"authenticated": _session_ok(request.cookies), "initialized": adminstore.is_initialized()}
+    return {
+        "authenticated": _session_ok(request.cookies),
+        "initialized": adminstore.is_initialized(),
+        "features": {"capsuleCredentials": CAPSULE_CREDENTIALS_ENABLED},
+    }
 
 
 @app.post("/api/login")
