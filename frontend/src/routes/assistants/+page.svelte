@@ -423,6 +423,7 @@
     const capsule = runningCapsules.find((item) => item.id === selectedCapsule);
     if (!capsule) return;
 
+    evaluation = null;
     busy = true;
     dialogError = '';
     dialogResult = null;
