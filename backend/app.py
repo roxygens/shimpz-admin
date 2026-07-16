@@ -16,6 +16,7 @@ after a config change is the marketplace's job (via shimpz-driver), not this app
 """
 
 import hmac
+import json
 import logging
 import os
 import sys
@@ -307,15 +308,46 @@ async def apply(payload: dict):
     return {"applied": True, "results": results, "generated": generated}
 
 
-# ── Capsules: the authenticated control plane for capsule-driver. Session-gated by the middleware
-# (under /api/, not in OPEN_API); the panel holds no docker.sock — it POSTs to capsule-driver, which
-# provisions the isolated brain. This is the "create a Capsule, then configure it here" surface. ──
+# ── Capsules + Assistants: authenticated control plane for capsule-driver. Every route stays under
+# /api/ and outside OPEN_API, so the signed local Admin session is required before the private bearer
+# bridge can run. The Admin has no Docker socket and preserves bounded driver JSON/status exactly. ──
+def _capsule_driver_response(operation):
+    try:
+        response = operation()
+    except capsules.CapsuleRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return JSONResponse(status_code=response.status, content=response.body)
+
+
+async def _bounded_json_object(request: Request) -> dict:
+    """Read one JSON object without allowing an operation request to grow without bound."""
+    content_type = request.headers.get("content-type", "").partition(";")[0].strip().lower()
+    if content_type != "application/json":
+        raise HTTPException(status_code=415, detail="content type must be application/json")
+    raw_length = request.headers.get("content-length")
+    if raw_length is not None:
+        if not raw_length.isascii() or not raw_length.isdigit():
+            raise HTTPException(status_code=400, detail="invalid content length")
+        if int(raw_length) > capsules.MAX_JSON_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="request body too large")
+
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > capsules.MAX_JSON_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="request body too large")
+    try:
+        payload = json.loads(body)
+    except (json.JSONDecodeError, UnicodeError, RecursionError):
+        raise HTTPException(status_code=400, detail="request body must be valid JSON") from None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="request body must be a JSON object")
+    return payload
+
+
 @app.get("/api/capsules")
 async def capsules_list():
-    ok, body = capsules.list_capsules()
-    if not ok:
-        raise HTTPException(status_code=502, detail=body.get("error", "capsule-driver unreachable"))
-    return body
+    return _capsule_driver_response(capsules.list_capsules)
 
 
 @app.post("/api/capsules")
@@ -326,19 +358,44 @@ async def capsules_create(payload: dict):
     cid = capsules.to_cid(name)
     if not cid:
         raise HTTPException(status_code=400, detail="capsule name has no usable characters")
-    ok, body = capsules.create(cid, name)
-    if not ok:
-        raise HTTPException(status_code=502, detail=body.get("error", "capsule create failed"))
-    log.info("capsule created: %s", cid)
-    return body
+    response = _capsule_driver_response(lambda: capsules.create(cid, name))
+    if 200 <= response.status_code < 300:
+        log.info("capsule created: %s", cid)
+    return response
 
 
 @app.delete("/api/capsules/{cid}")
 async def capsules_destroy(cid: str):
-    ok, body = capsules.destroy(capsules.to_cid(cid))
-    if not ok:
-        raise HTTPException(status_code=502, detail=body.get("error", "capsule destroy failed"))
-    return body
+    return _capsule_driver_response(lambda: capsules.destroy(cid))
+
+
+@app.get("/api/assistants")
+async def assistants_list():
+    return _capsule_driver_response(capsules.list_assistants)
+
+
+@app.get("/api/capsules/{cid}/assistants")
+async def capsule_assistants_list(cid: str):
+    return _capsule_driver_response(lambda: capsules.list_installed_assistants(cid))
+
+
+@app.post("/api/capsules/{cid}/assistants")
+async def capsule_assistant_install(cid: str, request: Request):
+    payload = await _bounded_json_object(request)
+    return _capsule_driver_response(lambda: capsules.install_assistant(cid, payload))
+
+
+@app.post("/api/capsules/{cid}/assistants/{assistant_id}/operations/{operation}")
+async def capsule_assistant_operation(cid: str, assistant_id: str, operation: str, request: Request):
+    payload = await _bounded_json_object(request)
+    return _capsule_driver_response(
+        lambda: capsules.invoke_assistant_operation(cid, assistant_id, operation, payload)
+    )
+
+
+@app.delete("/api/capsules/{cid}/assistants/{assistant_id}")
+async def capsule_assistant_uninstall(cid: str, assistant_id: str):
+    return _capsule_driver_response(lambda: capsules.uninstall_assistant(cid, assistant_id))
 
 
 def _driver_proxy_response(operation):
