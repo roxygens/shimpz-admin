@@ -6,6 +6,7 @@
     INSTALL_INTENT,
     STORE_FRAME_MAX_HEIGHT,
     STORE_FRAME_MIN_HEIGHT,
+    STORE_LIFECYCLE_PROTOCOL_VERSION,
     acknowledgeStoreFrame,
     acknowledgeStoreInstallIntent,
     acknowledgeStoreUninstallIntent,
@@ -147,7 +148,9 @@
   let copy = $derived(LOCAL_COPY[currentLocale] ?? LOCAL_COPY.en);
   let storeLocale = $derived(currentLocale === 'pt' ? 'pt' : 'en');
   let storePageUrl = $derived(`https://shimpz.com/${storeLocale}/assistants`);
-  let storeUrl = $derived(`${storePageUrl}/embed?admin-frame=${frameReload}`);
+  let storeUrl = $derived(
+    `${storePageUrl}/embed?store-protocol=${STORE_LIFECYCLE_PROTOCOL_VERSION}&admin-frame=${frameReload}`,
+  );
   let runningCapsules = $derived(capsules.filter((capsule) => capsule.status === 'running'));
   let helloEntry = $derived(catalog.find((entry) => entry.id === HELLO_ID));
   let helloAvailable = $derived(Boolean(helloEntry && declaresHello(helloEntry)));

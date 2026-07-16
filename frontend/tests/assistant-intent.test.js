@@ -8,6 +8,7 @@ import {
   STORE_FRAME_MAX_HEIGHT,
   STORE_FRAME_MIN_HEIGHT,
   STORE_FRAME_TYPE,
+  STORE_LIFECYCLE_PROTOCOL_VERSION,
   STORE_ORIGIN,
   STORE_STATE_MAX_ASSISTANTS,
   STORE_STATE_TYPE,
@@ -23,6 +24,10 @@ import {
   projectReleasedStoreAssistantIds,
   storeFrameHeight,
 } from '../src/lib/assistantIntent.js';
+
+test('pins the embedded Store lifecycle protocol cache key', () => {
+  assert.equal(STORE_LIFECYCLE_PROTOCOL_VERSION, 1);
+});
 
 test('accepts only the exact Hello Pulse intent from the embedded Store window', () => {
   const iframeWindow = {};

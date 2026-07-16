@@ -17,6 +17,7 @@ export const STORE_STATE_TYPE = 'shimpz:assistant-store-state';
 export const STORE_FRAME_MIN_HEIGHT = 320;
 export const STORE_FRAME_MAX_HEIGHT = 5000;
 export const STORE_STATE_MAX_ASSISTANTS = 128;
+export const STORE_LIFECYCLE_PROTOCOL_VERSION = 1;
 
 const INTENT_KEYS = Object.freeze(['assistant', 'type', 'version']);
 const FRAME_KEYS = Object.freeze(['height', 'type', 'version']);

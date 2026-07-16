@@ -15,3 +15,10 @@ test('holds Store admission through modal close and intercepts Escape while busy
   assert.match(source, /<dialog[^>]+oncancel=\{cancelInstallDialog\}/);
   assert.match(source, /finally \{\s+storeActionLatch\.release\('uninstall'\);/);
 });
+
+test('pins Store protocol while preserving the independent reload counter', () => {
+  assert.match(
+    source,
+    /\/embed\?store-protocol=\$\{STORE_LIFECYCLE_PROTOCOL_VERSION\}&admin-frame=\$\{frameReload\}/,
+  );
+});
