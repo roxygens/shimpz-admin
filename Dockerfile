@@ -18,7 +18,7 @@ RUN npm ci --no-audit --no-fund && rm -rf /root/.npm
 COPY frontend/ ./
 # adapter-static writes the SPA to /w/build. Normalize the copied artifact tree explicitly: the
 # release builder supplies the Git-derived epoch and the final Python stage consumes only this tree.
-RUN npm run build && \
+RUN npm test && npm run build && \
     find /w/build -depth -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} + && \
     rm -rf /root/.npm
 

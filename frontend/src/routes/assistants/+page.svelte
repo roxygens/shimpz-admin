@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import AdminShell from '$lib/AdminShell.svelte';
   import LocaleMenu from '$lib/LocaleMenu.svelte';
-  import { INSTALL_INTENT, acceptsStoreInstallIntent } from '$lib/assistantIntent.js';
+  import { INSTALL_INTENT, acknowledgeStoreInstallIntent } from '$lib/assistantIntent.js';
   import { evaluateHelloPulse, listInstalledAssistants, safeApiError } from '$lib/localApi.js';
   import { t, locale } from '$lib/i18n.js';
 
@@ -28,10 +28,26 @@
       createCapsule: 'Create a Capsule',
       confirmTitle: 'Install Hello Pulse?',
       confirmLead: 'Choose the exact Capsule. The Store cannot choose it or install anything for you.',
+      checkingTitle: 'Preparing the local action…',
+      checkingLead: 'The Admin is checking the selected Capsule and its installed Assistants.',
+      alreadyTitle: 'Hello Pulse is already installed.',
+      alreadyLead: 'Nothing was installed twice. You can run its hello operation now.',
+      noCapsuleTitle: 'Create a running Capsule first.',
+      noCapsuleLead: 'An Assistant always belongs to one Capsule, so the Admin needs a destination before installation.',
+      unavailableTitle: 'Hello Pulse is unavailable right now.',
+      unavailableLead: 'The local catalog or installed inventory could not be verified. Retry the local data before installing.',
+      successTitle: 'Hello Pulse is ready.',
+      successLead: 'The Assistant is installed in the selected Capsule and its declared hello operation responded.',
+      failureTitle: 'The local action did not finish.',
+      failureLead: 'Nothing was hidden. Review the error below and retry when the local controller is available.',
       capsuleLabel: 'Destination Capsule',
       capsulePlaceholder: 'Select a Capsule',
       cancel: 'Cancel',
+      close: 'Close',
+      preparing: 'Checking…',
       confirm: 'Confirm install',
+      runInstalled: 'Run hello',
+      retryAction: 'Try again',
       working: 'Installing and running…',
       result: 'Hello result',
       uninstall: 'Uninstall from Capsule',
@@ -60,10 +76,26 @@
       createCapsule: 'Criar uma Cápsula',
       confirmTitle: 'Instalar o Hello Pulse?',
       confirmLead: 'Escolha a Cápsula exata. A Store não pode escolhê-la nem instalar nada por você.',
+      checkingTitle: 'Preparando a ação local…',
+      checkingLead: 'O Admin está verificando a Cápsula selecionada e seus Assistants instalados.',
+      alreadyTitle: 'O Hello Pulse já está instalado.',
+      alreadyLead: 'Nada foi instalado duas vezes. Você pode executar a operação hello agora.',
+      noCapsuleTitle: 'Crie primeiro uma Cápsula em execução.',
+      noCapsuleLead: 'Um Assistant sempre pertence a uma Cápsula, então o Admin precisa de um destino antes da instalação.',
+      unavailableTitle: 'O Hello Pulse está indisponível agora.',
+      unavailableLead: 'Não foi possível verificar o catálogo local ou o inventário instalado. Atualize os dados locais antes de instalar.',
+      successTitle: 'O Hello Pulse está pronto.',
+      successLead: 'O Assistant está instalado na Cápsula selecionada e sua operação hello declarada respondeu.',
+      failureTitle: 'A ação local não foi concluída.',
+      failureLead: 'Nada foi ocultado. Revise o erro abaixo e tente novamente quando o controller local estiver disponível.',
       capsuleLabel: 'Cápsula de destino',
       capsulePlaceholder: 'Selecione uma Cápsula',
       cancel: 'Cancelar',
+      close: 'Fechar',
+      preparing: 'Verificando…',
       confirm: 'Confirmar instalação',
+      runInstalled: 'Executar hello',
+      retryAction: 'Tentar novamente',
       working: 'Instalando e executando…',
       result: 'Resultado do hello',
       uninstall: 'Desinstalar da Cápsula',
@@ -87,10 +119,15 @@
   let inventoryPhase = $state('idle');
   let inventoryError = $state('');
   let inventoryAttempt = 0;
+  let localDataPhase = $state('idle');
+  let localDataRequest = Promise.resolve();
   let pendingAssistant = $state('');
   let evaluation = $state(null);
   let iframeElement = $state();
   let confirmDialog = $state();
+  let dialogMode = $state('install');
+  let dialogResult = $state(null);
+  let dialogAttempt = 0;
 
   let currentLocale = $derived($locale);
   let copy = $derived(LOCAL_COPY[currentLocale] ?? LOCAL_COPY.en);
@@ -100,7 +137,26 @@
   let helloEntry = $derived(catalog.find((entry) => entry.id === HELLO_ID));
   let helloAvailable = $derived(Boolean(helloEntry && declaresHello(helloEntry)));
   let activeCapsuleRecord = $derived(runningCapsules.find((capsule) => capsule.id === activeCapsule) ?? null);
+  let selectedCapsuleRecord = $derived(runningCapsules.find((capsule) => capsule.id === selectedCapsule) ?? null);
   let helloInstalled = $derived(installedAssistants.some((entry) => entry.assistant === HELLO_ID));
+  let dialogTitle = $derived({
+    checking: copy.checkingTitle,
+    install: copy.confirmTitle,
+    installed: copy.alreadyTitle,
+    'no-capsule': copy.noCapsuleTitle,
+    unavailable: copy.unavailableTitle,
+    success: copy.successTitle,
+    error: copy.failureTitle,
+  }[dialogMode] ?? copy.confirmTitle);
+  let dialogLead = $derived({
+    checking: copy.checkingLead,
+    install: copy.confirmLead,
+    installed: copy.alreadyLead,
+    'no-capsule': copy.noCapsuleLead,
+    unavailable: copy.unavailableLead,
+    success: copy.successLead,
+    error: copy.failureLead,
+  }[dialogMode] ?? copy.confirmLead);
 
   function declaresHello(entry) {
     if (Array.isArray(entry?.operations)) {
@@ -167,6 +223,7 @@
   }
 
   async function loadLocalData() {
+    localDataPhase = 'loading';
     localError = '';
     try {
       const [capsuleResponse, catalogResponse] = await Promise.all([
@@ -175,6 +232,7 @@
       ]);
       if (capsuleResponse.status === 401 || catalogResponse.status === 401) {
         phase = 'needauth';
+        localDataPhase = 'error';
         return;
       }
       const [capsuleBody, catalogBody] = await Promise.all([
@@ -193,10 +251,17 @@
         activeCapsule = capsules.find((capsule) => capsule.status === 'running')?.id ?? '';
       }
       await loadInstalled(activeCapsule);
+      localDataPhase = inventoryPhase === 'error' ? 'error' : 'ready';
     } catch (error) {
       localError = error instanceof Error ? error.message : copy.loadFailed;
       catalog = [];
+      localDataPhase = 'error';
     }
+  }
+
+  function refreshLocalData() {
+    localDataRequest = loadLocalData();
+    return localDataRequest;
   }
 
   async function checkSession() {
@@ -209,51 +274,90 @@
         return;
       }
       phase = 'ready';
-      await loadLocalData();
+      await refreshLocalData();
     } catch {
       phase = 'needauth';
     }
   }
 
-  function beginInstall(assistantId) {
-    if (assistantId !== HELLO_ID || !activeCapsuleRecord) return;
-    if (helloInstalled) {
-      evaluation = {
-        kind: 'installed',
-        note: copy.alreadyInstalled,
-        message: format(copy.installedAt, { capsule: activeCapsuleRecord.name }),
-      };
+  function showInstallDialog() {
+    if (confirmDialog && !confirmDialog.open) confirmDialog.showModal();
+  }
+
+  async function beginInstall(assistantId) {
+    const attempt = ++dialogAttempt;
+    pendingAssistant = assistantId;
+    selectedCapsule = activeCapsuleRecord?.id ?? '';
+    dialogError = '';
+    dialogResult = null;
+    dialogMode = 'checking';
+    showInstallDialog();
+
+    if (assistantId !== HELLO_ID) {
+      dialogMode = 'unavailable';
       return;
     }
-    pendingAssistant = assistantId;
-    selectedCapsule = activeCapsuleRecord.id;
-    dialogError = '';
-    confirmDialog?.showModal();
+    if (localDataPhase === 'loading') await localDataRequest;
+    if (attempt !== dialogAttempt) return;
+
+    const capsule = activeCapsuleRecord;
+    selectedCapsule = capsule?.id ?? '';
+    if (localDataPhase === 'error') {
+      dialogMode = 'unavailable';
+      return;
+    }
+    if (!capsule) {
+      dialogMode = 'no-capsule';
+      return;
+    }
+    if (!helloAvailable) {
+      dialogMode = 'unavailable';
+      return;
+    }
+    if (inventoryPhase === 'loading') await loadInstalled(capsule.id);
+    if (attempt !== dialogAttempt) return;
+    if (inventoryPhase === 'error') {
+      dialogMode = 'unavailable';
+      return;
+    }
+    dialogMode = installedAssistants.some((entry) => entry.assistant === HELLO_ID) ? 'installed' : 'install';
   }
 
   function handleStoreMessage(event) {
-    if (acceptsStoreInstallIntent(event, iframeElement?.contentWindow)) beginInstall(HELLO_ID);
+    if (!acknowledgeStoreInstallIntent(event, iframeElement?.contentWindow)) return;
+    void beginInstall(event.data.assistant);
   }
 
   async function confirmInstall() {
-    if (busy || pendingAssistant !== HELLO_ID || !helloAvailable) return;
+    if (
+      busy ||
+      pendingAssistant !== HELLO_ID ||
+      !helloAvailable ||
+      !['install', 'installed', 'error'].includes(dialogMode)
+    ) return;
     const capsule = runningCapsules.find((item) => item.id === selectedCapsule);
     if (!capsule) return;
 
     busy = true;
     dialogError = '';
-    evaluation = null;
+    dialogResult = null;
     try {
       const { message, installed } = await evaluateHelloPulse(fetch, capsule.id);
-      evaluation = { kind: 'success', note: installed ? copy.installedNow : copy.alreadyInstalled, message };
+      dialogResult = { note: installed ? copy.installedNow : copy.alreadyInstalled, message };
+      dialogMode = 'success';
       activeCapsule = capsule.id;
       await loadInstalled(capsule.id);
-      confirmDialog?.close();
     } catch (error) {
       dialogError = error instanceof Error ? error.message : copy.genericFailure;
+      dialogMode = 'error';
     } finally {
       busy = false;
     }
+  }
+
+  function closeInstallDialog() {
+    dialogAttempt += 1;
+    confirmDialog?.close();
   }
 
   async function runHello() {
@@ -384,7 +488,7 @@
       {#if localError}
         <div class="local-error" role="alert">
           <span>{localError}</span>
-          <button type="button" onclick={loadLocalData}>{copy.retry}</button>
+          <button type="button" onclick={refreshLocalData}>{copy.retry}</button>
         </div>
       {/if}
       <div class="installed-inventory" aria-live="polite">
@@ -445,28 +549,47 @@
   {/if}
 </AdminShell>
 
-<dialog bind:this={confirmDialog} aria-labelledby="assistant-confirm-title" onclose={() => (dialogError = '')}>
+<dialog bind:this={confirmDialog} aria-labelledby="assistant-confirm-title">
   <form class="dialog-panel" onsubmit={(event) => { event.preventDefault(); confirmInstall(); }}>
     <header>
       <p class="dialog-kicker">Assistant // local admission</p>
-      <h2 id="assistant-confirm-title">{copy.confirmTitle}</h2>
-      <p>{copy.confirmLead}</p>
+      <h2 id="assistant-confirm-title">{dialogTitle}</h2>
+      <p>{dialogLead}</p>
     </header>
-    {#if activeCapsuleRecord}
+    {#if selectedCapsuleRecord}
       <div class="dialog-target">
         <span>{copy.capsuleLabel}</span>
-        <strong>{activeCapsuleRecord.name}</strong>
-        <code>{activeCapsuleRecord.id}</code>
+        <strong>{selectedCapsuleRecord.name}</strong>
+        <code>{selectedCapsuleRecord.id}</code>
       </div>
     {/if}
+    {#if dialogMode === 'checking'}
+      <p class="dialog-progress" role="status">{copy.preparing}</p>
+    {:else if dialogMode === 'no-capsule'}
+      <a class="dialog-route" href="/capsules/">{copy.createCapsule}<span aria-hidden="true">→</span></a>
+    {/if}
     {#if dialogError}<p class="dialog-error" role="alert">{dialogError}</p>{/if}
+    {#if dialogResult}
+      <div class="dialog-result" role="status">
+        <span>{dialogResult.note}</span>
+        <strong>{dialogResult.message}</strong>
+      </div>
+    {/if}
     <footer>
-      <button type="button" class="dialog-secondary" disabled={busy} onclick={() => confirmDialog?.close()}>
-        {copy.cancel}
+      <button type="button" class="dialog-secondary" disabled={busy} onclick={closeInstallDialog}>
+        {dialogMode === 'install' ? copy.cancel : copy.close}
       </button>
-      <button type="submit" class="dialog-primary" disabled={busy || !selectedCapsule || !helloAvailable}>
-        {busy ? copy.working : copy.confirm}
-      </button>
+      {#if ['install', 'installed', 'error'].includes(dialogMode)}
+        <button type="submit" class="dialog-primary" disabled={busy || !selectedCapsule || !helloAvailable}>
+          {busy
+            ? copy.working
+            : dialogMode === 'installed'
+              ? copy.runInstalled
+              : dialogMode === 'error'
+                ? copy.retryAction
+                : copy.confirm}
+        </button>
+      {/if}
     </footer>
   </form>
 </dialog>
@@ -657,7 +780,12 @@
   .dialog-target span { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; }
   .dialog-target strong { font-size: 0.9rem; }
   .dialog-target code { color: var(--accent); font-size: 0.65rem; }
+  .dialog-progress { margin: 1rem 0 0; color: var(--accent); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .dialog-route { display: flex; min-height: 2.8rem; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; padding: 0 0.9rem; background: var(--accent); color: #001013; font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700; text-decoration: none; text-transform: uppercase; }
   .dialog-error { margin: 0.8rem 0 0; color: var(--danger); font-size: 0.78rem; line-height: 1.5; }
+  .dialog-result { display: grid; gap: 0.35rem; margin-top: 1rem; border-left: 2px solid var(--success); padding: 0.85rem 1rem; background: rgba(5, 255, 161, 0.045); }
+  .dialog-result span { color: var(--success); font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; }
+  .dialog-result strong { font-size: 0.9rem; }
   .dialog-panel footer { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; }
   .dialog-secondary { background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--text-dim); }
 

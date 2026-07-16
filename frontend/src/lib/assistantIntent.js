@@ -4,6 +4,7 @@ export const INSTALL_INTENT = Object.freeze({
   version: 1,
   assistant: 'hello-pulse',
 });
+export const INSTALL_ACK_TYPE = 'shimpz:assistant-install-ack';
 
 const INTENT_KEYS = Object.freeze(['assistant', 'type', 'version']);
 
@@ -24,4 +25,22 @@ export function acceptsStoreInstallIntent(event, iframeWindow) {
     data.version === INSTALL_INTENT.version &&
     data.assistant === INSTALL_INTENT.assistant
   );
+}
+
+/**
+ * Acknowledge only the exact inert Store intent. The response deliberately contains no Capsule,
+ * inventory, token, runtime, or installation state; local admission remains entirely in the Admin.
+ */
+export function acknowledgeStoreInstallIntent(event, iframeWindow) {
+  if (!acceptsStoreInstallIntent(event, iframeWindow)) return false;
+  event.source.postMessage(
+    {
+      type: INSTALL_ACK_TYPE,
+      version: INSTALL_INTENT.version,
+      assistant: INSTALL_INTENT.assistant,
+      accepted: true,
+    },
+    event.origin,
+  );
+  return true;
 }

@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  INSTALL_ACK_TYPE,
   INSTALL_INTENT,
   STORE_ORIGIN,
+  acknowledgeStoreInstallIntent,
   acceptsStoreInstallIntent,
 } from '../src/lib/assistantIntent.js';
 
@@ -32,4 +34,44 @@ test('rejects every untrusted origin, source, type, version, id, and extra field
 
   for (const candidate of cases) assert.equal(acceptsStoreInstallIntent(candidate, iframeWindow), false);
   assert.equal(acceptsStoreInstallIntent(exact, null), false);
+});
+
+test('acknowledges an accepted intent without exposing any local state', () => {
+  const acknowledgements = [];
+  const iframeWindow = {
+    postMessage(message, targetOrigin) { acknowledgements.push({ message, targetOrigin }); },
+  };
+  const event = { origin: STORE_ORIGIN, source: iframeWindow, data: { ...INSTALL_INTENT } };
+
+  assert.equal(acknowledgeStoreInstallIntent(event, iframeWindow), true);
+  assert.deepEqual(acknowledgements, [{
+    message: {
+      type: INSTALL_ACK_TYPE,
+      version: 1,
+      assistant: 'hello-pulse',
+      accepted: true,
+    },
+    targetOrigin: STORE_ORIGIN,
+  }]);
+  assert.deepEqual(Object.keys(acknowledgements[0].message).sort(), [
+    'accepted',
+    'assistant',
+    'type',
+    'version',
+  ]);
+});
+
+test('never acknowledges a rejected Store message', () => {
+  const acknowledgements = [];
+  const iframeWindow = {
+    postMessage(message, targetOrigin) { acknowledgements.push({ message, targetOrigin }); },
+  };
+  const event = {
+    origin: 'https://lookalike.invalid',
+    source: iframeWindow,
+    data: { ...INSTALL_INTENT },
+  };
+
+  assert.equal(acknowledgeStoreInstallIntent(event, iframeWindow), false);
+  assert.deepEqual(acknowledgements, []);
 });
