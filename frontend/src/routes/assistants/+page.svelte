@@ -2,21 +2,257 @@
   import { onMount } from 'svelte';
   import AdminShell from '$lib/AdminShell.svelte';
   import LocaleMenu from '$lib/LocaleMenu.svelte';
+  import { INSTALL_INTENT, acceptsStoreInstallIntent } from '$lib/assistantIntent.js';
   import { t, locale } from '$lib/i18n.js';
 
+  const HELLO_ID = INSTALL_INTENT.assistant;
+  const CID_RE = /^[a-z0-9_]{1,40}$/;
+  const LOCAL_COPY = {
+    en: {
+      localKicker: 'Local evaluation // trusted',
+      localTitle: 'Meet Hello Pulse.',
+      localLead: 'Install the first released Assistant in one Capsule and run its declared hello operation. No Store login is required.',
+      available: 'Ready in this Space',
+      unavailable: 'Unavailable in this Space',
+      evaluate: 'Install and run hello',
+      noCapsules: 'Create a running Capsule before evaluating an Assistant.',
+      createCapsule: 'Create a Capsule',
+      confirmTitle: 'Install Hello Pulse?',
+      confirmLead: 'Choose the exact Capsule. The Store cannot choose it or install anything for you.',
+      capsuleLabel: 'Destination Capsule',
+      capsulePlaceholder: 'Select a Capsule',
+      cancel: 'Cancel',
+      confirm: 'Confirm install',
+      working: 'Installing and running…',
+      result: 'Hello result',
+      uninstall: 'Uninstall from Capsule',
+      uninstallConfirm: 'Uninstall Hello Pulse from {capsule}?',
+      removed: 'Hello Pulse was uninstalled from {capsule}.',
+      loadFailed: 'The local Assistant control plane is unavailable.',
+      retry: 'Retry local data',
+      genericFailure: 'The local evaluation could not be completed.',
+    },
+    pt: {
+      localKicker: 'Avaliação local // confiável',
+      localTitle: 'Conheça o Hello Pulse.',
+      localLead: 'Instale o primeiro Assistant publicado em uma Cápsula e execute a operação hello declarada. Nenhum login da Store é necessário.',
+      available: 'Pronto neste Space',
+      unavailable: 'Indisponível neste Space',
+      evaluate: 'Instalar e executar hello',
+      noCapsules: 'Crie uma Cápsula em execução antes de avaliar um Assistant.',
+      createCapsule: 'Criar uma Cápsula',
+      confirmTitle: 'Instalar o Hello Pulse?',
+      confirmLead: 'Escolha a Cápsula exata. A Store não pode escolhê-la nem instalar nada por você.',
+      capsuleLabel: 'Cápsula de destino',
+      capsulePlaceholder: 'Selecione uma Cápsula',
+      cancel: 'Cancelar',
+      confirm: 'Confirmar instalação',
+      working: 'Instalando e executando…',
+      result: 'Resultado do hello',
+      uninstall: 'Desinstalar da Cápsula',
+      uninstallConfirm: 'Desinstalar o Hello Pulse de {capsule}?',
+      removed: 'O Hello Pulse foi desinstalado de {capsule}.',
+      loadFailed: 'O plano de controle local de Assistants está indisponível.',
+      retry: 'Tentar dados locais novamente',
+      genericFailure: 'Não foi possível concluir a avaliação local.',
+    },
+  };
+
   let phase = $state('checking');
+  let capsules = $state([]);
+  let catalog = $state([]);
+  let localError = $state('');
+  let dialogError = $state('');
+  let busy = $state(false);
+  let selectedCapsule = $state('');
+  let pendingAssistant = $state('');
+  let evaluation = $state(null);
+  let lastCapsule = $state(null);
+  let iframeElement = $state();
+  let confirmDialog = $state();
+
   let currentLocale = $derived($locale);
+  let copy = $derived(LOCAL_COPY[currentLocale] ?? LOCAL_COPY.en);
   let storeLocale = $derived(currentLocale === 'pt' ? 'pt' : 'en');
   let storeUrl = $derived(`https://shimpz.com/${storeLocale}/assistants/embed`);
+  let runningCapsules = $derived(capsules.filter((capsule) => capsule.status === 'running'));
+  let helloEntry = $derived(catalog.find((entry) => entry.id === HELLO_ID));
+  let helloAvailable = $derived(Boolean(helloEntry && declaresHello(helloEntry)));
+
+  function declaresHello(entry) {
+    if (Array.isArray(entry?.operations)) {
+      return entry.operations.some((operation) => operation === 'hello' || operation?.id === 'hello');
+    }
+    return Boolean(entry?.operations && typeof entry.operations === 'object' && entry.operations.hello);
+  }
+
+  function normalizeCapsules(document) {
+    if (!document || !Array.isArray(document.capsules)) return [];
+    return document.capsules
+      .filter((item) => item && typeof item === 'object' && CID_RE.test(item.id))
+      .map((item) => ({
+        id: item.id,
+        name: typeof item.name === 'string' && item.name.trim() ? item.name.trim().slice(0, 80) : item.id,
+        status: typeof item.status === 'string' ? item.status : 'unknown',
+      }));
+  }
+
+  function normalizeCatalog(document) {
+    if (!document || !Array.isArray(document.assistants)) return [];
+    return document.assistants.filter((item) => item && typeof item === 'object' && item.id === HELLO_ID);
+  }
+
+  function isHelloInstalled(document) {
+    if (!document || !Array.isArray(document.assistants)) return false;
+    return document.assistants.some((item) => {
+      if (typeof item === 'string') return item === HELLO_ID;
+      return item && typeof item === 'object' && (item.assistant === HELLO_ID || item.id === HELLO_ID);
+    });
+  }
+
+  async function jsonObject(response) {
+    const body = await response.json().catch(() => ({}));
+    return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+  }
+
+  function detail(body, fallback) {
+    const candidate = body.detail ?? body.error;
+    return typeof candidate === 'string' && candidate.length <= 300 ? candidate : fallback;
+  }
+
+  function format(message, values) {
+    let output = message;
+    for (const [key, value] of Object.entries(values)) output = output.replaceAll(`{${key}}`, value);
+    return output;
+  }
+
+  async function loadLocalData() {
+    localError = '';
+    try {
+      const [capsuleResponse, catalogResponse] = await Promise.all([
+        fetch('/api/capsules', { cache: 'no-store', headers: { Accept: 'application/json' } }),
+        fetch('/api/assistants', { cache: 'no-store', headers: { Accept: 'application/json' } }),
+      ]);
+      if (capsuleResponse.status === 401 || catalogResponse.status === 401) {
+        phase = 'needauth';
+        return;
+      }
+      const [capsuleBody, catalogBody] = await Promise.all([
+        jsonObject(capsuleResponse),
+        jsonObject(catalogResponse),
+      ]);
+      if (!capsuleResponse.ok) throw new Error(detail(capsuleBody, copy.loadFailed));
+      if (!catalogResponse.ok) throw new Error(detail(catalogBody, copy.loadFailed));
+      capsules = normalizeCapsules(capsuleBody);
+      catalog = normalizeCatalog(catalogBody);
+    } catch (error) {
+      localError = error instanceof Error ? error.message : copy.loadFailed;
+      catalog = [];
+    }
+  }
 
   async function checkSession() {
     phase = 'checking';
     try {
       const response = await fetch('/api/session', { cache: 'no-store' });
       if (!response.ok) throw new Error('session unavailable');
-      phase = (await response.json()).authenticated ? 'ready' : 'needauth';
+      if (!(await response.json()).authenticated) {
+        phase = 'needauth';
+        return;
+      }
+      phase = 'ready';
+      await loadLocalData();
     } catch {
       phase = 'needauth';
+    }
+  }
+
+  function beginInstall(assistantId) {
+    if (assistantId !== HELLO_ID) return;
+    pendingAssistant = assistantId;
+    selectedCapsule = '';
+    dialogError = '';
+    confirmDialog?.showModal();
+  }
+
+  function handleStoreMessage(event) {
+    if (acceptsStoreInstallIntent(event, iframeElement?.contentWindow)) beginInstall(HELLO_ID);
+  }
+
+  async function confirmInstall() {
+    if (busy || pendingAssistant !== HELLO_ID || !helloAvailable) return;
+    const capsule = runningCapsules.find((item) => item.id === selectedCapsule);
+    if (!capsule) return;
+
+    busy = true;
+    dialogError = '';
+    evaluation = null;
+    try {
+      const base = `/api/capsules/${encodeURIComponent(capsule.id)}/assistants`;
+      const installedResponse = await fetch(base, {
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      const installedBody = await jsonObject(installedResponse);
+      if (!installedResponse.ok) throw new Error(detail(installedBody, copy.genericFailure));
+
+      if (!isHelloInstalled(installedBody)) {
+        const installResponse = await fetch(base, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assistant: HELLO_ID }),
+        });
+        const installBody = await jsonObject(installResponse);
+        // A concurrent local install is harmless; the declared operation below is the final proof.
+        if (!installResponse.ok && installResponse.status !== 409) {
+          throw new Error(detail(installBody, copy.genericFailure));
+        }
+      }
+
+      const helloResponse = await fetch(`${base}/${HELLO_ID}/operations/hello`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Captain' }),
+      });
+      const helloBody = await jsonObject(helloResponse);
+      if (!helloResponse.ok) throw new Error(detail(helloBody, copy.genericFailure));
+      const message = helloBody.message ?? helloBody.result?.message;
+      if (typeof message !== 'string' || !message || message.length > 256) {
+        throw new Error(copy.genericFailure);
+      }
+
+      lastCapsule = capsule;
+      evaluation = { kind: 'success', message };
+      confirmDialog?.close();
+    } catch (error) {
+      dialogError = error instanceof Error ? error.message : copy.genericFailure;
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function uninstallLast() {
+    if (busy || !lastCapsule) return;
+    const question = format(copy.uninstallConfirm, { capsule: lastCapsule.name });
+    if (!window.confirm(question)) return;
+    busy = true;
+    localError = '';
+    try {
+      const response = await fetch(
+        `/api/capsules/${encodeURIComponent(lastCapsule.id)}/assistants/${HELLO_ID}`,
+        { method: 'DELETE', headers: { Accept: 'application/json' } },
+      );
+      const body = await jsonObject(response);
+      if (!response.ok) throw new Error(detail(body, copy.genericFailure));
+      evaluation = {
+        kind: 'removed',
+        message: format(copy.removed, { capsule: lastCapsule.name }),
+      };
+      lastCapsule = null;
+    } catch (error) {
+      localError = error instanceof Error ? error.message : copy.genericFailure;
+    } finally {
+      busy = false;
     }
   }
 
@@ -28,12 +264,16 @@
     }
   }
 
-  onMount(checkSession);
+  onMount(() => {
+    window.addEventListener('message', handleStoreMessage);
+    checkSession();
+    return () => window.removeEventListener('message', handleStoreMessage);
+  });
 </script>
 
 <svelte:head>
   <title>Assistants — Shimpz Admin</title>
-  <meta name="description" content="Browse the canonical Shimpz Assistant Store from the local Admin." />
+  <meta name="description" content="Browse and evaluate trusted Shimpz Assistants from the local Admin." />
 </svelte:head>
 
 <AdminShell active="assistants" authenticated={phase === 'ready'} actions={shellActions}>
@@ -61,12 +301,50 @@
       </a>
     </header>
 
+    <section id="local-evaluation" class="evaluation-card" aria-labelledby="hello-pulse-title">
+      <div class="assistant-mark" aria-hidden="true"><span>H</span><i></i></div>
+      <div class="evaluation-copy">
+        <p class="kicker">{copy.localKicker}</p>
+        <h2 id="hello-pulse-title">{copy.localTitle}</h2>
+        <p>{copy.localLead}</p>
+        <div class:ready={helloAvailable} class="availability">
+          <i aria-hidden="true"></i>{helloAvailable ? copy.available : copy.unavailable}
+        </div>
+      </div>
+      <div class="evaluation-actions">
+        {#if runningCapsules.length}
+          <button type="button" disabled={!helloAvailable || busy} onclick={() => beginInstall(HELLO_ID)}>
+            {copy.evaluate}<span aria-hidden="true">→</span>
+          </button>
+        {:else}
+          <p>{copy.noCapsules}</p>
+          <a href="/capsules/">{copy.createCapsule}<span aria-hidden="true">→</span></a>
+        {/if}
+      </div>
+      {#if localError}
+        <div class="local-error" role="alert">
+          <span>{localError}</span>
+          <button type="button" onclick={loadLocalData}>{copy.retry}</button>
+        </div>
+      {/if}
+      {#if evaluation}
+        <div class:removed={evaluation.kind === 'removed'} class="hello-result" role="status">
+          <span>{copy.result}</span>
+          <strong>{evaluation.message}</strong>
+          {#if lastCapsule}
+            <button type="button" disabled={busy} onclick={uninstallLast}>{copy.uninstall}</button>
+          {/if}
+        </div>
+      {/if}
+    </section>
+
     <section class="store-frame" aria-labelledby="store-source">
       <header>
         <span id="store-source"><i aria-hidden="true"></i>{$t('store.source')}</span>
         <code>SHIMPZ // STORE</code>
       </header>
       <iframe
+        bind:this={iframeElement}
         src={storeUrl}
         title={$t('store.frameTitle')}
         sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
@@ -77,6 +355,32 @@
     <p class="trust-boundary"><span aria-hidden="true">◇</span>{$t('store.boundary')}</p>
   {/if}
 </AdminShell>
+
+<dialog bind:this={confirmDialog} aria-labelledby="assistant-confirm-title" onclose={() => (dialogError = '')}>
+  <form class="dialog-panel" onsubmit={(event) => { event.preventDefault(); confirmInstall(); }}>
+    <header>
+      <p class="dialog-kicker">Assistant // local admission</p>
+      <h2 id="assistant-confirm-title">{copy.confirmTitle}</h2>
+      <p>{copy.confirmLead}</p>
+    </header>
+    <label for="assistant-capsule">{copy.capsuleLabel}</label>
+    <select id="assistant-capsule" bind:value={selectedCapsule} disabled={busy} required>
+      <option value="" disabled>{copy.capsulePlaceholder}</option>
+      {#each runningCapsules as capsule (capsule.id)}
+        <option value={capsule.id}>{capsule.name} · {capsule.id}</option>
+      {/each}
+    </select>
+    {#if dialogError}<p class="dialog-error" role="alert">{dialogError}</p>{/if}
+    <footer>
+      <button type="button" class="dialog-secondary" disabled={busy} onclick={() => confirmDialog?.close()}>
+        {copy.cancel}
+      </button>
+      <button type="submit" class="dialog-primary" disabled={busy || !selectedCapsule || !helloAvailable}>
+        {busy ? copy.working : copy.confirm}
+      </button>
+    </footer>
+  </form>
+</dialog>
 
 {#snippet shellActions()}
   <LocaleMenu compact={phase !== 'ready'} />
@@ -106,7 +410,6 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
-
   .logout b { color: var(--accent); }
   .logout:hover { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 
@@ -117,8 +420,7 @@
     gap: 2rem;
     margin-bottom: 2rem;
   }
-
-  .kicker {
+  .kicker, .dialog-kicker {
     margin: 0 0 0.9rem;
     color: var(--accent);
     font-family: var(--font-mono);
@@ -127,7 +429,6 @@
     letter-spacing: 0.19em;
     text-transform: uppercase;
   }
-
   h1 {
     max-width: 12ch;
     margin: 0;
@@ -136,7 +437,6 @@
     letter-spacing: -0.08em;
     text-wrap: balance;
   }
-
   .lead {
     max-width: 65ch;
     margin: 1.1rem 0 0;
@@ -144,9 +444,7 @@
     font-size: 1rem;
     line-height: 1.7;
   }
-
-  .external,
-  .sign-in {
+  .external, .sign-in, .evaluation-actions a {
     display: inline-flex;
     min-height: 2.9rem;
     align-items: center;
@@ -164,9 +462,71 @@
     text-decoration: none;
     text-transform: uppercase;
   }
+  .external:hover, .sign-in:hover { filter: drop-shadow(0 0 9px rgba(0, 240, 255, 0.32)); }
 
-  .external:hover,
-  .sign-in:hover { filter: drop-shadow(0 0 9px rgba(0, 240, 255, 0.32)); }
+  .evaluation-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(13rem, auto);
+    align-items: center;
+    gap: clamp(1rem, 3vw, 2rem);
+    margin-bottom: 1.25rem;
+    padding: clamp(1.2rem, 3vw, 2rem);
+    background: radial-gradient(circle at 10% 50%, rgba(0, 240, 255, 0.08), transparent 30%), var(--surface-1);
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  }
+  .assistant-mark {
+    position: relative;
+    display: grid;
+    width: 4.8rem;
+    height: 4.8rem;
+    place-items: center;
+    border: 1px solid var(--border-strong);
+    border-radius: 50%;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .assistant-mark::before, .assistant-mark i {
+    position: absolute;
+    inset: 0.5rem;
+    border: 1px dashed rgba(0, 240, 255, 0.35);
+    border-radius: 50%;
+    content: '';
+  }
+  .assistant-mark i { inset: -0.35rem; border-color: rgba(255, 61, 242, 0.22); }
+  .evaluation-copy h2 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.3rem); letter-spacing: -0.05em; }
+  .evaluation-copy > p:not(.kicker) { max-width: 58ch; margin: 0.65rem 0 0; color: var(--text-dim); line-height: 1.6; }
+  .availability { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 0.9rem; color: var(--text-faint); font-family: var(--font-mono); font-size: 0.62rem; text-transform: uppercase; }
+  .availability i { width: 0.42rem; height: 0.42rem; border-radius: 50%; background: var(--danger); }
+  .availability.ready { color: var(--success); }
+  .availability.ready i { background: var(--success); box-shadow: 0 0 8px rgba(5, 255, 161, 0.55); }
+  .evaluation-actions { display: flex; align-items: flex-end; flex-direction: column; gap: 0.75rem; }
+  .evaluation-actions > p { max-width: 25ch; margin: 0; color: var(--text-dim); font-size: 0.78rem; line-height: 1.5; text-align: right; }
+  .evaluation-actions button, .dialog-primary, .dialog-secondary, .hello-result button, .local-error button {
+    min-height: 2.8rem;
+    border: 0;
+    padding: 0 1rem;
+    background: var(--accent);
+    color: #001013;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .evaluation-actions button { display: inline-flex; align-items: center; gap: 1rem; }
+  button:disabled { cursor: not-allowed; opacity: 0.42; }
+  .local-error, .hello-result { grid-column: 1 / -1; }
+  .local-error { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--danger); color: var(--danger); font-size: 0.78rem; }
+  .local-error button { min-height: 2.2rem; background: transparent; box-shadow: inset 0 0 0 1px var(--danger); color: var(--danger); }
+  .hello-result { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding: 1rem; border-left: 2px solid var(--success); background: rgba(5, 255, 161, 0.045); }
+  .hello-result.removed { border-left-color: var(--accent-alt); background: rgba(255, 61, 242, 0.04); }
+  .hello-result span { color: var(--success); font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; }
+  .hello-result strong { font-size: 0.9rem; }
+  .hello-result button { min-height: 2.25rem; background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--text-dim); }
 
   .store-frame {
     overflow: hidden;
@@ -174,97 +534,51 @@
     box-shadow: inset 0 0 0 1px var(--border-strong), 0 20px 60px rgba(0, 0, 0, 0.4);
     clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   }
-
-  .store-frame > header {
-    display: flex;
-    min-height: 2.9rem;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0 1rem;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface-1);
-    color: var(--text-faint);
-    font-family: var(--font-mono);
-    font-size: 0.6rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-
+  .store-frame > header { display: flex; min-height: 2.9rem; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 1rem; border-bottom: 1px solid var(--border); background: var(--surface-1); color: var(--text-faint); font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; }
   .store-frame > header span { display: inline-flex; align-items: center; gap: 0.5rem; }
-  .store-frame > header i {
-    width: 0.42rem;
-    height: 0.42rem;
-    background: var(--success);
-    border-radius: 50%;
-    box-shadow: 0 0 8px rgba(5, 255, 161, 0.55);
-  }
+  .store-frame > header i { width: 0.42rem; height: 0.42rem; background: var(--success); border-radius: 50%; box-shadow: 0 0 8px rgba(5, 255, 161, 0.55); }
   .store-frame code { color: var(--accent); font-size: inherit; }
-
-  iframe {
-    display: block;
-    width: 100%;
-    height: min(72rem, calc(100vh - 12rem));
-    min-height: 42rem;
-    border: 0;
-    background: #000;
-  }
-
-  .trust-boundary {
-    display: flex;
-    max-width: 78ch;
-    align-items: flex-start;
-    gap: 0.65rem;
-    margin: 1rem 0 0;
-    color: var(--text-faint);
-    font-size: 0.76rem;
-    line-height: 1.6;
-  }
+  iframe { display: block; width: 100%; height: min(72rem, calc(100vh - 12rem)); min-height: 42rem; border: 0; background: #000; }
+  .trust-boundary { display: flex; max-width: 78ch; align-items: flex-start; gap: 0.65rem; margin: 1rem 0 0; color: var(--text-faint); font-size: 0.76rem; line-height: 1.6; }
   .trust-boundary span { color: var(--accent-alt); }
 
-  .state {
-    display: flex;
-    min-height: 28rem;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    border: 1px solid var(--border);
-    background: radial-gradient(circle at 50% 35%, rgba(0, 240, 255, 0.055), transparent 48%), var(--surface-1);
-    color: var(--text-dim);
-    text-align: center;
-  }
+  dialog { width: min(34rem, calc(100vw - 2rem)); border: 0; padding: 0; background: transparent; color: var(--text); }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); }
+  .dialog-panel { padding: clamp(1.4rem, 4vw, 2.2rem); background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--border-strong), 0 24px 80px rgba(0, 0, 0, 0.65); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+  .dialog-panel h2 { margin: 0; font-size: clamp(1.6rem, 4vw, 2.5rem); letter-spacing: -0.05em; }
+  .dialog-panel header > p:last-child { margin: 0.8rem 0 1.5rem; color: var(--text-dim); line-height: 1.6; }
+  .dialog-panel label { display: block; margin-bottom: 0.5rem; color: var(--text-faint); font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .dialog-panel select { width: 100%; min-height: 3rem; border: 1px solid var(--border-strong); padding: 0 0.8rem; background: #050708; color: var(--text); font-family: var(--font-mono); }
+  .dialog-error { margin: 0.8rem 0 0; color: var(--danger); font-size: 0.78rem; line-height: 1.5; }
+  .dialog-panel footer { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; }
+  .dialog-secondary { background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--text-dim); }
+
+  .state { display: flex; min-height: 28rem; align-items: center; justify-content: center; flex-direction: column; border: 1px solid var(--border); background: radial-gradient(circle at 50% 35%, rgba(0, 240, 255, 0.055), transparent 48%), var(--surface-1); color: var(--text-dim); text-align: center; }
   .state h1 { max-width: 18ch; font-size: clamp(1.65rem, 4vw, 2.6rem); letter-spacing: -0.05em; }
   .state > p:not(.kicker) { max-width: 51ch; margin: 0.8rem 1rem 1.5rem; line-height: 1.65; }
-
-  .pulse {
-    position: relative;
-    width: 4.6rem;
-    height: 4.6rem;
-    margin-bottom: 1.5rem;
-    border: 1px solid var(--border-strong);
-    border-radius: 50%;
-  }
-  .pulse::before,
-  .pulse::after,
-  .pulse span {
-    position: absolute;
-    border: 1px solid var(--accent);
-    border-radius: 50%;
-    content: '';
-    animation: pulse 1.8s ease-out infinite;
-  }
+  .pulse { position: relative; width: 4.6rem; height: 4.6rem; margin-bottom: 1.5rem; border: 1px solid var(--border-strong); border-radius: 50%; }
+  .pulse::before, .pulse::after, .pulse span { position: absolute; border: 1px solid var(--accent); border-radius: 50%; content: ''; animation: pulse 1.8s ease-out infinite; }
   .pulse::before { inset: 1.5rem; }
   .pulse::after { inset: 0.8rem; animation-delay: 0.35s; }
   .pulse span { inset: 0; animation-delay: 0.7s; }
+  @keyframes pulse { 0% { opacity: 0.8; transform: scale(0.7); } 100% { opacity: 0; transform: scale(1.12); } }
 
-  @keyframes pulse {
-    0% { opacity: 0.8; transform: scale(0.7); }
-    100% { opacity: 0; transform: scale(1.12); }
+  @media (max-width: 820px) {
+    .evaluation-card { grid-template-columns: auto minmax(0, 1fr); }
+    .evaluation-actions { grid-column: 1 / -1; align-items: stretch; }
+    .evaluation-actions > p { max-width: none; text-align: left; }
   }
-
   @media (max-width: 720px) {
     .store-header { grid-template-columns: 1fr; align-items: start; }
     .external { width: 100%; }
     iframe { min-height: 36rem; }
+    .hello-result { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) {
+    .evaluation-card { grid-template-columns: 1fr; }
+    .assistant-mark { width: 4rem; height: 4rem; }
+    .evaluation-actions, .local-error, .hello-result { grid-column: 1; }
+    .local-error { align-items: stretch; flex-direction: column; }
+    .dialog-panel footer { align-items: stretch; flex-direction: column-reverse; }
   }
 </style>
