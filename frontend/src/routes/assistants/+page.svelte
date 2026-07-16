@@ -305,7 +305,7 @@
         src={storeUrl}
         title={$t('store.frameTitle')}
         sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-        referrerpolicy="no-referrer"
+        referrerpolicy="origin"
       ></iframe>
     </section>
 
