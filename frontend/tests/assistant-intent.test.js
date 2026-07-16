@@ -18,6 +18,7 @@ import {
   acknowledgeStoreUninstallIntent,
   acceptsStoreInstallIntent,
   acceptsStoreUninstallIntent,
+  createStoreActionLatch,
   postStoreAssistantState,
   projectReleasedStoreAssistantIds,
   storeFrameHeight,
@@ -88,6 +89,20 @@ test('never acknowledges a rejected Store message', () => {
 
   assert.equal(acknowledgeStoreInstallIntent(event, iframeWindow), false);
   assert.deepEqual(acknowledgements, []);
+});
+
+test('keeps exactly one Store action latched until its matching release', () => {
+  const latch = createStoreActionLatch();
+
+  assert.equal(latch.acquire('install'), true);
+  assert.equal(latch.acquire('install'), false);
+  assert.equal(latch.acquire('uninstall'), false);
+  assert.equal(latch.release('uninstall'), false);
+  assert.equal(latch.acquire('uninstall'), false);
+  assert.equal(latch.release('install'), true);
+  assert.equal(latch.acquire('uninstall'), true);
+  assert.equal(latch.release('uninstall'), true);
+  assert.equal(latch.acquire('unknown'), false);
 });
 
 test('accepts and acknowledges only the exact Hello Pulse uninstall intent', () => {

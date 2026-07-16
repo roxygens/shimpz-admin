@@ -9,6 +9,7 @@
     acknowledgeStoreFrame,
     acknowledgeStoreInstallIntent,
     acknowledgeStoreUninstallIntent,
+    createStoreActionLatch,
     postStoreAssistantState,
     projectReleasedStoreAssistantIds,
   } from '$lib/assistantIntent.js';
@@ -140,6 +141,7 @@
   let frameTimeout;
   let storeSnapshotStatus = 'loading';
   let storeSnapshotInstalled = [];
+  const storeActionLatch = createStoreActionLatch();
 
   let currentLocale = $derived($locale);
   let copy = $derived(LOCAL_COPY[currentLocale] ?? LOCAL_COPY.en);
@@ -392,11 +394,19 @@
       return;
     }
     if (acknowledgeStoreInstallIntent(event, iframeElement?.contentWindow)) {
-      void beginInstall(event.data.assistant);
+      if (!storeActionLatch.acquire('install')) {
+        publishStoreSnapshot();
+        return;
+      }
+      void runStoreInstall(event.data.assistant);
       return;
     }
     if (acknowledgeStoreUninstallIntent(event, iframeElement?.contentWindow)) {
-      void beginStoreUninstall(event.data.assistant);
+      if (!storeActionLatch.acquire('uninstall')) {
+        publishStoreSnapshot();
+        return;
+      }
+      void runStoreUninstall(event.data.assistant);
     }
   }
 
@@ -430,10 +440,32 @@
     }
   }
 
+  async function runStoreInstall(assistantId) {
+    try {
+      await beginInstall(assistantId);
+    } catch (error) {
+      dialogError = error instanceof Error ? error.message : copy.genericFailure;
+      if (confirmDialog?.open) {
+        dialogMode = 'error';
+      } else {
+        storeActionLatch.release('install');
+      }
+      publishStoreSnapshot();
+    }
+  }
+
   function closeInstallDialog() {
+    if (busy) return;
     dialogAttempt += 1;
     confirmDialog?.close();
+    storeActionLatch.release('install');
     publishStoreSnapshot();
+  }
+
+  function cancelInstallDialog(event) {
+    event.preventDefault();
+    if (busy) return;
+    closeInstallDialog();
   }
 
   async function runHello() {
@@ -498,6 +530,15 @@
       return;
     }
     await uninstallInstalled(installed);
+  }
+
+  async function runStoreUninstall(assistantId) {
+    try {
+      await beginStoreUninstall(assistantId);
+    } finally {
+      storeActionLatch.release('uninstall');
+      publishStoreSnapshot();
+    }
   }
 
   async function logout() {
@@ -656,7 +697,7 @@
   {/if}
 </AdminShell>
 
-<dialog bind:this={confirmDialog} aria-labelledby="assistant-confirm-title">
+<dialog bind:this={confirmDialog} aria-labelledby="assistant-confirm-title" oncancel={cancelInstallDialog}>
   <form class="dialog-panel" onsubmit={(event) => { event.preventDefault(); confirmInstall(); }}>
     <header>
       <p class="dialog-kicker">Assistant // local admission</p>

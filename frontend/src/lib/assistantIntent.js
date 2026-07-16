@@ -25,6 +25,7 @@ const STATE_STATUSES = new Set(['error', 'loading', 'ready']);
 const ASSISTANT_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const RELEASED_STORE_ASSISTANT_IDS = Object.freeze([INSTALL_INTENT.assistant]);
 const RELEASED_STORE_ASSISTANTS = new Set(RELEASED_STORE_ASSISTANT_IDS);
+const STORE_ACTIONS = new Set(['install', 'uninstall']);
 
 function hasExactKeys(value, expected) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -36,6 +37,23 @@ function hasExactKeys(value, expected) {
 
 function isTrustedStoreEvent(event, iframeWindow) {
   return Boolean(event && event.origin === STORE_ORIGIN && event.source === iframeWindow && iframeWindow);
+}
+
+/** Keep one local Store admission active without exposing its state across the frame boundary. */
+export function createStoreActionLatch() {
+  let activeAction = '';
+  return Object.freeze({
+    acquire(action) {
+      if (!STORE_ACTIONS.has(action) || activeAction) return false;
+      activeAction = action;
+      return true;
+    },
+    release(action) {
+      if (activeAction !== action) return false;
+      activeAction = '';
+      return true;
+    },
+  });
 }
 
 function acceptsStoreIntent(event, iframeWindow, expected) {
