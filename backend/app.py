@@ -24,6 +24,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import adminstore
@@ -346,12 +347,12 @@ async def _bounded_json_object(request: Request) -> dict:
 
 
 @app.get("/api/capsules")
-async def capsules_list():
+def capsules_list():
     return _capsule_driver_response(capsules.list_capsules)
 
 
 @app.post("/api/capsules")
-async def capsules_create(payload: dict):
+def capsules_create(payload: dict):
     name = str(payload.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="capsule name required")
@@ -365,36 +366,40 @@ async def capsules_create(payload: dict):
 
 
 @app.delete("/api/capsules/{cid}")
-async def capsules_destroy(cid: str):
+def capsules_destroy(cid: str):
     return _capsule_driver_response(lambda: capsules.destroy(cid))
 
 
 @app.get("/api/assistants")
-async def assistants_list():
+def assistants_list():
     return _capsule_driver_response(capsules.list_assistants)
 
 
 @app.get("/api/capsules/{cid}/assistants")
-async def capsule_assistants_list(cid: str):
+def capsule_assistants_list(cid: str):
     return _capsule_driver_response(lambda: capsules.list_installed_assistants(cid))
 
 
 @app.post("/api/capsules/{cid}/assistants")
 async def capsule_assistant_install(cid: str, request: Request):
     payload = await _bounded_json_object(request)
-    return _capsule_driver_response(lambda: capsules.install_assistant(cid, payload))
+    return await run_in_threadpool(
+        _capsule_driver_response,
+        lambda: capsules.install_assistant(cid, payload),
+    )
 
 
 @app.post("/api/capsules/{cid}/assistants/{assistant_id}/operations/{operation}")
 async def capsule_assistant_operation(cid: str, assistant_id: str, operation: str, request: Request):
     payload = await _bounded_json_object(request)
-    return _capsule_driver_response(
-        lambda: capsules.invoke_assistant_operation(cid, assistant_id, operation, payload)
+    return await run_in_threadpool(
+        _capsule_driver_response,
+        lambda: capsules.invoke_assistant_operation(cid, assistant_id, operation, payload),
     )
 
 
 @app.delete("/api/capsules/{cid}/assistants/{assistant_id}")
-async def capsule_assistant_uninstall(cid: str, assistant_id: str):
+def capsule_assistant_uninstall(cid: str, assistant_id: str):
     return _capsule_driver_response(lambda: capsules.uninstall_assistant(cid, assistant_id))
 
 

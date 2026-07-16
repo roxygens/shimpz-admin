@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,6 +27,7 @@ class _DriverHandler(BaseHTTPRequestHandler):
     response_status = 200
     response_body = b'{"ok":true}'
     response_headers: ClassVar[dict[str, str]] = {"Content-Type": "application/json"}
+    response_delay_seconds = 0.0
 
     def log_message(self, *_args):
         pass
@@ -41,6 +43,8 @@ class _DriverHandler(BaseHTTPRequestHandler):
                 "headers": {key.lower(): value for key, value in self.headers.items()},
             }
         )
+        if self.__class__.response_delay_seconds:
+            time.sleep(self.__class__.response_delay_seconds)
         self.send_response(self.__class__.response_status)
         headers = dict(self.__class__.response_headers)
         headers.setdefault("Content-Length", str(len(self.__class__.response_body)))
@@ -63,6 +67,7 @@ class _LiveDriverCase(unittest.TestCase):
         _DriverHandler.response_status = 200
         _DriverHandler.response_body = b'{"ok":true}'
         _DriverHandler.response_headers = {"Content-Type": "application/json"}
+        _DriverHandler.response_delay_seconds = 0.0
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _DriverHandler)
         self.thread = threading.Thread(
             target=self.server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
@@ -245,6 +250,18 @@ class CapsuleAssistantRouteTest(_LiveDriverCase):
         self.assertEqual(document["body"], {"detail": "request body too large"})
         self.assertEqual(_DriverHandler.requests, [])
 
+    def test_session_responds_while_real_driver_holds_install(self):
+        _DriverHandler.response_delay_seconds = 1.0
+
+        document = self._run_asgi_probe("concurrent-session")
+
+        self.assertEqual(document["session_status"], 200)
+        self.assertTrue(document["session_body"]["authenticated"])
+        self.assertTrue(document["install_was_pending"])
+        self.assertLess(document["session_elapsed_seconds"], 0.75)
+        self.assertEqual(document["install_status"], 200)
+        self.assertEqual(len(_DriverHandler.requests), 1)
+
 
 async def _asgi_request(admin_app, method: str, path: str, body: bytes = b"", *, token: str = ""):
     """Drive the real FastAPI ASGI stack without an in-process route substitute."""
@@ -336,6 +353,36 @@ def _run_asgi_probe(scenario: str) -> None:
             )
         )
         output = {"status": status, "body": body}
+    elif scenario == "concurrent-session":
+        async def concurrent_requests():
+            payload = json.dumps({"assistant": "hello-pulse"}, separators=(",", ":")).encode()
+            started = time.monotonic()
+            install_task = asyncio.create_task(
+                _asgi_request(
+                    admin_app,
+                    "POST",
+                    "/api/capsules/capsule_1/assistants",
+                    payload,
+                    token=token,
+                )
+            )
+            await asyncio.sleep(0.1)
+            session_status, session_body = await asyncio.wait_for(
+                _asgi_request(admin_app, "GET", "/api/session", token=token),
+                timeout=0.5,
+            )
+            install_was_pending = not install_task.done()
+            session_elapsed_seconds = time.monotonic() - started
+            install_status, _install_body = await install_task
+            return {
+                "session_status": session_status,
+                "session_body": session_body,
+                "install_was_pending": install_was_pending,
+                "session_elapsed_seconds": session_elapsed_seconds,
+                "install_status": install_status,
+            }
+
+        output = asyncio.run(concurrent_requests())
     else:
         raise SystemExit(f"unknown ASGI probe: {scenario}")
     print(json.dumps(output, separators=(",", ":")))
