@@ -3,6 +3,7 @@
   import AdminShell from '$lib/AdminShell.svelte';
   import LocaleMenu from '$lib/LocaleMenu.svelte';
   import { INSTALL_INTENT, acceptsStoreInstallIntent } from '$lib/assistantIntent.js';
+  import { evaluateHelloPulse, safeApiError } from '$lib/localApi.js';
   import { t, locale } from '$lib/i18n.js';
 
   const HELLO_ID = INSTALL_INTENT.assistant;
@@ -102,22 +103,9 @@
     return document.assistants.filter((item) => item && typeof item === 'object' && item.id === HELLO_ID);
   }
 
-  function isHelloInstalled(document) {
-    if (!document || !Array.isArray(document.assistants)) return false;
-    return document.assistants.some((item) => {
-      if (typeof item === 'string') return item === HELLO_ID;
-      return item && typeof item === 'object' && (item.assistant === HELLO_ID || item.id === HELLO_ID);
-    });
-  }
-
   async function jsonObject(response) {
     const body = await response.json().catch(() => ({}));
     return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
-  }
-
-  function detail(body, fallback) {
-    const candidate = body.detail ?? body.error;
-    return typeof candidate === 'string' && candidate.length <= 300 ? candidate : fallback;
   }
 
   function format(message, values) {
@@ -141,8 +129,8 @@
         jsonObject(capsuleResponse),
         jsonObject(catalogResponse),
       ]);
-      if (!capsuleResponse.ok) throw new Error(detail(capsuleBody, copy.loadFailed));
-      if (!catalogResponse.ok) throw new Error(detail(catalogBody, copy.loadFailed));
+      if (!capsuleResponse.ok) throw new Error(safeApiError(capsuleBody, copy.loadFailed));
+      if (!catalogResponse.ok) throw new Error(safeApiError(catalogBody, copy.loadFailed));
       capsules = normalizeCapsules(capsuleBody);
       catalog = normalizeCatalog(catalogBody);
     } catch (error) {
@@ -188,38 +176,7 @@
     dialogError = '';
     evaluation = null;
     try {
-      const base = `/api/capsules/${encodeURIComponent(capsule.id)}/assistants`;
-      const installedResponse = await fetch(base, {
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-      });
-      const installedBody = await jsonObject(installedResponse);
-      if (!installedResponse.ok) throw new Error(detail(installedBody, copy.genericFailure));
-
-      if (!isHelloInstalled(installedBody)) {
-        const installResponse = await fetch(base, {
-          method: 'POST',
-          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ assistant: HELLO_ID }),
-        });
-        const installBody = await jsonObject(installResponse);
-        // A concurrent local install is harmless; the declared operation below is the final proof.
-        if (!installResponse.ok && installResponse.status !== 409) {
-          throw new Error(detail(installBody, copy.genericFailure));
-        }
-      }
-
-      const helloResponse = await fetch(`${base}/${HELLO_ID}/operations/hello`, {
-        method: 'POST',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Captain' }),
-      });
-      const helloBody = await jsonObject(helloResponse);
-      if (!helloResponse.ok) throw new Error(detail(helloBody, copy.genericFailure));
-      const message = helloBody.message ?? helloBody.result?.message;
-      if (typeof message !== 'string' || !message || message.length > 256) {
-        throw new Error(copy.genericFailure);
-      }
+      const { message } = await evaluateHelloPulse(fetch, capsule.id);
 
       lastCapsule = capsule;
       evaluation = { kind: 'success', message };
@@ -243,7 +200,7 @@
         { method: 'DELETE', headers: { Accept: 'application/json' } },
       );
       const body = await jsonObject(response);
-      if (!response.ok) throw new Error(detail(body, copy.genericFailure));
+      if (!response.ok) throw new Error(safeApiError(body, copy.genericFailure));
       evaluation = {
         kind: 'removed',
         message: format(copy.removed, { capsule: lastCapsule.name }),

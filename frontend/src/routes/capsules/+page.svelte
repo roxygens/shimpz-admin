@@ -4,6 +4,7 @@
   import CapsuleCard from '$lib/CapsuleCard.svelte';
   import LocaleMenu from '$lib/LocaleMenu.svelte';
   import { t } from '$lib/i18n.js';
+  import { safeApiError } from '$lib/localApi.js';
 
   let phase = $state('checking'); // checking | needauth | ready
   let capsules = $state([]);
@@ -27,7 +28,7 @@
       }
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        error = body.detail ?? 'Could not reach the Capsule Driver.';
+        error = safeApiError(body, 'Could not reach the Capsule Driver.');
         return;
       }
       capsules = (await response.json()).capsules ?? [];
@@ -70,7 +71,8 @@
         body: JSON.stringify({ name: name.trim() }),
       });
       if (!response.ok) {
-        mutationError = (await response.json().catch(() => ({}))).detail ?? 'Capsule creation failed.';
+        const body = await response.json().catch(() => ({}));
+        mutationError = safeApiError(body, 'Capsule creation failed.');
         return;
       }
       createDialog?.close();
@@ -98,7 +100,8 @@
         method: 'DELETE',
       });
       if (!response.ok) {
-        mutationError = (await response.json().catch(() => ({}))).detail ?? 'Capsule destruction failed.';
+        const body = await response.json().catch(() => ({}));
+        mutationError = safeApiError(body, 'Capsule destruction failed.');
         return;
       }
       deleteDialog?.close();
