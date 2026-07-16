@@ -245,3 +245,10 @@ test('rejects malformed, ambiguous, and oversized Assistant Store state', () => 
   assert.equal(postStoreAssistantState(iframeWindow, 'ready', maximum), true);
   assert.equal(messages[0].message.installed.length, STORE_STATE_MAX_ASSISTANTS);
 });
+
+test('rejects consecutive and trailing hyphens in Assistant Store state ids', () => {
+  const iframeWindow = { postMessage() { throw new Error('must not post'); } };
+
+  assert.equal(postStoreAssistantState(iframeWindow, 'ready', ['hello--pulse']), false);
+  assert.equal(postStoreAssistantState(iframeWindow, 'ready', ['hello-pulse-']), false);
+});

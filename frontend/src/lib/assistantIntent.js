@@ -22,7 +22,7 @@ const INTENT_KEYS = Object.freeze(['assistant', 'type', 'version']);
 const FRAME_KEYS = Object.freeze(['height', 'type', 'version']);
 const STATE_KEYS = Object.freeze(['installed', 'status', 'type', 'version']);
 const STATE_STATUSES = new Set(['error', 'loading', 'ready']);
-const ASSISTANT_ID_RE = /^[a-z][a-z0-9-]{0,79}$/;
+const ASSISTANT_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
 function hasExactKeys(value, expected) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -128,7 +128,12 @@ export function postStoreAssistantState(iframeWindow, status, installed) {
 
   const seen = new Set();
   for (const assistant of installed) {
-    if (typeof assistant !== 'string' || !ASSISTANT_ID_RE.test(assistant) || seen.has(assistant)) {
+    if (
+      typeof assistant !== 'string' ||
+      assistant.length > 80 ||
+      !ASSISTANT_ID_RE.test(assistant) ||
+      seen.has(assistant)
+    ) {
       return false;
     }
     seen.add(assistant);

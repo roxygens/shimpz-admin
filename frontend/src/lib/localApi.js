@@ -1,5 +1,5 @@
 const CAPSULE_ID_RE = /^[a-z0-9_]{1,40}$/;
-const ASSISTANT_ID_RE = /^[a-z][a-z0-9-]{0,79}$/;
+const ASSISTANT_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const RUNTIME_STATUS_RE = /^[a-z]{2,24}$/;
 const HELLO_ID = 'hello-pulse';
 const MAX_INSTALLED_ASSISTANTS = 128;
@@ -50,6 +50,8 @@ export async function listInstalledAssistants(fetcher, capsuleId) {
     if (
       !entry ||
       typeof entry !== 'object' ||
+      typeof assistant !== 'string' ||
+      assistant.length > 80 ||
       !ASSISTANT_ID_RE.test(assistant) ||
       !RUNTIME_STATUS_RE.test(status) ||
       seen.has(assistant)

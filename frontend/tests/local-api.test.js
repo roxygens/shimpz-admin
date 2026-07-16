@@ -111,3 +111,18 @@ test('installed inventory errors and malformed records fail honestly instead of 
     );
   }
 });
+
+test('rejects consecutive and trailing hyphens in installed Assistant ids', async () => {
+  for (const assistant of ['hello--pulse', 'hello-pulse-']) {
+    await assert.rejects(
+      listInstalledAssistants(
+        async () => response(200, { assistants: [{ assistant, status: 'running' }] }),
+        'capsule_1',
+      ),
+      (error) => (
+        error instanceof LocalApiError &&
+        error.message === 'The installed Assistant inventory is invalid.'
+      ),
+    );
+  }
+});
