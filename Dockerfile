@@ -77,7 +77,7 @@ RUN UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --no-install-project --no-
 
 WORKDIR /app/backend
 COPY backend/app.py backend/adminstore.py backend/auth.py backend/capsules.py backend/catalog.py backend/driver_proxy.py \
-     backend/envfile.py backend/integrations.py backend/keyset.py backend/validate_live.py ./
+     backend/envfile.py backend/integrations.py backend/keyset.py backend/modelproviders.py backend/validate_live.py ./
 # UI_DIR in app.py resolves to backend/../frontend/build
 COPY --from=ui /w/build /app/frontend/build
 

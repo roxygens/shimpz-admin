@@ -1,8 +1,8 @@
-"""The admin panel's own credential store — `admin.json` (0600), separate from the `.env` keyset.
+"""The Admin's private store — `admin.json` (0600), separate from the `.env` keyset.
 
-Holds the operator's password hash + salt + the session-signing secret. Deliberately NOT a `.env`
-key: it would break the SCHEMA↔.env.example parity gate and, worse, get seeded into the brain's
-`$SHIMPZ_HOME/.env`. It lives on the panel's own `/data` volume.
+It holds the password record, session-signing secret, and local model API keys. Model keys stay in
+this backend-owned `/data` volume: they are never seeded into a Brain/Capsule environment, returned
+to the browser, or mixed with the platform media key in `.env`.
 
 Fail-loud on corruption: a damaged admin.json RAISES rather than reading as "no password set" —
 otherwise a corrupt store would silently re-open first-run bootstrap and let anyone claim the
@@ -11,12 +11,14 @@ password. (Contrast with shimpzipc's quarantine-and-continue; here "continue" is
 
 import json
 import os
+import threading
 import time
 from pathlib import Path
 
 import auth
 
 STORE_PATH = Path(os.environ.get("SHIMPZ_ADMIN_STORE") or "/data/admin.json")
+_MODEL_CREDENTIAL_LOCK = threading.RLock()
 
 
 def _read():
@@ -78,3 +80,39 @@ def set_password(password):
         data["session_secret"] = auth.new_secret()
     data.setdefault("created", int(time.time()))
     _write(data)
+
+
+def model_credentials():
+    """Return the private model-credential records for trusted backend callers only.
+
+    HTTP handlers must project these records through ``modelproviders.status``; this function is
+    intentionally not a route and therefore never defines a browser-readable secret surface.
+    """
+    records = _read().get("model_credentials", {})
+    if not isinstance(records, dict):
+        raise RuntimeError(f"admin store {STORE_PATH} has invalid model credentials")
+    return records
+
+
+def set_model_api_key(provider, api_key):
+    """Atomically persist one backend-only provider key in the existing 0600 Admin store."""
+    with _MODEL_CREDENTIAL_LOCK:
+        data = _read()
+        records = data.setdefault("model_credentials", {})
+        if not isinstance(records, dict):
+            raise RuntimeError(f"admin store {STORE_PATH} has invalid model credentials")
+        records[provider] = {"api_key": api_key, "updated": int(time.time())}
+        _write(data)
+
+
+def delete_model_api_key(provider):
+    """Delete one provider key without disturbing the Admin session or other providers."""
+    with _MODEL_CREDENTIAL_LOCK:
+        data = _read()
+        records = data.get("model_credentials", {})
+        if not isinstance(records, dict):
+            raise RuntimeError(f"admin store {STORE_PATH} has invalid model credentials")
+        removed = records.pop(provider, None) is not None
+        if removed:
+            _write(data)
+        return removed

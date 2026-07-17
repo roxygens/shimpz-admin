@@ -37,6 +37,7 @@ import driver_proxy
 import envfile
 import integrations
 import keyset
+import modelproviders
 import validate_live
 
 log = logging.getLogger("shimpz-admin")
@@ -351,6 +352,31 @@ async def _bounded_json_object(request: Request) -> dict:
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="request body must be a JSON object")
     return payload
+
+
+@app.get("/api/model-providers")
+def model_providers_status():
+    """Return masked local provider state; cleartext keys never leave the Admin backend."""
+    return modelproviders.status()
+
+
+@app.put("/api/model-providers/{provider}")
+async def model_provider_configure(provider: str, request: Request):
+    payload = await _bounded_json_object(request)
+    if set(payload) != {"api_key"}:
+        raise HTTPException(status_code=400, detail="request body must contain only api_key")
+    try:
+        return modelproviders.configure(provider, payload["api_key"])
+    except modelproviders.ModelProviderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@app.delete("/api/model-providers/{provider}")
+def model_provider_delete(provider: str):
+    try:
+        return modelproviders.remove(provider)
+    except modelproviders.ModelProviderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
 MAX_MULTIPART_OVERHEAD_BYTES = 64 * 1024
