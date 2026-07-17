@@ -48,14 +48,6 @@ CATALOG = {
         "recreate_target": "cf-driver",
         "reconfigurable": True,
     },
-    "proxy": {
-        "public_name": "IPRoyal",
-        "logo": "iproyal.svg",
-        "category": CAPABILITY,
-        "blurb": "Route the real Chrome through a residential proxy IP.",
-        "recreate_target": None,  # consumed by shimpz-browser (recreate is disruptive → applies on restart)
-        "reconfigurable": True,
-    },
     "internal": {
         "public_name": "Datastores",
         "logo": "datastores.svg",

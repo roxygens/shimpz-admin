@@ -181,10 +181,8 @@ def _example_defaults():
 def _configured(fields, values, defaults):
     """True when the user configured this card — a field set to a non-default, non-generated value.
 
-    A fresh install is `cp .env.example .env`, so a card's non-secret defaults (e.g.
-    `IPROYAL_PROXY_PORT_HTTP=12323`, `SHIMPZ_PROXY=auto`) are present but must NOT read as "configured" —
-    only a value the user changed or provided (a proxy password, an R2 bucket) counts. This is what
-    fixes the IPRoyal/proxy card wrongly reading configured on a fresh install.
+    A fresh install is `cp .env.example .env`, so only a value the user changed or provided counts.
+    Generated values and unchanged scaffolding defaults do not mark an integration as configured.
     """
     return any(
         not f["generated"] and (v := values.get(f["key"], "").strip()) and v != defaults.get(f["key"], "").strip()
