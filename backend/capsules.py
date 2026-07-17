@@ -36,7 +36,9 @@ _POWER_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _FILE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _MEDIA_TYPE_RE = re.compile(r"^[a-z0-9][a-z0-9!#$&^_.+\-]*/[a-z0-9][a-z0-9!#$&^_.+\-]*$")
+_MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 _ALLOWED_POWERS = frozenset({"hello"})
+_MODEL_PROVIDERS = frozenset({"anthropic", "openai"})
 
 
 class CapsuleRequestError(ValueError):
@@ -219,6 +221,26 @@ def create(capsule_id: object, name: object) -> DriverResponse:
 def destroy(capsule_id: object) -> DriverResponse:
     cid = canonical_capsule_id(capsule_id)
     return _call("DELETE", f"/v1/capsules/{cid}")
+
+
+def get_inference(capsule_id: object) -> DriverResponse:
+    """Read provider/model metadata only; the controller response must never contain a key."""
+    cid = canonical_capsule_id(capsule_id)
+    return _call("GET", f"/v1/capsules/{cid}/inference")
+
+
+def configure_inference(capsule_id: object, payload: object) -> DriverResponse:
+    """Forward the closed, secret-free Capsule inference contract."""
+    cid = canonical_capsule_id(capsule_id)
+    if not isinstance(payload, dict) or set(payload) != {"provider", "model"}:
+        raise CapsuleRequestError("inference requires only provider and model")
+    provider = payload["provider"]
+    model = payload["model"]
+    if not isinstance(provider, str) or provider not in _MODEL_PROVIDERS:
+        raise CapsuleRequestError("unsupported model provider")
+    if not isinstance(model, str) or _MODEL_RE.fullmatch(model) is None:
+        raise CapsuleRequestError("model must be a safe identifier of at most 128 characters")
+    return _call("PUT", f"/v1/capsules/{cid}/inference", {"provider": provider, "model": model})
 
 
 def list_assistants() -> DriverResponse:

@@ -468,6 +468,21 @@ def capsules_destroy(cid: str):
     return _capsule_driver_response(lambda: capsules.destroy(cid))
 
 
+@app.get("/api/capsules/{cid}/inference")
+def capsule_inference_status(cid: str):
+    """Return only the Capsule's provider/model selection; credentials remain in this backend."""
+    return _capsule_driver_response(lambda: capsules.get_inference(cid))
+
+
+@app.put("/api/capsules/{cid}/inference")
+async def capsule_inference_configure(cid: str, request: Request):
+    payload = await _bounded_json_object(request)
+    return await run_in_threadpool(
+        _capsule_driver_response,
+        lambda: capsules.configure_inference(cid, payload),
+    )
+
+
 @app.get("/api/assistants")
 def assistants_list():
     return _capsule_driver_response(capsules.list_assistants)

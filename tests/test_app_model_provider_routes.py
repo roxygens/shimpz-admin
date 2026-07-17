@@ -37,6 +37,8 @@ class ModelProviderRouteTests(unittest.TestCase):
                 ("/api/model-providers", "GET"),
                 ("/api/model-providers/{provider}", "PUT"),
                 ("/api/model-providers/{provider}", "DELETE"),
+                ("/api/capsules/{cid}/inference", "GET"),
+                ("/api/capsules/{cid}/inference", "PUT"),
             }.issubset(routes)
         )
         self.assertFalse(any("resolve" in path or "secret" in path for path, _method in routes))
