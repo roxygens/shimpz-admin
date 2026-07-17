@@ -1,10 +1,9 @@
-"""The admin panel API + static UI server (runs as the `shimpz-admin` container, or via scripts/shimpz-setup).
+"""The local Admin API and static UI server running in the `shimpz-admin` container.
 
 Auth (persistent): first run has NO password — the "create admin password" screen is reachable
 while uninitialized (the panel binds loopback / sits behind Cloudflare Access; the window closes
 forever the instant a password is set). After that, a signed session cookie (`shimpz_admin`) is the
-only way in. A legacy `SHIMPZ_SETUP_TOKEN`, if set, still bridges `?token=` → a session WHILE
-uninitialized (defense-in-depth for multi-user hosts); once a password exists it is dead.
+only way in. Query parameters never grant a session.
 
 The static SPA + the auth endpoints are open (the login form carries no secret); everything that
 reads or writes the keyset requires a valid session. Secrets flow IN via /api/validate + /api/apply
@@ -15,7 +14,6 @@ config only. Booting the stack is `scripts/shimpz-init && docker compose up`; re
 after a config change is the marketplace's job (via shimpz-driver), not this app's.
 """
 
-import hmac
 import json
 import logging
 import os
@@ -23,7 +21,7 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException, MultiPartParser
@@ -44,9 +42,6 @@ import validate_live
 log = logging.getLogger("shimpz-admin")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-# Optional bootstrap token: shimpz-setup mints one; the shimpz-admin container normally does not. Its
-# ONLY power is bridging `?token=` → a session while no password is set. Never a raise if absent.
-SETUP_TOKEN = os.environ.get("SHIMPZ_SETUP_TOKEN", "").strip()
 CAPSULE_CREDENTIALS_ENABLED = os.environ.get("SHIMPZ_CAPSULE_CREDENTIALS_ENABLED", "1").strip() == "1"
 
 REPO = Path(os.environ.get("SHIMPZ_REPO") or Path(__file__).resolve().parents[3])
@@ -87,20 +82,11 @@ async def _gate(request: Request, call_next):
     """Dual-mode gate: static SPA + auth endpoints open; the rest needs a signed session cookie."""
     path = request.url.path
 
-    # (1) legacy shimpz-setup bridge — a matching ?token= grants a session, but ONLY while uninitialized.
-    tok = request.query_params.get("token", "")
-    if tok and SETUP_TOKEN and not adminstore.is_initialized():
-        if not hmac.compare_digest(tok, SETUP_TOKEN):
-            return PlainTextResponse("invalid setup token", status_code=401)
-        resp = RedirectResponse(url=path)
-        _set_session(resp, request, auth.issue_session(adminstore.ensure_secret()))
-        return resp
-
-    # (2) static SPA + assets (login form has no secret) and (3) the open auth endpoints
+    # Static SPA + assets (login form has no secret) and the open auth endpoints.
     if not path.startswith("/api/") or path in OPEN_API:
         return await call_next(request)
 
-    # (4) everything else under /api/ → valid session required
+    # Everything else under /api/ requires a valid session.
     if not _session_ok(request.cookies):
         return JSONResponse({"detail": "unauthenticated"}, status_code=401)
     return await call_next(request)
@@ -140,8 +126,6 @@ async def logout():
 async def admin_setup(request: Request, payload: dict):
     if adminstore.is_initialized():
         raise HTTPException(status_code=409, detail="admin password already set")
-    if SETUP_TOKEN and not hmac.compare_digest(str(payload.get("bootstrap_token", "")), SETUP_TOKEN):
-        raise HTTPException(status_code=401, detail="bootstrap token required")
     password = str(payload.get("password", ""))
     if len(password) < MIN_PASSWORD_LEN:
         raise HTTPException(status_code=400, detail=f"password must be at least {MIN_PASSWORD_LEN} characters")

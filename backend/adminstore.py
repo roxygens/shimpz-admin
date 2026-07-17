@@ -56,20 +56,6 @@ def is_initialized():
     return bool(_read().get("password_hash"))
 
 
-def ensure_secret():
-    """Return the session-signing secret, creating (and persisting) one if absent.
-
-    Called before issuing any session — including the shimpz-setup bootstrap bridge — so a secret
-    exists even before a password is set. Does NOT set a password (is_initialized stays False).
-    """
-    data = _read()
-    if not data.get("session_secret"):
-        data["session_secret"] = auth.new_secret()
-        data.setdefault("created", int(time.time()))
-        _write(data)
-    return data["session_secret"]
-
-
 def set_password(password):
     """Set the admin password (salt + scrypt hash), ensuring a session secret exists too."""
     data = _read()

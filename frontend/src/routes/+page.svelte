@@ -100,11 +100,10 @@
 
     authBusy = true;
     try {
-      const bootstrap_token = new URLSearchParams(location.search).get('token') ?? '';
       const response = await fetch('/api/admin/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw, bootstrap_token }),
+        body: JSON.stringify({ password: pw }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));

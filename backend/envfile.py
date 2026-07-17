@@ -63,7 +63,7 @@ def merge(existing, updates):
 def render(values):
     """Serialize schema-ordered with group headers; unmanaged keys preserved at the end."""
     reject_legacy_root_credentials(values)
-    lines = ["# Managed by apps/admin (shimpz-setup wizard). Git-ignored — never commit."]
+    lines = ["# Managed by the local Shimpz Admin. Git-ignored — never commit."]
     group = None
     for f in keyset.SCHEMA:
         if f["group"] != group:

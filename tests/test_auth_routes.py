@@ -1,0 +1,100 @@
+"""Route-level contracts for the local Admin bootstrap boundary."""
+
+from __future__ import annotations
+
+import asyncio
+import importlib
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend"))
+
+
+class AuthRouteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.tempdir = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.tempdir.cleanup)
+        root = Path(cls.tempdir.name)
+        with mock.patch.dict(
+            os.environ,
+            {
+                "SHIMPZ_REPO": str(root),
+                "SHIMPZ_ADMIN_STORE": str(root / "admin.json"),
+                "SHIMPZ_SETUP_TOKEN": "retired-token-must-be-inert",
+            },
+        ):
+            sys.modules.pop("app", None)
+            cls.admin_app = importlib.import_module("app")
+        previous_store = cls.admin_app.adminstore.STORE_PATH
+        cls.admin_app.adminstore.STORE_PATH = root / "admin.json"
+        cls.addClassCleanup(setattr, cls.admin_app.adminstore, "STORE_PATH", previous_store)
+
+    def setUp(self) -> None:
+        self.admin_app.adminstore.STORE_PATH.unlink(missing_ok=True)
+
+    @staticmethod
+    def _request(path: str) -> Request:
+        raw_path, _, query = path.partition("?")
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": raw_path,
+            "raw_path": raw_path.encode(),
+            "query_string": query.encode(),
+            "root_path": "",
+            "headers": [],
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        return Request(scope, receive)
+
+    def test_retired_query_token_grants_no_session_or_api_access(self) -> None:
+        async def serve_static(_request):
+            return PlainTextResponse("spa")
+
+        response = asyncio.run(self.admin_app._gate(self._request("/?token=retired-token-must-be-inert"), serve_static))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.body, b"spa")
+        self.assertNotIn("set-cookie", response.headers)
+
+        async def should_not_run(_request):
+            self.fail("a query token reached a session-gated endpoint")
+
+        guarded = asyncio.run(
+            self.admin_app._gate(self._request("/api/state?token=retired-token-must-be-inert"), should_not_run)
+        )
+        self.assertEqual(guarded.status_code, 401)
+        self.assertFalse(self.admin_app.adminstore.is_initialized())
+
+    def test_retired_environment_does_not_change_password_setup(self) -> None:
+        response = asyncio.run(
+            self.admin_app.admin_setup(
+                self._request("/api/admin/setup"),
+                {"password": "correct horse battery staple"},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("set-cookie", response.headers)
+        self.assertTrue(self.admin_app.adminstore.is_initialized())
+
+
+if __name__ == "__main__":
+    unittest.main()

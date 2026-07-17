@@ -94,7 +94,6 @@ class _LiveDriverCase(unittest.TestCase):
                 "SHIMPZ_ADMIN_STORE": str(self.root / "admin.json"),
                 "SHIMPZ_CAPSULEDRIVER_URL": self.driver_url,
                 "SHIMPZ_CAPSULEDRIVER_TOKEN_FILE": str(self.token_file),
-                "SHIMPZ_SETUP_TOKEN": "",
             }
         )
         result = subprocess.run(
