@@ -24,6 +24,7 @@ URL = os.environ.get("SHIMPZ_CAPSULEDRIVER_URL", "http://capsule-driver:7077")
 TOKEN_FILE = os.environ.get("SHIMPZ_CAPSULEDRIVER_TOKEN_FILE", "/run/shimpz-capsuledriver/token")
 
 MAX_JSON_BODY_BYTES = 16 * 1024
+MAX_CHAT_JSON_BODY_BYTES = 24 * 1024
 MAX_JSON_RESPONSE_BYTES = 256 * 1024
 MAX_FILE_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_FILE_JSON_BODY_BYTES = 4 * ((MAX_FILE_UPLOAD_BYTES + 2) // 3) + 8192
@@ -39,6 +40,8 @@ _MEDIA_TYPE_RE = re.compile(r"^[a-z0-9][a-z0-9!#$&^_.+\-]*/[a-z0-9][a-z0-9!#$&^_
 _MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 _ALLOWED_POWERS = frozenset({"hello"})
 _MODEL_PROVIDERS = frozenset({"anthropic", "openai"})
+MAX_CHAT_MESSAGE_CHARS = 16_000
+MAX_CHAT_FILES = 8
 
 
 class CapsuleRequestError(ValueError):
@@ -175,6 +178,7 @@ def _call(
     *,
     timeout: int = CONTROL_TIMEOUT_SECONDS,
     max_body_bytes: int = MAX_JSON_BODY_BYTES,
+    model_credential: tuple[str, str] | None = None,
 ) -> DriverResponse:
     body = _encode_payload(payload, max_bytes=max_body_bytes)
     connection = None
@@ -186,6 +190,19 @@ def _call(
         headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
         if body is not None:
             headers["Content-Type"] = "application/json"
+        if model_credential is not None:
+            provider, api_key = model_credential
+            encoded_key = api_key.encode("ascii") if isinstance(api_key, str) and api_key.isascii() else b""
+            if (
+                provider not in _MODEL_PROVIDERS
+                or not 16 <= len(encoded_key) <= 8 * 1024
+                or any(not 33 <= byte <= 126 for byte in encoded_key)
+            ):
+                raise OSError("invalid private model credential")
+            # Private Admin -> local controller hand-off. These headers never come from browser
+            # input, never enter a Capsule payload, and are never included in this module's logs.
+            headers["X-Shimpz-Model-Provider"] = provider
+            headers["X-Shimpz-Model-Api-Key"] = api_key
         connection = http.client.HTTPConnection(host, port, timeout=timeout)
         connection.request(method, path, body=body, headers=headers)
         response = connection.getresponse()
@@ -241,6 +258,52 @@ def configure_inference(capsule_id: object, payload: object) -> DriverResponse:
     if not isinstance(model, str) or _MODEL_RE.fullmatch(model) is None:
         raise CapsuleRequestError("model must be a safe identifier of at most 128 characters")
     return _call("PUT", f"/v1/capsules/{cid}/inference", {"provider": provider, "model": model})
+
+
+def canonical_chat_payload(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict) or set(payload) not in (
+        {"assistant", "message"},
+        {"assistant", "message", "files"},
+    ):
+        raise CapsuleRequestError("chat requires assistant, message, and optional files")
+    assistant = canonical_assistant_id(payload["assistant"])
+    message = payload["message"]
+    if not isinstance(message, str) or not (message := message.strip()):
+        raise CapsuleRequestError("message must be non-empty")
+    if len(message) > MAX_CHAT_MESSAGE_CHARS:
+        raise CapsuleRequestError(f"message exceeds {MAX_CHAT_MESSAGE_CHARS} characters")
+    files = payload.get("files", [])
+    if not isinstance(files, list) or len(files) > MAX_CHAT_FILES:
+        raise CapsuleRequestError(f"files must contain at most {MAX_CHAT_FILES} ids")
+    canonical_files = [_canonical_id(item, field="file id", pattern=_FILE_ID_RE, maximum=32) for item in files]
+    if len(set(canonical_files)) != len(canonical_files):
+        raise CapsuleRequestError("files must not contain duplicate ids")
+    return {"assistant": assistant, "message": message, "files": canonical_files}
+
+
+def chat(
+    capsule_id: object,
+    payload: object,
+    *,
+    provider: str,
+    api_key: str,
+) -> DriverResponse:
+    """Send a turn whose JSON is secret-free; the key uses the private authenticated header."""
+    cid = canonical_capsule_id(capsule_id)
+    body = canonical_chat_payload(payload)
+    return _call(
+        "POST",
+        f"/v1/capsules/{cid}/chat",
+        body,
+        timeout=CONTROL_TIMEOUT_SECONDS,
+        max_body_bytes=MAX_CHAT_JSON_BODY_BYTES,
+        model_credential=(provider, api_key),
+    )
+
+
+def stop_chat(capsule_id: object) -> DriverResponse:
+    cid = canonical_capsule_id(capsule_id)
+    return _call("POST", f"/v1/capsules/{cid}/chat/stop", {})
 
 
 def list_assistants() -> DriverResponse:

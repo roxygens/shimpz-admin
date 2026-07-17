@@ -37,6 +37,7 @@ import driver_proxy
 import envfile
 import integrations
 import keyset
+import localchat
 import modelproviders
 import validate_live
 
@@ -328,7 +329,7 @@ def _capsule_driver_response(action):
     return JSONResponse(status_code=response.status, content=response.body)
 
 
-async def _bounded_json_object(request: Request) -> dict:
+async def _bounded_json_object(request: Request, max_bytes: int = capsules.MAX_JSON_BODY_BYTES) -> dict:
     """Read one JSON object without allowing a Power request to grow without bound."""
     content_type = request.headers.get("content-type", "").partition(";")[0].strip().lower()
     if content_type != "application/json":
@@ -337,13 +338,13 @@ async def _bounded_json_object(request: Request) -> dict:
     if raw_length is not None:
         if not raw_length.isascii() or not raw_length.isdigit():
             raise HTTPException(status_code=400, detail="invalid content length")
-        if int(raw_length) > capsules.MAX_JSON_BODY_BYTES:
+        if int(raw_length) > max_bytes:
             raise HTTPException(status_code=413, detail="request body too large")
 
     body = bytearray()
     async for chunk in request.stream():
         body.extend(chunk)
-        if len(body) > capsules.MAX_JSON_BODY_BYTES:
+        if len(body) > max_bytes:
             raise HTTPException(status_code=413, detail="request body too large")
     try:
         payload = json.loads(body)
@@ -480,6 +481,23 @@ async def capsule_inference_configure(cid: str, request: Request):
     return await run_in_threadpool(
         _capsule_driver_response,
         lambda: capsules.configure_inference(cid, payload),
+    )
+
+
+@app.post("/api/capsules/{cid}/chat")
+async def capsule_chat(cid: str, request: Request):
+    payload = await _bounded_json_object(request, capsules.MAX_CHAT_JSON_BODY_BYTES)
+    return await run_in_threadpool(
+        _capsule_driver_response,
+        lambda: localchat.turn(cid, payload),
+    )
+
+
+@app.post("/api/capsules/{cid}/chat/stop")
+async def capsule_chat_stop(cid: str):
+    return await run_in_threadpool(
+        _capsule_driver_response,
+        lambda: localchat.stop(cid),
     )
 
 
