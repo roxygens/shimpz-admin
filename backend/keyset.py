@@ -79,26 +79,7 @@ SCHEMA = (
         "validator": "tunnel_token",
         "help": "Cloudflare Tunnel connector token (Zero Trust → Tunnels). Optional: enables the public desktop.",
     },
-    # ── Telegram (the product's voice/text surface) ──────────────────────────────────────────
-    {
-        "key": "TELEGRAM_BOT_TOKEN",
-        "group": "telegram",
-        "required": True,
-        "generate": False,
-        "secret": True,
-        "validator": "live_telegram",
-        "help": "Bot token from @BotFather.",
-    },
-    {
-        "key": "TELEGRAM_ALLOWED_USERS",
-        "group": "telegram",
-        "required": True,
-        "generate": False,
-        "secret": False,
-        "validator": "re:\\d+(,\\d+)*",
-        "help": "Comma-separated numeric Telegram user IDs allowed to talk to Shimpz (from @userinfobot).",
-    },
-    # ── OpenAI (voice STT/TTS + imagegen) ────────────────────────────────────────────────────
+    # ── OpenAI (media STT/TTS + imagegen) ───────────────────────────────────────────────────
     {
         "key": "SHIMPZ_OPENAI_MEDIA_API_KEY",
         "group": "openai",
@@ -106,7 +87,7 @@ SCHEMA = (
         "generate": False,
         "secret": True,
         "validator": "live_openai",
-        "help": "Optional freshly rotated platform media key: powers Telegram voice + imagegen only in "
+        "help": "Optional freshly rotated platform media key: powers transcription, speech, and image generation in "
         "openai-driver; never copy a legacy root OPENAI_API_KEY and never inject it into Brains or Capsules.",
     },
     {
@@ -247,24 +228,6 @@ BY_KEY = {f["key"]: f for f in SCHEMA}
 # "How to get this →" with a direct link to the provider. Only the credentials a human must
 # actually hunt for get an entry; generated/advanced keys rely on their one-line `help`.
 GUIDES = {
-    "TELEGRAM_BOT_TOKEN": {
-        "link": "https://t.me/BotFather",
-        "link_label": "Open @BotFather",
-        "steps": [
-            "In Telegram, open @BotFather and send /newbot.",
-            "Choose a display name, then a username ending in “bot”.",
-            "Copy the token it replies with — it looks like 123456789:ABCdef… .",
-        ],
-    },
-    "TELEGRAM_ALLOWED_USERS": {
-        "link": "https://t.me/userinfobot",
-        "link_label": "Open @userinfobot",
-        "steps": [
-            "In Telegram, open @userinfobot and send any message.",
-            "It replies with your numeric ID (e.g. 1529279486).",
-            "Paste that number here. Add more IDs comma-separated to allow other people.",
-        ],
-    },
     "SHIMPZ_OPENAI_MEDIA_API_KEY": {
         "link": "https://platform.openai.com/api-keys",
         "link_label": "OpenAI → API keys",
@@ -272,7 +235,7 @@ GUIDES = {
             "Sign in at platform.openai.com and open API keys.",
             "Create a new least-privilege media-only secret key and copy the sk-… value.",
             "Never reuse a legacy root OPENAI_API_KEY; remove and rotate that old credential first.",
-            "Needed only for Telegram voice (speech-to-text / text-to-speech) and image generation.",
+            "Needed only for transcription, speech generation, and image generation.",
         ],
     },
     "SHIMPZ_CF_ACCOUNT": {

@@ -10,24 +10,16 @@ names a human types to the ACTUAL env var names the target container reads (mirr
 
 import keyset
 
-CHANNEL, CAPABILITY, INFRA = "CHANNEL", "CAPABILITY", "INFRA"
-CATEGORIES = (CHANNEL, CAPABILITY, INFRA)
+CAPABILITY, INFRA = "CAPABILITY", "INFRA"
+CATEGORIES = (CAPABILITY, INFRA)
 
 # group → metadata. `logo` is a file under frontend/static/integrations/.
 CATALOG = {
-    "telegram": {
-        "public_name": "Telegram",
-        "logo": "telegram.svg",
-        "category": CHANNEL,
-        "blurb": "Talk to Shimpz by voice and text from your phone.",
-        "recreate_target": None,  # feeds the `shimpz-brain` brain; live channel reconfig is Phase D3
-        "reconfigurable": True,
-    },
     "openai": {
         "public_name": "OpenAI",
         "logo": "openai.svg",
         "category": CAPABILITY,
-        "blurb": "Voice (speech ↔ text) for Telegram and image generation.",
+        "blurb": "Transcription, speech generation, and image generation.",
         "recreate_target": "openai-driver",
         "reconfigurable": True,
     },

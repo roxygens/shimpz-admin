@@ -14,7 +14,7 @@
 
   let integrations = $state([]);
   let categories = $state([]);
-  let activeCat = $state('CHANNEL');
+  let activeCat = $state('CAPABILITY');
   let drawer = $state(null);
   let values = $state({});
   let results = $state({});

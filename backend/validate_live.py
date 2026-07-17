@@ -3,7 +3,7 @@
 Fail-fast at config time: each check returns (ok, detail) and distinguishes "credential rejected"
 from "network unreachable" in the detail, never logging or echoing the value itself.
 
-IPv4-first: dual-stack endpoints (api.telegram.org, api.cloudflare.com, …) fail TLS handshake on
+IPv4-first: dual-stack endpoints (api.cloudflare.com, api.openai.com, …) fail TLS handshake on
 hosts with broken IPv6 egress (this repo's own incident class — see MEMORY.md gotchas; the
 container bakes a gai.conf fix, but the wizard runs on the BARE host of a fresh machine where no
 such fix exists). Sorting A records first is the fail-safe.
@@ -40,13 +40,6 @@ def _http_json(url, headers):
             return resp.status, json.loads(resp.read().decode("utf-8", errors="replace") or "null")
     except urllib.error.HTTPError as e:  # 4xx/5xx still carry a status we branch on
         return e.code, None
-
-
-def _live_telegram(value):
-    status, body = _http_json(f"https://api.telegram.org/bot{value}/getMe", {})
-    if status == 200 and body and body.get("ok"):
-        return True, f"@{body['result'].get('username', '?')}"
-    return False, f"Telegram rejected the token (HTTP {status})"
 
 
 def _live_cloudflare(value):
@@ -92,7 +85,6 @@ def _tunnel_token(value):
 
 
 _LIVE = {
-    "live_telegram": _live_telegram,
     "live_cloudflare": _live_cloudflare,
     "live_openai": _live_openai,
     "live_github": _live_github,

@@ -20,7 +20,6 @@ export const messages = {
       remote: 'Installing on a remote server? You’re already reaching this page, so you’re good.',
     },
     steps: {
-      telegram: { title: 'Telegram', sub: 'How you talk to Shimpz — by voice and text.' },
       brain: { title: 'The brain', sub: 'Model APIs power Shimpz’s thinking.' },
       cloudflare: { title: 'Cloudflare', sub: 'Lets Shimpz publish apps on your own domains.' },
       optional: { title: 'Optional features', sub: 'Each one turns on a capability. Skip any you don’t need.' },
@@ -44,7 +43,6 @@ export const messages = {
       needRequired: 'Fill and save every required field to enable boot.',
       boot: 'Boot Shimpz',
       booting: 'Booting…',
-      allUp: 'Shimpz is up — every service is running. Close the wizard and talk to your bot on Telegram.',
       stack: 'Stack',
       applyError: 'Some values failed validation — go back and fix the ones marked in red.',
       installing: 'Setting up Shimpz',
@@ -78,7 +76,7 @@ export const messages = {
       retry: 'Retry connection',
       unreachable: 'Cannot reach the Admin API. Check the service and try again.',
     },
-    category: { CHANNEL: 'Channels', BRAIN: 'Brain', CAPABILITY: 'Capabilities', INFRA: 'Infrastructure' },
+    category: { BRAIN: 'Brain', CAPABILITY: 'Capabilities', INFRA: 'Infrastructure' },
     workspace: {
       kicker: 'Space // control plane',
       title: 'Integrations',
@@ -149,26 +147,8 @@ export const messages = {
       disable: 'Disable',
     },
     fields: {
-      TELEGRAM_BOT_TOKEN: {
-        help: 'The token @BotFather gives you when you create a bot.',
-        linkLabel: 'Open @BotFather',
-        steps: [
-          'In Telegram, open @BotFather and send /newbot.',
-          'Choose a display name, then a username ending in “bot”.',
-          'Copy the token it replies with — like 123456789:ABCdef… .',
-        ],
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        help: 'The numeric Telegram IDs allowed to talk to Shimpz.',
-        linkLabel: 'Open @userinfobot',
-        steps: [
-          'In Telegram, open @userinfobot and send any message.',
-          'It replies with your numeric ID (e.g. 1529279486).',
-          'Paste it here; add more IDs comma-separated to allow other people.',
-        ],
-      },
       SHIMPZ_OPENAI_MEDIA_API_KEY: {
-        help: 'Optional platform media key — powers Telegram voice and image generation only; never a Brain or Capsule.',
+        help: 'Optional platform media key — powers transcription, speech, and image generation only; never a Brain or Capsule.',
         linkLabel: 'OpenAI → API keys',
         steps: [
           'Sign in at platform.openai.com → API keys.',
@@ -234,7 +214,6 @@ export const messages = {
       remote: 'Instalando num servidor remoto? Você já está vendo esta página, então está tudo certo.',
     },
     steps: {
-      telegram: { title: 'Telegram', sub: 'Como você fala com o Shimpz — por voz e texto.' },
       brain: { title: 'O cérebro', sub: 'APIs de modelos movem o raciocínio do Shimpz.' },
       cloudflare: { title: 'Cloudflare', sub: 'Permite o Shimpz publicar apps nos seus domínios.' },
       optional: { title: 'Recursos opcionais', sub: 'Cada um liga uma capacidade. Pule os que não precisar.' },
@@ -258,7 +237,6 @@ export const messages = {
       needRequired: 'Preencha e salve cada campo obrigatório para liberar o boot.',
       boot: 'Ligar o Shimpz',
       booting: 'Ligando…',
-      allUp: 'O Shimpz está no ar — todos os serviços rodando. Feche o assistente e fale com seu bot no Telegram.',
       stack: 'Serviços',
       applyError: 'Alguns valores não passaram na validação — volte e corrija os marcados em vermelho.',
       installing: 'Preparando o Shimpz',
@@ -292,7 +270,7 @@ export const messages = {
       retry: 'Tentar conexão novamente',
       unreachable: 'Não foi possível acessar a API do Admin. Verifique o serviço e tente novamente.',
     },
-    category: { CHANNEL: 'Canais', BRAIN: 'Cérebro', CAPABILITY: 'Capacidades', INFRA: 'Infraestrutura' },
+    category: { BRAIN: 'Cérebro', CAPABILITY: 'Capacidades', INFRA: 'Infraestrutura' },
     workspace: {
       kicker: 'Space // plano de controle',
       title: 'Integrações',
@@ -363,24 +341,6 @@ export const messages = {
       disable: 'Desativar',
     },
     fields: {
-      TELEGRAM_BOT_TOKEN: {
-        help: 'O token que o @BotFather te dá ao criar um bot.',
-        linkLabel: 'Abrir @BotFather',
-        steps: [
-          'No Telegram, abra o @BotFather e envie /newbot.',
-          'Escolha um nome e um usuário terminando em “bot”.',
-          'Copie o token da resposta — algo como 123456789:ABCdef… .',
-        ],
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        help: 'Os IDs numéricos do Telegram autorizados a falar com o Shimpz.',
-        linkLabel: 'Abrir @userinfobot',
-        steps: [
-          'No Telegram, abra o @userinfobot e envie qualquer mensagem.',
-          'Ele responde com seu ID numérico (ex.: 1529279486).',
-          'Cole aqui; separe por vírgula para autorizar mais pessoas.',
-        ],
-      },
       SHIMPZ_OPENAI_MEDIA_API_KEY: {
         help: 'Chave opcional de mídia da plataforma — só habilita voz e imagens; nunca um Cérebro ou Cápsula.',
         linkLabel: 'OpenAI → API keys',
@@ -448,7 +408,6 @@ export const messages = {
       remote: '¿Instalando en un servidor remoto? Ya estás viendo esta página, así que todo bien.',
     },
     steps: {
-      telegram: { title: 'Telegram', sub: 'Cómo hablas con Shimpz — por voz y texto.' },
       brain: { title: 'El cerebro', sub: 'Las APIs de modelos impulsan el razonamiento de Shimpz.' },
       cloudflare: { title: 'Cloudflare', sub: 'Permite que Shimpz publique apps en tus dominios.' },
       optional: { title: 'Funciones opcionales', sub: 'Cada una activa una capacidad. Omite las que no necesites.' },
@@ -472,7 +431,6 @@ export const messages = {
       needRequired: 'Completa y guarda cada campo obligatorio para habilitar el arranque.',
       boot: 'Encender Shimpz',
       booting: 'Encendiendo…',
-      allUp: 'Shimpz está activo — todos los servicios en marcha. Cierra el asistente y habla con tu bot en Telegram.',
       stack: 'Servicios',
       applyError: 'Algunos valores no pasaron la validación — vuelve y corrige los marcados en rojo.',
       installing: 'Preparando Shimpz',
@@ -506,7 +464,7 @@ export const messages = {
       retry: 'Reintentar conexión',
       unreachable: 'No se puede acceder a la API del Admin. Comprueba el servicio e inténtalo de nuevo.',
     },
-    category: { CHANNEL: 'Canales', BRAIN: 'Cerebro', CAPABILITY: 'Capacidades', INFRA: 'Infraestructura' },
+    category: { BRAIN: 'Cerebro', CAPABILITY: 'Capacidades', INFRA: 'Infraestructura' },
     workspace: {
       kicker: 'Space // plano de control',
       title: 'Integraciones',
@@ -577,24 +535,6 @@ export const messages = {
       disable: 'Desactivar',
     },
     fields: {
-      TELEGRAM_BOT_TOKEN: {
-        help: 'El token que te da @BotFather al crear un bot.',
-        linkLabel: 'Abrir @BotFather',
-        steps: [
-          'En Telegram, abre @BotFather y envía /newbot.',
-          'Elige un nombre y un usuario que termine en “bot”.',
-          'Copia el token de la respuesta — como 123456789:ABCdef… .',
-        ],
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        help: 'Los IDs numéricos de Telegram autorizados a hablar con Shimpz.',
-        linkLabel: 'Abrir @userinfobot',
-        steps: [
-          'En Telegram, abre @userinfobot y envía cualquier mensaje.',
-          'Responde con tu ID numérico (p. ej. 1529279486).',
-          'Pégalo aquí; separa por comas para autorizar a más personas.',
-        ],
-      },
       SHIMPZ_OPENAI_MEDIA_API_KEY: {
         help: 'Clave multimedia opcional de la plataforma — solo voz e imágenes; nunca un Cerebro ni una Cápsula.',
         linkLabel: 'OpenAI → API keys',
@@ -662,7 +602,6 @@ export const messages = {
       remote: '在远程服务器上安装？你已经能看到本页，说明一切正常。',
     },
     steps: {
-      telegram: { title: 'Telegram', sub: '你与 Shimpz 交流的方式——语音和文字。' },
       brain: { title: '大脑', sub: '模型 API 驱动 Shimpz 的思考。' },
       cloudflare: { title: 'Cloudflare', sub: '让 Shimpz 在你的域名上发布应用。' },
       optional: { title: '可选功能', sub: '每一项开启一种能力。不需要的可跳过。' },
@@ -686,7 +625,6 @@ export const messages = {
       needRequired: '填写并保存所有必填项后才能启动。',
       boot: '启动 Shimpz',
       booting: '启动中…',
-      allUp: 'Shimpz 已上线——所有服务运行中。关闭向导，在 Telegram 上与你的机器人对话吧。',
       stack: '服务',
       applyError: '部分值未通过校验——请返回修正标红的项。',
       installing: '正在部署 Shimpz',
@@ -720,7 +658,7 @@ export const messages = {
       retry: '重试连接',
       unreachable: '无法访问 Admin API。请检查服务后重试。',
     },
-    category: { CHANNEL: '渠道', BRAIN: '大脑', CAPABILITY: '能力', INFRA: '基础设施' },
+    category: { BRAIN: '大脑', CAPABILITY: '能力', INFRA: '基础设施' },
     workspace: {
       kicker: 'Space // 控制平面',
       title: '集成',
@@ -791,26 +729,8 @@ export const messages = {
       disable: '停用',
     },
     fields: {
-      TELEGRAM_BOT_TOKEN: {
-        help: '创建机器人时 @BotFather 给你的令牌。',
-        linkLabel: '打开 @BotFather',
-        steps: [
-          '在 Telegram 打开 @BotFather，发送 /newbot。',
-          '设置显示名，再设一个以 “bot” 结尾的用户名。',
-          '复制它回复的令牌——形如 123456789:ABCdef… 。',
-        ],
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        help: '允许与 Shimpz 对话的 Telegram 数字 ID。',
-        linkLabel: '打开 @userinfobot',
-        steps: [
-          '在 Telegram 打开 @userinfobot，发送任意消息。',
-          '它会回复你的数字 ID（如 1529279486）。',
-          '粘贴到此处；用逗号分隔可授权更多人。',
-        ],
-      },
       SHIMPZ_OPENAI_MEDIA_API_KEY: {
-        help: '可选的平台媒体密钥——仅用于 Telegram 语音和图像；绝不会注入大脑或胶囊。',
+        help: '可选的平台媒体密钥——仅用于转录、语音和图像；绝不会注入大脑或胶囊。',
         linkLabel: 'OpenAI → API keys',
         steps: [
           '登录 platform.openai.com → API keys。',
@@ -876,7 +796,6 @@ export const messages = {
       remote: 'Installation sur un serveur distant ? Vous voyez déjà cette page, tout est bon.',
     },
     steps: {
-      telegram: { title: 'Telegram', sub: 'Comment vous parlez à Shimpz — voix et texte.' },
       brain: { title: 'Le cerveau', sub: 'Les API de modèles alimentent la réflexion de Shimpz.' },
       cloudflare: { title: 'Cloudflare', sub: 'Permet à Shimpz de publier des apps sur vos domaines.' },
       optional: { title: 'Options', sub: 'Chacune active une capacité. Ignorez celles dont vous n’avez pas besoin.' },
@@ -900,7 +819,6 @@ export const messages = {
       needRequired: 'Remplissez et enregistrez chaque champ requis pour activer le démarrage.',
       boot: 'Démarrer Shimpz',
       booting: 'Démarrage…',
-      allUp: 'Shimpz est en ligne — tous les services tournent. Fermez l’assistant et parlez à votre bot sur Telegram.',
       stack: 'Services',
       applyError: 'Certaines valeurs ont échoué à la validation — revenez corriger celles en rouge.',
       installing: 'Préparation de Shimpz',
@@ -934,7 +852,7 @@ export const messages = {
       retry: 'Réessayer la connexion',
       unreachable: 'Impossible de joindre l’API Admin. Vérifiez le service puis réessayez.',
     },
-    category: { CHANNEL: 'Canaux', BRAIN: 'Cerveau', CAPABILITY: 'Capacités', INFRA: 'Infrastructure' },
+    category: { BRAIN: 'Cerveau', CAPABILITY: 'Capacités', INFRA: 'Infrastructure' },
     workspace: {
       kicker: 'Space // plan de contrôle',
       title: 'Intégrations',
@@ -1005,24 +923,6 @@ export const messages = {
       disable: 'Désactiver',
     },
     fields: {
-      TELEGRAM_BOT_TOKEN: {
-        help: 'Le jeton que @BotFather vous donne à la création d’un bot.',
-        linkLabel: 'Ouvrir @BotFather',
-        steps: [
-          'Dans Telegram, ouvrez @BotFather et envoyez /newbot.',
-          'Choisissez un nom, puis un identifiant finissant par « bot ».',
-          'Copiez le jeton renvoyé — du type 123456789:ABCdef… .',
-        ],
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        help: 'Les identifiants Telegram numériques autorisés à parler à Shimpz.',
-        linkLabel: 'Ouvrir @userinfobot',
-        steps: [
-          'Dans Telegram, ouvrez @userinfobot et envoyez un message.',
-          'Il répond avec votre ID numérique (ex. 1529279486).',
-          'Collez-le ici ; séparez par des virgules pour autoriser d’autres personnes.',
-        ],
-      },
       SHIMPZ_OPENAI_MEDIA_API_KEY: {
         help: 'Clé média de plateforme facultative — voix et images uniquement, jamais un Cerveau ou une Capsule.',
         linkLabel: 'OpenAI → API keys',
@@ -1090,7 +990,6 @@ export const messages = {
       remote: 'Installation auf einem entfernten Server? Du siehst diese Seite bereits, also alles gut.',
     },
     steps: {
-      telegram: { title: 'Telegram', sub: 'So sprichst du mit Shimpz — per Sprache und Text.' },
       brain: { title: 'Das Gehirn', sub: 'Modell-APIs treiben Shimpzs Denken an.' },
       cloudflare: { title: 'Cloudflare', sub: 'Lässt Shimpz Apps auf deinen Domains veröffentlichen.' },
       optional: { title: 'Optionale Funktionen', sub: 'Jede schaltet eine Fähigkeit frei. Überspringe, was du nicht brauchst.' },
@@ -1114,7 +1013,6 @@ export const messages = {
       needRequired: 'Fülle und speichere jedes Pflichtfeld, um den Start zu aktivieren.',
       boot: 'Shimpz starten',
       booting: 'Starte…',
-      allUp: 'Shimpz läuft — alle Dienste sind aktiv. Schließe den Assistenten und schreib deinem Bot auf Telegram.',
       stack: 'Dienste',
       applyError: 'Einige Werte sind bei der Prüfung durchgefallen — geh zurück und korrigiere die roten.',
       installing: 'Shimpz wird eingerichtet',
@@ -1148,7 +1046,7 @@ export const messages = {
       retry: 'Verbindung erneut versuchen',
       unreachable: 'Die Admin-API ist nicht erreichbar. Prüfen Sie den Dienst und versuchen Sie es erneut.',
     },
-    category: { CHANNEL: 'Kanäle', BRAIN: 'Gehirn', CAPABILITY: 'Fähigkeiten', INFRA: 'Infrastruktur' },
+    category: { BRAIN: 'Gehirn', CAPABILITY: 'Fähigkeiten', INFRA: 'Infrastruktur' },
     workspace: {
       kicker: 'Space // Steuerzentrale',
       title: 'Integrationen',
@@ -1219,24 +1117,6 @@ export const messages = {
       disable: 'Deaktivieren',
     },
     fields: {
-      TELEGRAM_BOT_TOKEN: {
-        help: 'Das Token, das dir @BotFather beim Erstellen eines Bots gibt.',
-        linkLabel: '@BotFather öffnen',
-        steps: [
-          'Öffne in Telegram @BotFather und sende /newbot.',
-          'Wähle einen Anzeigenamen und einen Benutzernamen, der auf „bot“ endet.',
-          'Kopiere das Token aus der Antwort — etwa 123456789:ABCdef… .',
-        ],
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        help: 'Die numerischen Telegram-IDs, die mit Shimpz sprechen dürfen.',
-        linkLabel: '@userinfobot öffnen',
-        steps: [
-          'Öffne in Telegram @userinfobot und sende irgendeine Nachricht.',
-          'Er antwortet mit deiner numerischen ID (z. B. 1529279486).',
-          'Hier einfügen; mit Kommas trennen, um weitere Personen zu erlauben.',
-        ],
-      },
       SHIMPZ_OPENAI_MEDIA_API_KEY: {
         help: 'Optionaler Plattform-Medienschlüssel — nur Sprache und Bilder, nie ein Brain oder eine Capsule.',
         linkLabel: 'OpenAI → API keys',
@@ -1304,7 +1184,6 @@ export const messages = {
       remote: 'リモートサーバーにインストール中ですか？このページが見えているなら大丈夫です。',
     },
     steps: {
-      telegram: { title: 'Telegram', sub: 'Shimpz との会話方法——音声とテキスト。' },
       brain: { title: '頭脳', sub: 'モデル API が Shimpz の思考を担います。' },
       cloudflare: { title: 'Cloudflare', sub: 'Shimpz があなたのドメインでアプリを公開できます。' },
       optional: { title: '任意の機能', sub: '各項目が機能を有効にします。不要なものはスキップ。' },
@@ -1328,7 +1207,6 @@ export const messages = {
       needRequired: '起動を有効にするには、すべての必須項目を入力・保存してください。',
       boot: 'Shimpz を起動',
       booting: '起動中…',
-      allUp: 'Shimpz が稼働中——全サービスが動作しています。ウィザードを閉じて Telegram でボットと話しましょう。',
       stack: 'サービス',
       applyError: '一部の値が検証に失敗しました——戻って赤い項目を修正してください。',
       installing: 'Shimpz をセットアップ中',
@@ -1362,7 +1240,7 @@ export const messages = {
       retry: '接続を再試行',
       unreachable: 'Admin API に接続できません。サービスを確認して、もう一度お試しください。',
     },
-    category: { CHANNEL: 'チャネル', BRAIN: '頭脳', CAPABILITY: '機能', INFRA: 'インフラ' },
+    category: { BRAIN: '頭脳', CAPABILITY: '機能', INFRA: 'インフラ' },
     workspace: {
       kicker: 'Space // コントロールプレーン',
       title: 'インテグレーション',
@@ -1433,24 +1311,6 @@ export const messages = {
       disable: '無効化',
     },
     fields: {
-      TELEGRAM_BOT_TOKEN: {
-        help: 'ボット作成時に @BotFather が渡すトークン。',
-        linkLabel: '@BotFather を開く',
-        steps: [
-          'Telegram で @BotFather を開き /newbot を送信。',
-          '表示名を決め、次に「bot」で終わるユーザー名を設定。',
-          '返ってきたトークンをコピー——123456789:ABCdef… の形式。',
-        ],
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        help: 'Shimpz と話せる Telegram の数値 ID。',
-        linkLabel: '@userinfobot を開く',
-        steps: [
-          'Telegram で @userinfobot を開き、任意のメッセージを送信。',
-          '数値 ID（例: 1529279486）が返ってきます。',
-          'ここに貼り付け。カンマ区切りで他の人も許可できます。',
-        ],
-      },
       SHIMPZ_OPENAI_MEDIA_API_KEY: {
         help: '任意のプラットフォーム用メディアキー——音声と画像専用で、Brain や Capsule には入りません。',
         linkLabel: 'OpenAI → API keys',
@@ -1518,7 +1378,6 @@ export const messages = {
       remote: 'تُثبّت على خادم بعيد؟ أنت ترى هذه الصفحة بالفعل، إذن كل شيء على ما يُرام.',
     },
     steps: {
-      telegram: { title: 'تيليجرام', sub: 'كيف تتحدّث إلى Shimpz — صوتًا ونصًّا.' },
       brain: { title: 'العقل', sub: 'تُشغّل واجهات نماذج الذكاء تفكير Shimpz.' },
       cloudflare: { title: 'Cloudflare', sub: 'يتيح لـ Shimpz نشر التطبيقات على نطاقاتك.' },
       optional: { title: 'ميزات اختيارية', sub: 'كلٌّ منها يُفعّل قدرة. تخطَّ ما لا تحتاجه.' },
@@ -1542,7 +1401,6 @@ export const messages = {
       needRequired: 'املأ واحفظ كل حقل مطلوب لتفعيل التشغيل.',
       boot: 'تشغيل Shimpz',
       booting: 'جارٍ التشغيل…',
-      allUp: 'Shimpz يعمل — كل الخدمات نشطة. أغلق المُساعد وتحدّث إلى بوتك على تيليجرام.',
       stack: 'الخدمات',
       applyError: 'فشلت بعض القيم في التحقّق — ارجع وصحّح المُعلَّمة بالأحمر.',
       installing: 'يجري إعداد Shimpz',
@@ -1576,7 +1434,7 @@ export const messages = {
       retry: 'إعادة محاولة الاتصال',
       unreachable: 'تعذّر الوصول إلى Admin API. تحقّق من الخدمة ثم حاول مجددًا.',
     },
-    category: { CHANNEL: 'القنوات', BRAIN: 'العقل', CAPABILITY: 'القدرات', INFRA: 'البنية التحتية' },
+    category: { BRAIN: 'العقل', CAPABILITY: 'القدرات', INFRA: 'البنية التحتية' },
     workspace: {
       kicker: 'Space // مستوى التحكّم',
       title: 'عمليات التكامل',
@@ -1647,24 +1505,6 @@ export const messages = {
       disable: 'تعطيل',
     },
     fields: {
-      TELEGRAM_BOT_TOKEN: {
-        help: 'الرمز الذي يمنحك إياه @BotFather عند إنشاء بوت.',
-        linkLabel: 'فتح @BotFather',
-        steps: [
-          'في تيليجرام، افتح @BotFather وأرسِل ‎/newbot.',
-          'اختر اسمًا ظاهرًا، ثم اسم مستخدم ينتهي بـ «bot».',
-          'انسخ الرمز في الرد — مثل ‎123456789:ABCdef… .',
-        ],
-      },
-      TELEGRAM_ALLOWED_USERS: {
-        help: 'مُعرِّفات تيليجرام الرقمية المسموح لها بالتحدّث إلى Shimpz.',
-        linkLabel: 'فتح @userinfobot',
-        steps: [
-          'في تيليجرام، افتح @userinfobot وأرسِل أي رسالة.',
-          'يردّ بمُعرِّفك الرقمي (مثل 1529279486).',
-          'الصقه هنا؛ افصل بفواصل للسماح لأشخاص آخرين.',
-        ],
-      },
       SHIMPZ_OPENAI_MEDIA_API_KEY: {
         help: 'مفتاح وسائط اختياري للمنصة — للصوت والصور فقط، ولا يُحقن في أي عقل أو كبسولة.',
         linkLabel: 'OpenAI → API keys',
