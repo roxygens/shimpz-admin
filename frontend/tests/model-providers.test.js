@@ -1,0 +1,78 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  listModelProviders,
+  loadInference,
+  removeModelKey,
+  saveModelSetup,
+} from '../src/lib/modelProviders.js';
+
+function response(status, body) {
+  return { ok: status >= 200 && status < 300, status, async json() { return body; } };
+}
+
+const providers = [
+  { id: 'openai', title: 'OpenAI', default_model: 'gpt-5.5', configured: false, masked: null },
+  { id: 'anthropic', title: 'Anthropic', default_model: 'claude-sonnet-5', configured: true, masked: '••••test' },
+];
+
+test('loads masked provider state and rejects a secret-bearing response', async () => {
+  assert.deepEqual(await listModelProviders(async () => response(200, { providers })), providers);
+
+  await assert.rejects(
+    listModelProviders(async () => response(200, {
+      providers: [{ ...providers[0], api_key: 'must-not-enter-ui' }, providers[1]],
+    })),
+    /invalid/,
+  );
+});
+
+test('saves the key only to Admin and provider/model only to inference', async () => {
+  const calls = [];
+  const fetcher = async (url, options) => {
+    calls.push({ url, options });
+    return calls.length === 1
+      ? response(200, { ...providers[0], configured: true, masked: '••••test' })
+      : response(200, { capsule: 'capsule_1', provider: 'openai', model: 'gpt-5.5' });
+  };
+
+  await saveModelSetup(
+    fetcher,
+    'capsule_1',
+    { provider: 'openai', model: 'gpt-5.5', apiKey: 'sk-test-0123456789' },
+    providers,
+  );
+
+  assert.deepEqual(JSON.parse(calls[0].options.body), { api_key: 'sk-test-0123456789' });
+  assert.deepEqual(JSON.parse(calls[1].options.body), { provider: 'openai', model: 'gpt-5.5' });
+  assert.doesNotMatch(calls[1].options.body, /api_key|sk-test/);
+});
+
+test('reuses a configured key without a credential write', async () => {
+  const calls = [];
+  await saveModelSetup(
+    async (url, options) => {
+      calls.push({ url, options });
+      return response(200, { provider: 'anthropic', model: 'claude-sonnet-5' });
+    },
+    'capsule_1',
+    { provider: 'anthropic', model: 'claude-sonnet-5', apiKey: '' },
+    providers,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, '/api/capsules/capsule_1/inference');
+});
+
+test('treats unconfigured inference as empty and removes keys through the fixed route', async () => {
+  assert.equal(await loadInference(async () => response(409, { detail: 'not configured' }), 'capsule_1'), null);
+  const removed = await removeModelKey(
+    async (url, options) => {
+      assert.equal(url, '/api/model-providers/openai');
+      assert.equal(options.method, 'DELETE');
+      return response(200, providers[0]);
+    },
+    'openai',
+  );
+  assert.equal(removed.configured, false);
+});

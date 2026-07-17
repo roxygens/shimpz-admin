@@ -21,7 +21,7 @@ export const messages = {
     },
     steps: {
       telegram: { title: 'Telegram', sub: 'How you talk to Shimpz — by voice and text.' },
-      brain: { title: 'The brain', sub: 'Claude powers Shimpz’s thinking.' },
+      brain: { title: 'The brain', sub: 'Model APIs power Shimpz’s thinking.' },
       cloudflare: { title: 'Cloudflare', sub: 'Lets Shimpz publish apps on your own domains.' },
       optional: { title: 'Optional features', sub: 'Each one turns on a capability. Skip any you don’t need.' },
     },
@@ -234,7 +234,7 @@ export const messages = {
     },
     steps: {
       telegram: { title: 'Telegram', sub: 'Como você fala com o Shimpz — por voz e texto.' },
-      brain: { title: 'O cérebro', sub: 'O Claude move o raciocínio do Shimpz.' },
+      brain: { title: 'O cérebro', sub: 'APIs de modelos movem o raciocínio do Shimpz.' },
       cloudflare: { title: 'Cloudflare', sub: 'Permite o Shimpz publicar apps nos seus domínios.' },
       optional: { title: 'Recursos opcionais', sub: 'Cada um liga uma capacidade. Pule os que não precisar.' },
     },
@@ -447,7 +447,7 @@ export const messages = {
     },
     steps: {
       telegram: { title: 'Telegram', sub: 'Cómo hablas con Shimpz — por voz y texto.' },
-      brain: { title: 'El cerebro', sub: 'Claude impulsa el razonamiento de Shimpz.' },
+      brain: { title: 'El cerebro', sub: 'Las APIs de modelos impulsan el razonamiento de Shimpz.' },
       cloudflare: { title: 'Cloudflare', sub: 'Permite que Shimpz publique apps en tus dominios.' },
       optional: { title: 'Funciones opcionales', sub: 'Cada una activa una capacidad. Omite las que no necesites.' },
     },
@@ -660,7 +660,7 @@ export const messages = {
     },
     steps: {
       telegram: { title: 'Telegram', sub: '你与 Shimpz 交流的方式——语音和文字。' },
-      brain: { title: '大脑', sub: 'Claude 驱动 Shimpz 的思考。' },
+      brain: { title: '大脑', sub: '模型 API 驱动 Shimpz 的思考。' },
       cloudflare: { title: 'Cloudflare', sub: '让 Shimpz 在你的域名上发布应用。' },
       optional: { title: '可选功能', sub: '每一项开启一种能力。不需要的可跳过。' },
     },
@@ -873,7 +873,7 @@ export const messages = {
     },
     steps: {
       telegram: { title: 'Telegram', sub: 'Comment vous parlez à Shimpz — voix et texte.' },
-      brain: { title: 'Le cerveau', sub: 'Claude alimente la réflexion de Shimpz.' },
+      brain: { title: 'Le cerveau', sub: 'Les API de modèles alimentent la réflexion de Shimpz.' },
       cloudflare: { title: 'Cloudflare', sub: 'Permet à Shimpz de publier des apps sur vos domaines.' },
       optional: { title: 'Options', sub: 'Chacune active une capacité. Ignorez celles dont vous n’avez pas besoin.' },
     },
@@ -1086,7 +1086,7 @@ export const messages = {
     },
     steps: {
       telegram: { title: 'Telegram', sub: 'So sprichst du mit Shimpz — per Sprache und Text.' },
-      brain: { title: 'Das Gehirn', sub: 'Claude treibt Shimpzs Denken an.' },
+      brain: { title: 'Das Gehirn', sub: 'Modell-APIs treiben Shimpzs Denken an.' },
       cloudflare: { title: 'Cloudflare', sub: 'Lässt Shimpz Apps auf deinen Domains veröffentlichen.' },
       optional: { title: 'Optionale Funktionen', sub: 'Jede schaltet eine Fähigkeit frei. Überspringe, was du nicht brauchst.' },
     },
@@ -1299,7 +1299,7 @@ export const messages = {
     },
     steps: {
       telegram: { title: 'Telegram', sub: 'Shimpz との会話方法——音声とテキスト。' },
-      brain: { title: '頭脳', sub: 'Claude が Shimpz の思考を担います。' },
+      brain: { title: '頭脳', sub: 'モデル API が Shimpz の思考を担います。' },
       cloudflare: { title: 'Cloudflare', sub: 'Shimpz があなたのドメインでアプリを公開できます。' },
       optional: { title: '任意の機能', sub: '各項目が機能を有効にします。不要なものはスキップ。' },
     },
@@ -1512,7 +1512,7 @@ export const messages = {
     },
     steps: {
       telegram: { title: 'تيليجرام', sub: 'كيف تتحدّث إلى Shimpz — صوتًا ونصًّا.' },
-      brain: { title: 'العقل', sub: 'يُشغّل Claude تفكير Shimpz.' },
+      brain: { title: 'العقل', sub: 'تُشغّل واجهات نماذج الذكاء تفكير Shimpz.' },
       cloudflare: { title: 'Cloudflare', sub: 'يتيح لـ Shimpz نشر التطبيقات على نطاقاتك.' },
       optional: { title: 'ميزات اختيارية', sub: 'كلٌّ منها يُفعّل قدرة. تخطَّ ما لا تحتاجه.' },
     },

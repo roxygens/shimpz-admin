@@ -1,5 +1,6 @@
 <script>
   import DriverCredentialPanel from '$lib/DriverCredentialPanel.svelte';
+  import ModelProviderPanel from '$lib/ModelProviderPanel.svelte';
   import { t } from '$lib/i18n.js';
 
   let { capsule, busy = false, showCredentials = true, onDelete } = $props();
@@ -18,6 +19,8 @@
   <div class="identity">
     <h2>{capsule.name || capsule.id}</h2>
   </div>
+
+  <ModelProviderPanel capsuleId={capsule.id} />
 
   {#if showCredentials}
     <section class="drivers" aria-label={$t('capsules.drivers')}>
