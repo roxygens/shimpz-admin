@@ -132,6 +132,7 @@ export const messages = {
       signIn: 'Open sign-in',
       boundary: 'Sign-in and future checkout open directly on shimpz.com. The local Admin never stores Store passwords or payment credentials.',
     },
+    chat: { nav: 'Chat' },
     integration: {
       save: 'Save',
       saving: 'Saving…',
@@ -345,6 +346,7 @@ export const messages = {
       signIn: 'Abrir login',
       boundary: 'Login e futuro checkout abrem diretamente no shimpz.com. O Admin local nunca armazena senhas da Store nem credenciais de pagamento.',
     },
+    chat: { nav: 'Chat' },
     integration: {
       save: 'Salvar',
       saving: 'Salvando…',
@@ -558,6 +560,7 @@ export const messages = {
       signIn: 'Abrir inicio de sesión',
       boundary: 'El inicio de sesión y el futuro pago se abren directamente en shimpz.com. El Admin local nunca guarda contraseñas de la tienda ni datos de pago.',
     },
+    chat: { nav: 'Chat' },
     integration: {
       save: 'Guardar',
       saving: 'Guardando…',
@@ -771,6 +774,7 @@ export const messages = {
       signIn: '打开登录页',
       boundary: '登录和未来的结账流程会直接在 shimpz.com 打开。本地 Admin 永远不会保存商店密码或支付凭据。',
     },
+    chat: { nav: 'Chat' },
     integration: {
       save: '保存',
       saving: '保存中…',
@@ -984,6 +988,7 @@ export const messages = {
       signIn: 'Ouvrir la connexion',
       boundary: 'La connexion et le futur paiement s’ouvrent directement sur shimpz.com. L’Admin local ne conserve jamais les mots de passe de la boutique ni les données de paiement.',
     },
+    chat: { nav: 'Chat' },
     integration: {
       save: 'Enregistrer',
       saving: 'Enregistrement…',
@@ -1197,6 +1202,7 @@ export const messages = {
       signIn: 'Anmeldung öffnen',
       boundary: 'Anmeldung und künftiger Checkout öffnen sich direkt auf shimpz.com. Der lokale Admin speichert niemals Store-Passwörter oder Zahlungsdaten.',
     },
+    chat: { nav: 'Chat' },
     integration: {
       save: 'Speichern',
       saving: 'Speichere…',
@@ -1410,6 +1416,7 @@ export const messages = {
       signIn: 'ログインを開く',
       boundary: 'ログインと今後の購入手続きは shimpz.com で直接開きます。ローカル Admin が Store のパスワードや決済情報を保存することはありません。',
     },
+    chat: { nav: 'Chat' },
     integration: {
       save: '保存',
       saving: '保存中…',
@@ -1623,6 +1630,7 @@ export const messages = {
       signIn: 'فتح تسجيل الدخول',
       boundary: 'يفتح تسجيل الدخول والدفع المستقبلي مباشرةً على shimpz.com. لا يخزّن Admin المحلي كلمات مرور المتجر أو بيانات الدفع أبدًا.',
     },
+    chat: { nav: 'Chat' },
     integration: {
       save: 'حفظ',
       saving: 'جارٍ الحفظ…',
