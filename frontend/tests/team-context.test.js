@@ -383,6 +383,15 @@ test('Team sidebar keeps Store links canonical and file controls scoped to Chat'
   assert.match(sidebarSource, /assistantStoreHref\(storeLocale, runtime\.assistant\)/);
   assert.match(sidebarSource, /target="_blank"/);
   assert.match(sidebarSource, /rel="noopener noreferrer"/);
+  assert.doesNotMatch(sidebarSource, /<i aria-hidden="true">↗<\/i>/);
+  assert.match(sidebarSource, /\.assistant-list \{[\s\S]*?margin-inline: -1\.15rem;/);
+  assert.match(
+    sidebarSource,
+    /\.assistant-list a \{[\s\S]*?grid-template-columns: auto minmax\(0, 1fr\);[\s\S]*?padding: 0\.65rem 1\.15rem;/,
+  );
+  assert.match(sidebarSource, /\.assistant-list a:hover,[\s\S]*?background: rgba\(0, 240, 255, 0\.065\);/);
+  assert.match(sidebarSource, /\.assistant-list a:active \{\s*background: rgba\(0, 240, 255, 0\.11\);/);
+  assert.doesNotMatch(sidebarSource, /\.assistant-list a:hover \{[^}]*border/s);
   assert.match(sidebarSource, /\{#if active === 'chat'\}[\s\S]*?<input[\s\S]*?type="checkbox"/);
 });
 

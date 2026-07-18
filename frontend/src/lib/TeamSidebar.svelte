@@ -233,7 +233,6 @@
                     <strong>{assistant.name}</strong>
                     <small>{assistant.status}</small>
                   </span>
-                  <i aria-hidden="true">↗</i>
                 </a>
               {/if}
             </li>
@@ -470,22 +469,31 @@
     list-style: none;
   }
 
+  .assistant-list {
+    gap: 0;
+    margin-inline: -1.15rem;
+  }
+
   .assistant-list a {
     display: grid;
     min-width: 0;
     min-height: 3.15rem;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    gap: 0.65rem;
-    padding: 0.45rem;
-    border: 1px solid transparent;
+    gap: 0.75rem;
+    padding: 0.65rem 1.15rem;
     color: var(--text);
     text-decoration: none;
   }
 
-  .assistant-list a:hover {
-    border-color: var(--border-strong);
-    background: rgba(0, 240, 255, 0.035);
+  .assistant-list a:hover,
+  .assistant-list a:focus-visible {
+    outline: 0;
+    background: rgba(0, 240, 255, 0.065);
+  }
+
+  .assistant-list a:active {
+    background: rgba(0, 240, 255, 0.11);
   }
 
   .assistant-list a > span {
@@ -508,11 +516,6 @@
     font-size: 0.5rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-  }
-
-  .assistant-list i {
-    color: var(--accent);
-    font-style: normal;
   }
 
   .file-list li {
