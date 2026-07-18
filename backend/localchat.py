@@ -1,10 +1,11 @@
-"""Secret-safe local chat orchestration for the Admin backend.
+"""Secret-safe local Team chat orchestration for the Admin backend.
 
-The browser contract is always ``assistant/message/files``. This backend reads the selected
-provider from controller-owned inference metadata, resolves its API key from ``admin.json`` through
-the non-route ``modelproviders.resolve_api_key``, then delivers it only in fixed private headers on
-the authenticated control network. Successful and failed controller responses are reprojected so a
-buggy controller can never echo that key back to the browser.
+The browser contract is always ``message/files``. The controller owns the Team's installed
+Assistants and chooses their declared Powers; neither is selectable from the browser. This backend
+reads controller-owned inference metadata, resolves its API key from ``admin.json`` through the
+non-route ``modelproviders.resolve_api_key``, then delivers it only in fixed private headers on the
+authenticated control network. Successful and failed controller responses are reprojected so a
+buggy controller can never echo that key or internal execution details back to the browser.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import modelproviders
 
 _MISSING_RUNTIME_STATUSES = frozenset({HTTPStatus.NOT_FOUND, HTTPStatus.METHOD_NOT_ALLOWED, HTTPStatus.NOT_IMPLEMENTED})
 MAX_REPLY_CHARS = 64 * 1024
+MAX_TEAM_NAME_CHARS = 80
 
 
 def _unavailable() -> capsules.DriverResponse:
@@ -72,28 +74,25 @@ def turn(capsule_id: object, payload: object) -> capsules.DriverResponse:
     if not 200 <= response.status < 300:
         return _safe_error(response, secret=api_key)
 
-    assistant = response.body.get("assistant")
+    team = response.body.get("team")
     reply = response.body.get("reply")
-    power = response.body.get("power")
     if (
-        assistant != body["assistant"]
+        not _valid_team_name(team)
         or not isinstance(reply, str)
         or not 0 < len(reply) <= MAX_REPLY_CHARS
         or api_key in reply
-        or (power is not None and (not isinstance(power, str) or _valid_power(power) is None))
     ):
         return capsules.DriverResponse(HTTPStatus.BAD_GATEWAY, {"detail": "local chat response is invalid"})
-    return capsules.DriverResponse(
-        response.status,
-        {"assistant": assistant, "reply": reply, "power": power},
+    return capsules.DriverResponse(response.status, {"team": team, "reply": reply})
+
+
+def _valid_team_name(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and value == value.strip()
+        and 0 < len(value) <= MAX_TEAM_NAME_CHARS
+        and all(ord(character) >= 32 and ord(character) != 127 for character in value)
     )
-
-
-def _valid_power(value: str) -> str | None:
-    try:
-        return capsules._canonical_id(value, field="power id", pattern=capsules._POWER_ID_RE, maximum=80)
-    except capsules.CapsuleRequestError:
-        return None
 
 
 def stop(capsule_id: object) -> capsules.DriverResponse:

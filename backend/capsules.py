@@ -261,12 +261,9 @@ def configure_inference(capsule_id: object, payload: object) -> DriverResponse:
 
 
 def canonical_chat_payload(payload: object) -> dict[str, object]:
-    if not isinstance(payload, dict) or set(payload) not in (
-        {"assistant", "message"},
-        {"assistant", "message", "files"},
-    ):
-        raise CapsuleRequestError("chat requires assistant, message, and optional files")
-    assistant = canonical_assistant_id(payload["assistant"])
+    """Validate the Team chat contract without exposing its internal Assistants."""
+    if not isinstance(payload, dict) or set(payload) not in ({"message"}, {"message", "files"}):
+        raise CapsuleRequestError("chat requires message and optional files")
     message = payload["message"]
     if not isinstance(message, str) or not (message := message.strip()):
         raise CapsuleRequestError("message must be non-empty")
@@ -278,7 +275,7 @@ def canonical_chat_payload(payload: object) -> dict[str, object]:
     canonical_files = [_canonical_id(item, field="file id", pattern=_FILE_ID_RE, maximum=32) for item in files]
     if len(set(canonical_files)) != len(canonical_files):
         raise CapsuleRequestError("files must not contain duplicate ids")
-    return {"assistant": assistant, "message": message, "files": canonical_files}
+    return {"message": message, "files": canonical_files}
 
 
 def chat(

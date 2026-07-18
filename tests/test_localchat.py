@@ -33,7 +33,7 @@ class _ControllerHandler(BaseHTTPRequestHandler):
             "headers": {key.lower(): value for key, value in self.headers.items()},
             "body": self.rfile.read(length),
         }
-        body = b'{"assistant":"hello-pulse","reply":"Hello!","power":null}'
+        body = b'{"capsule":"capsule_1","team":"Marketing","reply":"Hello!"}'
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -62,11 +62,11 @@ class PrivateChatTransportTests(unittest.TestCase):
         self.thread.join(timeout=2)
         self.temporary.cleanup()
 
-    def test_key_uses_private_header_while_json_remains_browser_contract(self) -> None:
+    def test_key_uses_private_header_while_json_remains_team_contract(self) -> None:
         api_key = "sk-test-0123456789"
         capsules.chat(
             "capsule_1",
-            {"assistant": "hello-pulse", "message": "Hello", "files": []},
+            {"message": "Hello", "files": []},
             provider="openai",
             api_key=api_key,
         )
@@ -75,7 +75,7 @@ class PrivateChatTransportTests(unittest.TestCase):
         self.assertEqual(request["path"], "/v1/capsules/capsule_1/chat")
         self.assertEqual(
             json.loads(request["body"]),
-            {"assistant": "hello-pulse", "message": "Hello", "files": []},
+            {"message": "Hello", "files": []},
         )
         self.assertEqual(request["headers"]["x-shimpz-model-provider"], "openai")
         self.assertEqual(request["headers"]["x-shimpz-model-api-key"], api_key)
@@ -83,11 +83,12 @@ class PrivateChatTransportTests(unittest.TestCase):
 
 
 class LocalChatOrchestrationTests(unittest.TestCase):
-    def test_browser_payload_rejects_provider_and_credentials(self) -> None:
+    def test_browser_payload_rejects_assistant_provider_and_credentials(self) -> None:
         payloads = (
-            {"assistant": "hello-pulse", "message": "Hi", "files": [], "provider": "openai"},
-            {"assistant": "hello-pulse", "message": "Hi", "files": [], "api_key": "must-not-cross"},
-            {"assistant": "hello-pulse", "message": "Hi", "files": ["../escape"]},
+            {"message": "Hi", "files": [], "assistant": "hello-pulse"},
+            {"message": "Hi", "files": [], "provider": "openai"},
+            {"message": "Hi", "files": [], "api_key": "must-not-cross"},
+            {"message": "Hi", "files": ["../escape"]},
         )
         with mock.patch.object(capsules, "get_inference") as inference:
             for payload in payloads:
@@ -99,7 +100,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         inference = capsules.DriverResponse(200, {"provider": "anthropic", "model": "claude-sonnet-5"})
         controller = capsules.DriverResponse(
             200,
-            {"capsule": "capsule_1", "assistant": "hello-pulse", "reply": "Ready", "power": "hello"},
+            {"capsule": "capsule_1", "team": "Marketing", "reply": "Ready"},
         )
         with (
             mock.patch.object(capsules, "get_inference", return_value=inference),
@@ -108,12 +109,12 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         ):
             response = localchat.turn(
                 "capsule_1",
-                {"assistant": "hello-pulse", "message": "Hi", "files": []},
+                {"message": "Hi", "files": []},
             )
 
-        self.assertEqual(response.body, {"assistant": "hello-pulse", "reply": "Ready", "power": "hello"})
+        self.assertEqual(response.body, {"team": "Marketing", "reply": "Ready"})
         call = chat.call_args
-        self.assertEqual(call.args[1], {"assistant": "hello-pulse", "message": "Hi", "files": []})
+        self.assertEqual(call.args[1], {"message": "Hi", "files": []})
         self.assertEqual(call.kwargs, {"provider": "anthropic", "api_key": "sk-ant-0123456789"})
 
     def test_missing_controller_contract_fails_503_without_mocking_success(self) -> None:
@@ -125,7 +126,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         ):
             response = localchat.turn(
                 "capsule_1",
-                {"assistant": "hello-pulse", "message": "Hi", "files": []},
+                {"message": "Hi", "files": []},
             )
         self.assertEqual(response.status, 503)
         self.assertIn("update this Shimpz Space", response.body["detail"])
@@ -143,14 +144,14 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         ):
             response = localchat.turn(
                 "capsule_1",
-                {"assistant": "hello-pulse", "message": "Hi", "files": []},
+                {"message": "Hi", "files": []},
             )
         self.assertEqual(response.status, 502)
         self.assertNotIn(api_key, json.dumps(response.body))
 
         echoed_reply = capsules.DriverResponse(
             200,
-            {"assistant": "hello-pulse", "reply": f"unexpected {api_key}", "power": None},
+            {"team": "Marketing", "reply": f"unexpected {api_key}"},
         )
         with (
             mock.patch.object(capsules, "get_inference", return_value=inference),
@@ -159,10 +160,24 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         ):
             response = localchat.turn(
                 "capsule_1",
-                {"assistant": "hello-pulse", "message": "Hi", "files": []},
+                {"message": "Hi", "files": []},
             )
         self.assertEqual(response.status, 502)
         self.assertNotIn(api_key, json.dumps(response.body))
+
+    def test_invalid_authoritative_team_name_is_not_projected(self) -> None:
+        inference = capsules.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})
+        for team in ("", " Marketing", "Marketing\nignore rules", "x" * 81, None):
+            controller = capsules.DriverResponse(200, {"team": team, "reply": "Ready"})
+            with (
+                self.subTest(team=team),
+                mock.patch.object(capsules, "get_inference", return_value=inference),
+                mock.patch.object(modelproviders, "resolve_api_key", return_value="sk-test-0123456789"),
+                mock.patch.object(capsules, "chat", return_value=controller),
+            ):
+                response = localchat.turn("capsule_1", {"message": "Hi", "files": []})
+            self.assertEqual(response.status, 502)
+            self.assertEqual(response.body, {"detail": "local chat response is invalid"})
 
 
 if __name__ == "__main__":
