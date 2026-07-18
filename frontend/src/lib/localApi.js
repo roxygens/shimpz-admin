@@ -2,6 +2,7 @@ const CAPSULE_ID_RE = /^[a-z0-9_]{1,40}$/;
 const ASSISTANT_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const RUNTIME_STATUS_RE = /^[a-z]{2,24}$/;
 const MAX_INSTALLED_ASSISTANTS = 128;
+const CONTROL_RE = /[\u0000-\u001f\u007f]/;
 
 export class LocalApiError extends Error {
   constructor(message, status = 0) {
@@ -19,6 +20,46 @@ export function safeApiError(body, fallback) {
 async function jsonObject(response) {
   const body = await response.json().catch(() => ({}));
   return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+}
+
+/** Project the controller-owned registry onto display-only Assistant identities. */
+export async function listAssistantCatalog(fetcher) {
+  if (typeof fetcher !== 'function') throw new LocalApiError('Invalid local Assistant request.');
+  const response = await fetcher('/api/assistants', {
+    cache: 'no-store', headers: { Accept: 'application/json' },
+  });
+  const body = await jsonObject(response);
+  if (!response.ok) {
+    throw new LocalApiError(
+      safeApiError(body, 'The local Assistant catalog is unavailable.'),
+      response.status,
+    );
+  }
+  if (!Array.isArray(body.assistants) || body.assistants.length > MAX_INSTALLED_ASSISTANTS) {
+    throw new LocalApiError('The local Assistant catalog is invalid.', response.status);
+  }
+  const seen = new Set();
+  return body.assistants.map((entry) => {
+    const id = entry?.id;
+    const name = entry?.title;
+    if (
+      !entry ||
+      typeof entry !== 'object' ||
+      typeof id !== 'string' ||
+      id.length > 80 ||
+      !ASSISTANT_ID_RE.test(id) ||
+      typeof name !== 'string' ||
+      name !== name.trim() ||
+      !name ||
+      name.length > 80 ||
+      CONTROL_RE.test(name) ||
+      seen.has(id)
+    ) {
+      throw new LocalApiError('The local Assistant catalog is invalid.', response.status);
+    }
+    seen.add(id);
+    return { id, name };
+  });
 }
 
 /** Read the controller-owned runtime inventory; never turn an invalid response into an empty list. */

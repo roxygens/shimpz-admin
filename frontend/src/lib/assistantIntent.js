@@ -24,9 +24,16 @@ const FRAME_KEYS = Object.freeze(['height', 'type', 'version']);
 const STATE_KEYS = Object.freeze(['installed', 'status', 'type', 'version']);
 const STATE_STATUSES = new Set(['error', 'loading', 'ready']);
 const ASSISTANT_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const STORE_LOCALES = new Set(['en', 'pt']);
 const RELEASED_STORE_ASSISTANT_IDS = Object.freeze([INSTALL_INTENT.assistant]);
 const RELEASED_STORE_ASSISTANTS = new Set(RELEASED_STORE_ASSISTANT_IDS);
 const STORE_ACTIONS = new Set(['install', 'uninstall']);
+
+/** Build one canonical Store detail link without accepting an arbitrary origin or path. */
+export function assistantStoreHref(locale, assistantId) {
+  if (!STORE_LOCALES.has(locale) || !ASSISTANT_ID_RE.test(assistantId)) return null;
+  return `${STORE_ORIGIN}/${locale}/assistants/${assistantId}`;
+}
 
 function hasExactKeys(value, expected) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;

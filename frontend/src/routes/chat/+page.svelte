@@ -1,9 +1,11 @@
 <script>
   import { onMount } from 'svelte';
   import AdminShell from '$lib/AdminShell.svelte';
+  import AssistantIcon from '$lib/AssistantIcon.svelte';
   import LocaleMenu from '$lib/LocaleMenu.svelte';
+  import { assistantStoreHref } from '$lib/assistantIntent.js';
   import { locale, t } from '$lib/i18n.js';
-  import { safeApiError } from '$lib/localApi.js';
+  import { listAssistantCatalog, listInstalledAssistants, safeApiError } from '$lib/localApi.js';
   import {
     CHAT_WS_PROTOCOL,
     chatSocketUrl,
@@ -19,7 +21,8 @@
     en: {
       kicker: 'Team // Chat', title: 'Your Team',
       lead: 'Talk naturally with your Team. Its Brain coordinates the installed Assistants and their permitted Powers.',
-      team: 'Team', files: 'Files', noFiles: 'No files stored in this Team.',
+      team: 'Team', assistants: 'Assistants', noAssistants: 'No Assistants installed in this Team.',
+      openAssistant: 'Open {assistant} in the Store', files: 'Files', noFiles: 'No files stored in this Team.',
       placeholder: 'Message {team}…', send: 'Send', sending: '{team} is thinking…', you: 'You',
       stop: 'Stop', stopped: 'The active turn was stopped.', emptyTeams: 'Create a running Team first.',
       openTeams: 'Open Teams',
@@ -33,7 +36,8 @@
     pt: {
       kicker: 'Time // Chat', title: 'Seu Time',
       lead: 'Converse naturalmente com seu Time. O Brain coordena os Assistants instalados e seus Powers permitidos.',
-      team: 'Time', files: 'Arquivos', noFiles: 'Nenhum arquivo armazenado neste Time.',
+      team: 'Time', assistants: 'Assistants', noAssistants: 'Nenhum Assistant instalado neste Time.',
+      openAssistant: 'Abrir {assistant} na Store', files: 'Arquivos', noFiles: 'Nenhum arquivo armazenado neste Time.',
       placeholder: 'Envie uma mensagem para {team}…', send: 'Enviar', sending: '{team} está pensando…', you: 'Você',
       stop: 'Parar', stopped: 'O turno ativo foi interrompido.', emptyTeams: 'Crie primeiro um Time em execução.',
       openTeams: 'Abrir Times',
@@ -49,6 +53,8 @@
   let phase = $state('checking');
   let capsules = $state([]);
   let capsuleId = $state('');
+  let assistantCatalog = $state([]);
+  let installedAssistants = $state([]);
   let files = $state([]);
   let selectedFiles = $state([]);
   let draft = $state('');
@@ -68,6 +74,12 @@
   let teamName = $derived(activeTeam?.name ?? copy.title);
   let placeholder = $derived(copy.placeholder.replace('{team}', teamName));
   let thinking = $derived(copy.sending.replace('{team}', teamName));
+  let storeLocale = $derived($locale === 'pt' ? 'pt' : 'en');
+  let assistantCards = $derived(installedAssistants.map((entry) => ({
+    ...entry,
+    name: assistantCatalog.find((candidate) => candidate.id === entry.assistant)?.name ?? entry.assistant,
+    href: assistantStoreHref(storeLocale, entry.assistant),
+  })).filter((entry) => entry.href));
 
   function clearError() {
     error = '';
@@ -185,13 +197,17 @@
   }
 
   async function loadTeamData() {
+    installedAssistants = [];
     files = [];
     selectedFiles = [];
     turns = [];
     clearError();
     if (!capsuleId) return;
     try {
-      files = await listCapsuleFiles(fetch, capsuleId);
+      [files, installedAssistants] = await Promise.all([
+        listCapsuleFiles(fetch, capsuleId),
+        listInstalledAssistants(fetch, capsuleId),
+      ]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : copy.loadFailed);
     }
@@ -206,12 +222,16 @@
         phase = 'needauth';
         return;
       }
-      const response = await fetch('/api/capsules', {
-        cache: 'no-store', headers: { Accept: 'application/json' },
-      });
+      const [response, catalog] = await Promise.all([
+        fetch('/api/capsules', {
+          cache: 'no-store', headers: { Accept: 'application/json' },
+        }),
+        listAssistantCatalog(fetch),
+      ]);
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(safeApiError(body, copy.loadFailed));
       capsules = normalizeCapsules(body);
+      assistantCatalog = catalog;
       const requested = new URL(location.href).searchParams.get('capsule') ?? '';
       capsuleId = runningCapsules.some((entry) => entry.id === requested)
         ? requested
@@ -306,6 +326,19 @@
           <label><span>{copy.team}</span><select value={capsuleId} onchange={selectTeam} disabled={busy}>
             {#each runningCapsules as team (team.id)}<option value={team.id}>{team.name}</option>{/each}
           </select></label>
+          <section class="assistants"><h2>{copy.assistants} <small>{assistantCards.length}</small></h2>
+            {#if assistantCards.length}<ul>{#each assistantCards as assistant (assistant.assistant)}<li>
+              <a
+                href={assistant.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={copy.openAssistant.replace('{assistant}', assistant.name)}>
+                <AssistantIcon assistant={assistant.assistant} />
+                <span><strong>{assistant.name}</strong><small>{assistant.status}</small></span>
+                <b aria-hidden="true">↗</b>
+              </a>
+            </li>{/each}</ul>{:else}<p>{copy.noAssistants}</p>{/if}
+          </section>
           <section class="files"><h2>{copy.files} <small>{selectedFiles.length}/8</small></h2>
             {#if files.length}<ul>{#each files as file (file.id)}<li><label>
               <input type="checkbox" checked={selectedFiles.includes(file.id)} disabled={busy} onchange={() => toggleFile(file.id)} />
@@ -355,12 +388,19 @@
   .chat-shell { display: grid; min-height: 34rem; grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr); border: 1px solid var(--border-strong); background: var(--surface-1); }
   aside { padding: 1rem; border-right: 1px solid var(--border); background: rgba(0, 0, 0, 0.2); }
   aside > label { display: grid; gap: 0.35rem; margin-bottom: 0.8rem; }
-  label > span, .files h2 { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.09em; text-transform: uppercase; }
+  label > span, .assistants h2, .files h2 { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.09em; text-transform: uppercase; }
   select, textarea { width: 100%; border: 1px solid var(--border-strong); background: #050708; color: var(--text); font-family: var(--font-mono); }
   select { min-height: 2.5rem; padding: 0 0.65rem; }
   textarea { resize: vertical; padding: 0.75rem; line-height: 1.5; }
-  .files { margin-top: 1.2rem; border-top: 1px solid var(--border); padding-top: 1rem; }
-  .files h2 { display: flex; justify-content: space-between; margin: 0 0 0.7rem; }
+  .assistants, .files { margin-top: 1.2rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .assistants h2, .files h2 { display: flex; justify-content: space-between; margin: 0 0 0.7rem; }
+  .assistants ul { display: grid; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+  .assistants a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.6rem; border: 1px solid var(--border); padding: 0.45rem; color: var(--text); text-decoration: none; }
+  .assistants a:hover, .assistants a:focus-visible { border-color: var(--accent); outline: none; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  .assistants a > span { display: grid; min-width: 0; gap: 0.12rem; }
+  .assistants strong { overflow: hidden; font-family: var(--font-mono); font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
+  .assistants a small { color: var(--success); font-family: var(--font-mono); font-size: 0.52rem; text-transform: uppercase; }
+  .assistants a b { color: var(--accent-alt); font-size: 0.72rem; }
   .files ul { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
   .files li label { display: flex; align-items: start; gap: 0.45rem; color: var(--text-dim); font-size: 0.7rem; }
   .files li span { display: grid; overflow-wrap: anywhere; }
@@ -382,7 +422,7 @@
   .error { display: grid; gap: 0.35rem; margin: 0; border-left: 2px solid var(--danger); padding: 0.65rem 0.9rem; color: var(--danger); font-size: 0.72rem; }
   .error strong { font-weight: 600; }
   .error code { color: var(--text-faint); font-size: 0.6rem; line-height: 1.45; overflow-wrap: anywhere; white-space: normal; }
-  .files > p { color: var(--text-faint); font-size: 0.68rem; line-height: 1.5; }
+  .assistants > p, .files > p { color: var(--text-faint); font-size: 0.68rem; line-height: 1.5; }
   .gate a { display: inline-flex; align-items: center; }
   .gate, .center { display: grid; min-height: 25rem; place-items: center; gap: 1rem; text-align: center; }
   .logout { min-height: 2.75rem; }

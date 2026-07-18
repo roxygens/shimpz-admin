@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   installAssistant,
   LocalApiError,
+  listAssistantCatalog,
   listInstalledAssistants,
   safeApiError,
 } from '../src/lib/localApi.js';
@@ -99,6 +100,39 @@ test('loads the controller-owned installed Assistant inventory without weakening
     url: '/api/capsules/capsule_1/assistants',
     options: { cache: 'no-store', headers: { Accept: 'application/json' } },
   }]);
+});
+
+test('projects only bounded display identities from the local Assistant catalog', async () => {
+  const fetcher = async (url, options) => {
+    assert.equal(url, '/api/assistants');
+    assert.deepEqual(options, { cache: 'no-store', headers: { Accept: 'application/json' } });
+    return response(200, {
+      assistants: [
+        { id: 'hello-pulse', title: 'Hello Pulse', summary: 'First', powers: ['hello'] },
+        { id: 'salesnator', title: 'Salesnator', summary: 'Second', powers: [] },
+      ],
+    });
+  };
+
+  assert.deepEqual(await listAssistantCatalog(fetcher), [
+    { id: 'hello-pulse', name: 'Hello Pulse' },
+    { id: 'salesnator', name: 'Salesnator' },
+  ]);
+});
+
+test('rejects malformed or ambiguous Assistant catalog identities', async () => {
+  for (const assistants of [
+    null,
+    [{ id: '../escape', title: 'Escape' }],
+    [{ id: 'hello-pulse', title: ' Hello Pulse' }],
+    [{ id: 'hello-pulse', title: 'Hello\nPulse' }],
+    [{ id: 'hello-pulse', title: 'Hello Pulse' }, { id: 'hello-pulse', title: 'Duplicate' }],
+  ]) {
+    await assert.rejects(
+      listAssistantCatalog(async () => response(200, { assistants })),
+      (error) => error instanceof LocalApiError && error.message === 'The local Assistant catalog is invalid.',
+    );
+  }
 });
 
 test('installed inventory errors and malformed records fail honestly instead of looking empty', async () => {

@@ -19,6 +19,7 @@ import {
   acknowledgeStoreUninstallIntent,
   acceptsStoreInstallIntent,
   acceptsStoreUninstallIntent,
+  assistantStoreHref,
   createStoreActionLatch,
   postStoreAssistantState,
   projectReleasedStoreAssistantIds,
@@ -27,6 +28,22 @@ import {
 
 test('pins the embedded Store lifecycle protocol cache key', () => {
   assert.equal(STORE_LIFECYCLE_PROTOCOL_VERSION, 1);
+});
+
+test('builds only canonical Assistant detail links on the Store origin', () => {
+  assert.equal(
+    assistantStoreHref('en', 'hello-pulse'),
+    'https://shimpz.com/en/assistants/hello-pulse',
+  );
+  assert.equal(
+    assistantStoreHref('pt', 'salesnator'),
+    'https://shimpz.com/pt/assistants/salesnator',
+  );
+  for (const [locale, assistant] of [
+    ['es', 'hello-pulse'], ['en', '../escape'], ['en', 'Hello-Pulse'], ['en', 'hello--pulse'],
+  ]) {
+    assert.equal(assistantStoreHref(locale, assistant), null);
+  }
 });
 
 test('accepts only the exact Hello Pulse intent from the embedded Store window', () => {
