@@ -1,4 +1,6 @@
 <script>
+  import { replaceState } from '$app/navigation';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
 
   import AssistantIcon from '$lib/AssistantIcon.svelte';
@@ -69,6 +71,10 @@
 
   let copy = $derived($locale === 'pt' ? COPY.pt : COPY.en);
   let storeLocale = $derived($locale === 'pt' ? 'pt' : 'en');
+  let requestedTeamId = $derived.by(() => {
+    const candidate = page.url.searchParams.get('capsule') ?? '';
+    return TEAM_ID_RE.test(candidate) ? candidate : '';
+  });
   let installed = $derived.by(() => {
     const catalog = new Map($teamContext.catalog.map((assistant) => [assistant.id, assistant]));
     return $teamContext.installedAssistants.map((runtime) => {
@@ -82,24 +88,21 @@
     });
   });
 
-  function preferredTeamFromLocation() {
-    const candidate = new URL(window.location.href).searchParams.get('capsule') ?? '';
-    return TEAM_ID_RE.test(candidate) ? candidate : '';
-  }
-
   function updateLocationTeam(id) {
-    const next = new URL(window.location.href);
+    const next = new URL(page.url);
     next.searchParams.set('capsule', id);
-    window.history.replaceState(window.history.state, '', `${next.pathname}${next.search}${next.hash}`);
+    replaceState(next, page.state);
   }
 
   async function changeTeam(event) {
     const id = event.currentTarget.value;
     if (!id || id === $teamContext.selectedTeamId) return;
+    const previousId = $teamContext.selectedTeamId;
+    updateLocationTeam(id);
     try {
       await selectTeam(fetch, id);
-      updateLocationTeam(id);
     } catch {
+      if (previousId) updateLocationTeam(previousId);
       // The store exposes a safe, localized-ready error state next to the selector.
     }
   }
@@ -144,18 +147,21 @@
     }
   }
 
-  onMount(() => {
-    const preferredId = preferredTeamFromLocation();
-    if ($teamContext.phase === 'idle') {
-      loadTeamContext(fetch, preferredId).catch(() => {});
-      return;
-    }
+  $effect(() => {
+    const preferredId = requestedTeamId;
     if (
+      $teamContext.phase === 'ready' &&
       preferredId &&
       preferredId !== $teamContext.selectedTeamId &&
       $teamContext.teams.some((team) => team.id === preferredId)
     ) {
       selectTeam(fetch, preferredId).catch(() => {});
+    }
+  });
+
+  onMount(() => {
+    if ($teamContext.phase === 'idle') {
+      loadTeamContext(fetch, requestedTeamId).catch(() => {});
     }
   });
 </script>
@@ -197,73 +203,75 @@
     {/if}
   </section>
 
-  <section class="team-section" aria-labelledby="sidebar-assistants-title">
-    <div class="section-heading">
-      <h2 id="sidebar-assistants-title">{copy.assistants}</h2>
-      {#if $teamContext.phase === 'ready'}<b>{installed.length}</b>{/if}
-    </div>
+  {#if $teamContext.selectedTeamId}
+    <section class="team-section" aria-labelledby="sidebar-assistants-title">
+      <div class="section-heading">
+        <h2 id="sidebar-assistants-title">{copy.assistants}</h2>
+        {#if $teamContext.phase === 'ready'}<b>{installed.length}</b>{/if}
+      </div>
 
-    {#if installed.length > 0}
-      <ul class="assistant-list">
-        {#each installed as assistant (assistant.id)}
-          <li>
-            {#if assistant.href}
-              <a
-                href={assistant.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={copy.storeDetail.replace('{name}', assistant.name)}
-              >
-                <AssistantIcon assistant={assistant.id} size={34} />
-                <span>
-                  <strong>{assistant.name}</strong>
-                  <small>{assistant.status}</small>
-                </span>
-                <i aria-hidden="true">↗</i>
-              </a>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    {:else if $teamContext.phase === 'ready' && $teamContext.selectedTeamId}
-      <p class="muted">{copy.assistantEmpty}</p>
-    {/if}
-  </section>
+      {#if installed.length > 0}
+        <ul class="assistant-list">
+          {#each installed as assistant (assistant.id)}
+            <li>
+              {#if assistant.href}
+                <a
+                  href={assistant.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={copy.storeDetail.replace('{name}', assistant.name)}
+                >
+                  <AssistantIcon assistant={assistant.id} size={34} />
+                  <span>
+                    <strong>{assistant.name}</strong>
+                    <small>{assistant.status}</small>
+                  </span>
+                  <i aria-hidden="true">↗</i>
+                </a>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {:else if $teamContext.phase === 'ready'}
+        <p class="muted">{copy.assistantEmpty}</p>
+      {/if}
+    </section>
 
-  <section class="team-section files-section" aria-labelledby="sidebar-files-title">
-    <div class="section-heading">
-      <h2 id="sidebar-files-title">{copy.files}</h2>
-      {#if $teamContext.phase === 'ready'}<b>{$teamContext.files.length}</b>{/if}
-    </div>
+    <section class="team-section files-section" aria-labelledby="sidebar-files-title">
+      <div class="section-heading">
+        <h2 id="sidebar-files-title">{copy.files}</h2>
+        {#if $teamContext.phase === 'ready'}<b>{$teamContext.files.length}</b>{/if}
+      </div>
 
-    {#if $teamContext.files.length > 0}
-      <p class="section-help">{active === 'chat' ? copy.fileHelp : copy.fileReadOnly}</p>
-      <ul class="file-list">
-        {#each $teamContext.files as file (file.id)}
-          <li>
-            {#if active === 'chat'}
-              <label>
-                <input
-                  type="checkbox"
-                  checked={$teamContext.selectedFileIds.includes(file.id)}
-                  onchange={() => toggleTeamFile(file.id)}
-                />
-                <span class="file-mark" aria-hidden="true"></span>
-                <span class="file-name">{file.name}</span>
-              </label>
-            {:else}
-              <div class="file-row">
-                <span class="file-glyph" aria-hidden="true">◇</span>
-                <span class="file-name">{file.name}</span>
-              </div>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    {:else if $teamContext.phase === 'ready' && $teamContext.selectedTeamId}
-      <p class="muted">{copy.fileEmpty}</p>
-    {/if}
-  </section>
+      {#if $teamContext.files.length > 0}
+        <p class="section-help">{active === 'chat' ? copy.fileHelp : copy.fileReadOnly}</p>
+        <ul class="file-list">
+          {#each $teamContext.files as file (file.id)}
+            <li>
+              {#if active === 'chat'}
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={$teamContext.selectedFileIds.includes(file.id)}
+                    onchange={() => toggleTeamFile(file.id)}
+                  />
+                  <span class="file-mark" aria-hidden="true"></span>
+                  <span class="file-name">{file.name}</span>
+                </label>
+              {:else}
+                <div class="file-row">
+                  <span class="file-glyph" aria-hidden="true">◇</span>
+                  <span class="file-name">{file.name}</span>
+                </div>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {:else if $teamContext.phase === 'ready'}
+        <p class="muted">{copy.fileEmpty}</p>
+      {/if}
+    </section>
+  {/if}
 </div>
 
 <dialog bind:this={createDialog} oncancel={cancelCreateDialog} aria-labelledby="team-create-title">

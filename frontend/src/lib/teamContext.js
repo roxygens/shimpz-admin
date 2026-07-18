@@ -214,7 +214,6 @@ export async function selectTeam(fetcher, id) {
   teamContext.set({
     ...current,
     phase: 'loading',
-    selectedTeamId: canonicalId,
     installedAssistants: [],
     files: [],
     selectedFileIds: [],

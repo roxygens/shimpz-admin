@@ -101,12 +101,29 @@ test('switching Teams clears file authority before loading the selected inventor
   });
   const pending = selectTeam(fetcher, 'support');
 
+  assert.equal(get(teamContext).selectedTeamId, 'marketing');
   assert.deepEqual(get(teamContext).selectedFileIds, []);
   assert.deepEqual(get(teamContext).files, []);
   releaseAssistants(response(200, { assistants: [{ assistant: 'hello-pulse', status: 'running' }] }));
   await pending;
   assert.equal(get(teamContext).selectedTeamId, 'support');
   assert.deepEqual(get(teamContext).files, [{ id: FILE_B, name: 'ticket.txt', size: 12 }]);
+});
+
+test('a failed Team switch keeps the last verified Team selected', async () => {
+  await loadTeamContext(fixtureFetcher(), 'marketing');
+
+  await assert.rejects(
+    selectTeam(fixtureFetcher({
+      '/api/capsules/support/assistants': async () => response(503, {}),
+    }), 'support'),
+    (error) => error instanceof LocalApiError,
+  );
+
+  assert.equal(get(teamContext).phase, 'error');
+  assert.equal(get(teamContext).selectedTeamId, 'marketing');
+  assert.deepEqual(get(teamContext).installedAssistants, []);
+  assert.deepEqual(get(teamContext).files, []);
 });
 
 test('file selection accepts only current files and enforces the chat limit', async () => {
@@ -279,6 +296,36 @@ test('Team sidebar reveals creation only after a confirmed empty inventory', () 
   assert.match(sidebarSource, /<dialog[^>]+oncancel=\{cancelCreateDialog\}/);
   assert.match(sidebarSource, /maxlength="80"/);
   assert.doesNotMatch(sidebarSource, /Local Space/);
+});
+
+test('Team sidebar hides Assistant and file inventory until a Team is selected', () => {
+  assert.match(
+    sidebarSource,
+    /\{#if \$teamContext\.selectedTeamId\}[\s\S]*aria-labelledby="sidebar-assistants-title"[\s\S]*aria-labelledby="sidebar-files-title"[\s\S]*\{\/if\}\s*<\/div>/,
+  );
+});
+
+test('Team sidebar follows client-side capsule deep links without owning another loader', () => {
+  assert.match(sidebarSource, /import \{ replaceState \} from '\$app\/navigation';/);
+  assert.match(sidebarSource, /import \{ page \} from '\$app\/state';/);
+  assert.match(
+    sidebarSource,
+    /let requestedTeamId = \$derived\.by\(\(\) => \{\s*const candidate = page\.url\.searchParams\.get\('capsule'\) \?\? '';/,
+  );
+  assert.match(
+    sidebarSource,
+    /\$effect\(\(\) => \{\s*const preferredId = requestedTeamId;[\s\S]*\$teamContext\.phase === 'ready'[\s\S]*selectTeam\(fetch, preferredId\)\.catch/,
+  );
+  assert.match(sidebarSource, /replaceState\(next, page\.state\)/);
+  assert.match(
+    sidebarSource,
+    /const previousId = \$teamContext\.selectedTeamId;\s*updateLocationTeam\(id\);\s*try \{\s*await selectTeam\(fetch, id\);\s*\} catch \{\s*if \(previousId\) updateLocationTeam\(previousId\);/,
+  );
+  assert.match(
+    sidebarSource,
+    /onMount\(\(\) => \{\s*if \(\$teamContext\.phase === 'idle'\) \{\s*loadTeamContext\(fetch, requestedTeamId\)/,
+  );
+  assert.doesNotMatch(sidebarSource, /preferredTeamFromLocation|window\.history\.replaceState/);
 });
 
 test('Team sidebar keeps Store links canonical and file controls scoped to Chat', () => {
