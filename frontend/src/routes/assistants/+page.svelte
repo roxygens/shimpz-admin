@@ -22,7 +22,7 @@
     en: {
       installedNow: 'Installed now',
       alreadyInstalled: 'Already installed',
-      createCapsule: 'Create a Team',
+      createFromSidebar: 'Close this dialog and create a Team from the sidebar.',
       confirmTitle: 'Install Hello Pulse?',
       confirmLead: 'Choose the exact Team. The Store cannot choose it or install anything for you.',
       checkingTitle: 'Preparing the local action…',
@@ -58,7 +58,7 @@
     pt: {
       installedNow: 'Instalado agora',
       alreadyInstalled: 'Já estava instalado',
-      createCapsule: 'Criar um Time',
+      createFromSidebar: 'Feche esta janela e crie um Time pela barra lateral.',
       confirmTitle: 'Instalar o Hello Pulse?',
       confirmLead: 'Escolha o Time exato. A Store não pode escolhê-lo nem instalar nada por você.',
       checkingTitle: 'Preparando a ação local…',
@@ -503,7 +503,7 @@
     {#if dialogMode === 'checking'}
       <p class="dialog-progress" role="status">{copy.preparing}</p>
     {:else if dialogMode === 'no-capsule'}
-      <a class="dialog-route" href="/capsules/">{copy.createCapsule}<span aria-hidden="true">→</span></a>
+      <p class="dialog-route-hint">{copy.createFromSidebar}</p>
     {/if}
     {#if dialogError}<p class="dialog-error" role="alert">{dialogError}</p>{/if}
     {#if dialogResult}
@@ -634,7 +634,7 @@
   .dialog-target strong { font-size: 0.9rem; }
   .dialog-target code { color: var(--accent); font-size: 0.65rem; }
   .dialog-progress { margin: 1rem 0 0; color: var(--accent); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
-  .dialog-route { display: flex; min-height: 2.8rem; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; padding: 0 0.9rem; background: var(--accent); color: #001013; font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700; text-decoration: none; text-transform: uppercase; }
+  .dialog-route-hint { margin: 1rem 0 0; border-inline-start: 2px solid var(--accent); padding: 0.7rem 0.85rem; color: var(--text-dim); font-size: 0.72rem; line-height: 1.5; }
   .dialog-error { margin: 0.8rem 0 0; color: var(--danger); font-size: 0.78rem; line-height: 1.5; }
   .dialog-result { display: grid; gap: 0.35rem; margin-top: 1rem; border-left: 2px solid var(--success); padding: 0.85rem 1rem; background: rgba(5, 255, 161, 0.045); }
   .dialog-result span { color: var(--success); font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; }

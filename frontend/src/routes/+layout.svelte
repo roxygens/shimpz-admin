@@ -19,11 +19,9 @@
   let active = $derived(
     page.url.pathname.startsWith('/chat')
       ? 'chat'
-      : page.url.pathname.startsWith('/capsules')
-        ? 'capsules'
-        : page.url.pathname.startsWith('/assistants')
-          ? 'assistants'
-          : '',
+      : page.url.pathname.startsWith('/assistants')
+        ? 'assistants'
+        : '',
   );
 
   async function enterAdmin() {

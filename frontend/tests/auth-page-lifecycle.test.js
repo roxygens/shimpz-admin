@@ -29,12 +29,12 @@ test('renders the global navigation and Team context only for authenticated user
   assert.match(shell, /onclick=\{\(\) => onLogout\?\.\(\)\}/);
   assert.match(shell, /<ShimpzBrand href=\{authenticated \? '\/chat\/' : '\/'\} \/>/);
   assert.doesNotMatch(shell, /id: 'integrations'/);
+  assert.doesNotMatch(shell, /id: 'capsules'|href: '\/capsules\/'/);
   assert.doesNotMatch(shell, /<footer>/);
 
   const chat = shell.indexOf("{ id: 'chat'");
-  const teams = shell.indexOf("{ id: 'capsules'");
   const assistants = shell.indexOf("{ id: 'assistants'");
-  assert.ok(chat !== -1 && chat < teams && teams < assistants);
+  assert.ok(chat !== -1 && chat < assistants);
 
   const nav = shell.indexOf('<nav class="primary-nav"');
   const headerEnd = shell.indexOf('</header>');
@@ -50,6 +50,7 @@ test('keeps Chat viewport-bound while normal pages use a constrained responsive 
   assert.match(shell, /\.chat-mode \.workspace \{[\s\S]*padding: 0;[\s\S]*overflow: hidden;/);
   assert.match(shell, /\.content-frame \{[\s\S]*width: min\(100%, 1180px\);/);
   assert.match(shell, /@media \(max-width: 760px\)[\s\S]*'sidebar' auto[\s\S]*minmax\(0, 1fr\)/);
+  assert.match(shell, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(shell, /\.workspace \{[\s\S]*min-width: 0;[\s\S]*min-height: 0;/);
 });
 

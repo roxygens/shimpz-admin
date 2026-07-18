@@ -48,6 +48,8 @@ test('leaves initial Team loading and selection exclusively to the persistent si
   assert.doesNotMatch(source, /<select|capsule-context|capsule-picker|installed-inventory/);
   assert.match(source, /await waitForTeamContext\(\)/);
   assert.match(source, /queueMicrotask\(\(\) => unsubscribe\(\)\)/);
+  assert.doesNotMatch(source, /href="\/capsules\/"/);
+  assert.match(source, /createFromSidebar: 'Close this dialog and create a Team from the sidebar\.'/);
 });
 
 test('refreshes shared inventory after Store mutations without requiring Power metadata', () => {

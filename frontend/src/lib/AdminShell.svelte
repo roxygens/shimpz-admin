@@ -8,7 +8,6 @@
 
   const navigation = [
     { id: 'chat', label: 'chat.nav', href: '/chat/' },
-    { id: 'capsules', label: 'workspace.capsulesKicker', href: '/capsules/' },
     { id: 'assistants', label: 'store.nav', href: '/assistants/' },
   ];
 </script>
@@ -312,7 +311,7 @@
     .primary-nav {
       grid-row: 2;
       grid-column: 1 / -1;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       display: grid;
       width: 100%;
       padding: 0 0 0.45rem;
