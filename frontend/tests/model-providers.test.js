@@ -13,8 +13,32 @@ function response(status, body) {
 }
 
 const providers = [
-  { id: 'openai', title: 'OpenAI', default_model: 'gpt-5.5', configured: false, masked: null },
-  { id: 'anthropic', title: 'Anthropic', default_model: 'claude-sonnet-5', configured: true, masked: '••••test' },
+  {
+    id: 'openai',
+    title: 'OpenAI',
+    default_model: 'gpt-5.6-terra',
+    models: [
+      { id: 'gpt-5.6-sol', title: 'GPT-5.6 Sol', input_usd_per_million_cents: 500, output_usd_per_million_cents: 3000 },
+      { id: 'gpt-5.6-terra', title: 'GPT-5.6 Terra', input_usd_per_million_cents: 250, output_usd_per_million_cents: 1500 },
+      { id: 'gpt-5.6-luna', title: 'GPT-5.6 Luna', input_usd_per_million_cents: 100, output_usd_per_million_cents: 600 },
+      { id: 'gpt-5.5', title: 'GPT-5.5', input_usd_per_million_cents: 500, output_usd_per_million_cents: 3000 },
+    ],
+    configured: false,
+    masked: null,
+  },
+  {
+    id: 'anthropic',
+    title: 'Anthropic',
+    default_model: 'claude-sonnet-5',
+    models: [
+      { id: 'claude-fable-5', title: 'Claude Fable 5', input_usd_per_million_cents: 1000, output_usd_per_million_cents: 5000 },
+      { id: 'claude-opus-4-8', title: 'Claude Opus 4.8', input_usd_per_million_cents: 500, output_usd_per_million_cents: 2500 },
+      { id: 'claude-sonnet-5', title: 'Claude Sonnet 5', input_usd_per_million_cents: 300, output_usd_per_million_cents: 1500 },
+      { id: 'claude-haiku-4-5-20251001', title: 'Claude Haiku 4.5', input_usd_per_million_cents: 100, output_usd_per_million_cents: 500 },
+    ],
+    configured: true,
+    masked: '••••test',
+  },
 ];
 
 test('loads masked provider state and rejects a secret-bearing response', async () => {
@@ -23,6 +47,16 @@ test('loads masked provider state and rejects a secret-bearing response', async 
   await assert.rejects(
     listModelProviders(async () => response(200, {
       providers: [{ ...providers[0], api_key: 'must-not-enter-ui' }, providers[1]],
+    })),
+    /invalid/i,
+  );
+
+  await assert.rejects(
+    listModelProviders(async () => response(200, {
+      providers: [
+        { ...providers[0], models: [{ ...providers[0].models[0], input_usd_per_million_cents: 1 }, ...providers[0].models.slice(1)] },
+        providers[1],
+      ],
     })),
     /invalid/,
   );
@@ -54,7 +88,7 @@ test('reuses a configured key without a credential write', async () => {
   await saveModelSetup(
     async (url, options) => {
       calls.push({ url, options });
-      return response(200, { provider: 'anthropic', model: 'claude-sonnet-5' });
+      return response(200, { capsule: 'capsule_1', provider: 'anthropic', model: 'claude-sonnet-5' });
     },
     'capsule_1',
     { provider: 'anthropic', model: 'claude-sonnet-5', apiKey: '' },
@@ -62,6 +96,28 @@ test('reuses a configured key without a credential write', async () => {
   );
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, '/api/capsules/capsule_1/inference');
+});
+
+test('rejects inference models outside the provider catalog before saving', async () => {
+  await assert.rejects(
+    loadInference(
+      async () => response(200, { capsule: 'capsule_1', provider: 'openai', model: 'claude-sonnet-5' }),
+      'capsule_1',
+    ),
+    /invalid/,
+  );
+
+  let called = false;
+  await assert.rejects(
+    saveModelSetup(
+      async () => { called = true; },
+      'capsule_1',
+      { provider: 'openai', model: 'gpt-5.7', apiKey: 'sk-test-0123456789' },
+      providers,
+    ),
+    /invalid/i,
+  );
+  assert.equal(called, false);
 });
 
 test('treats unconfigured inference as empty and removes keys through the fixed route', async () => {

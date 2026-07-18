@@ -135,6 +135,28 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         resolve_key.assert_not_called()
         chat.assert_not_called()
 
+    def test_inference_response_must_use_an_exact_catalog_pair(self) -> None:
+        invalid = (
+            {"provider": "openai", "model": "gpt-5.7"},
+            {"provider": "openai", "model": "claude-sonnet-5"},
+            {"provider": "anthropic", "model": "gpt-5.6-terra"},
+            {"provider": "OpenAI", "model": "gpt-5.6-terra"},
+        )
+        for body in invalid:
+            with (
+                self.subTest(body=body),
+                mock.patch.object(capsules, "get_inference", return_value=capsules.DriverResponse(200, body)),
+                mock.patch.object(modelproviders, "resolve_api_key") as resolve_key,
+                mock.patch.object(capsules, "chat") as chat,
+            ):
+                response = localchat.turn("capsule_1", {"message": "Hi", "files": []})
+            self.assertEqual(
+                response,
+                capsules.DriverResponse(502, {"detail": "Capsule inference response is invalid"}),
+            )
+            resolve_key.assert_not_called()
+            chat.assert_not_called()
+
     def test_controller_cannot_echo_the_private_key_to_browser(self) -> None:
         api_key = "sk-test-0123456789"
         inference = capsules.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})

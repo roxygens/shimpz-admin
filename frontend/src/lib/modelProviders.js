@@ -1,9 +1,36 @@
 import { LocalApiError, safeApiError } from './localApi.js';
 
 const CAPSULE_ID_RE = /^[a-z0-9_]{1,40}$/;
-const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
-const PROVIDER_IDS = new Set(['anthropic', 'openai']);
+const EXPECTED_CATALOG = Object.freeze({
+  openai: Object.freeze({
+    title: 'OpenAI',
+    default_model: 'gpt-5.6-terra',
+    models: Object.freeze([
+      Object.freeze({ id: 'gpt-5.6-sol', title: 'GPT-5.6 Sol', input_usd_per_million_cents: 500, output_usd_per_million_cents: 3000 }),
+      Object.freeze({ id: 'gpt-5.6-terra', title: 'GPT-5.6 Terra', input_usd_per_million_cents: 250, output_usd_per_million_cents: 1500 }),
+      Object.freeze({ id: 'gpt-5.6-luna', title: 'GPT-5.6 Luna', input_usd_per_million_cents: 100, output_usd_per_million_cents: 600 }),
+      Object.freeze({ id: 'gpt-5.5', title: 'GPT-5.5', input_usd_per_million_cents: 500, output_usd_per_million_cents: 3000 }),
+    ]),
+  }),
+  anthropic: Object.freeze({
+    title: 'Anthropic',
+    default_model: 'claude-sonnet-5',
+    models: Object.freeze([
+      Object.freeze({ id: 'claude-fable-5', title: 'Claude Fable 5', input_usd_per_million_cents: 1000, output_usd_per_million_cents: 5000 }),
+      Object.freeze({ id: 'claude-opus-4-8', title: 'Claude Opus 4.8', input_usd_per_million_cents: 500, output_usd_per_million_cents: 2500 }),
+      Object.freeze({ id: 'claude-sonnet-5', title: 'Claude Sonnet 5', input_usd_per_million_cents: 300, output_usd_per_million_cents: 1500 }),
+      Object.freeze({ id: 'claude-haiku-4-5-20251001', title: 'Claude Haiku 4.5', input_usd_per_million_cents: 100, output_usd_per_million_cents: 500 }),
+    ]),
+  }),
+});
+const PROVIDER_IDS = new Set(Object.keys(EXPECTED_CATALOG));
 const MAX_PROVIDERS = PROVIDER_IDS.size;
+const MODEL_FIELDS = ['id', 'input_usd_per_million_cents', 'output_usd_per_million_cents', 'title'];
+const PROVIDER_FIELDS = ['configured', 'default_model', 'id', 'masked', 'models', 'title'];
+
+function exactKeys(value, expected) {
+  return Object.keys(value).sort().join('\0') === [...expected].sort().join('\0');
+}
 
 async function jsonObject(response) {
   const body = await response.json().catch(() => ({}));
@@ -11,18 +38,31 @@ async function jsonObject(response) {
 }
 
 function validProvider(entry) {
-  const keys = Object.keys(entry ?? {}).sort();
+  const expected = EXPECTED_CATALOG[entry?.id];
   return (
     entry &&
     typeof entry === 'object' &&
-    keys.every((key) => ['configured', 'default_model', 'id', 'masked', 'title'].includes(key)) &&
-    PROVIDER_IDS.has(entry.id) &&
-    typeof entry.title === 'string' &&
-    entry.title.length <= 40 &&
-    MODEL_RE.test(entry.default_model) &&
+    !Array.isArray(entry) &&
+    exactKeys(entry, PROVIDER_FIELDS) &&
+    expected &&
+    entry.title === expected.title &&
+    entry.default_model === expected.default_model &&
+    Array.isArray(entry.models) &&
+    entry.models.length === expected.models.length &&
+    entry.models.every((model, index) => (
+      model &&
+      typeof model === 'object' &&
+      !Array.isArray(model) &&
+      exactKeys(model, MODEL_FIELDS) &&
+      MODEL_FIELDS.every((field) => model[field] === expected.models[index][field])
+    )) &&
     typeof entry.configured === 'boolean' &&
     (entry.masked === null || (typeof entry.masked === 'string' && /^••••[!-~]{4}$/.test(entry.masked)))
   );
+}
+
+function validSelection(provider, model) {
+  return PROVIDER_IDS.has(provider) && EXPECTED_CATALOG[provider].models.some((entry) => entry.id === model);
 }
 
 /** Read masked provider state. A response containing any secret-shaped extra field fails closed. */
@@ -63,7 +103,11 @@ export async function loadInference(fetcher, capsuleId) {
   if (!response.ok) {
     throw new LocalApiError(safeApiError(body, 'Capsule inference settings are unavailable.'), response.status);
   }
-  if (!PROVIDER_IDS.has(body.provider) || !MODEL_RE.test(body.model)) {
+  if (
+    !exactKeys(body, ['capsule', 'model', 'provider']) ||
+    body.capsule !== capsuleId ||
+    !validSelection(body.provider, body.model)
+  ) {
     throw new LocalApiError('Capsule inference settings are invalid.', response.status);
   }
   return { provider: body.provider, model: body.model };
@@ -74,14 +118,17 @@ export async function saveModelSetup(fetcher, capsuleId, setup, providers) {
   if (
     typeof fetcher !== 'function' ||
     !CAPSULE_ID_RE.test(capsuleId) ||
-    !PROVIDER_IDS.has(setup?.provider) ||
-    !MODEL_RE.test(setup?.model) ||
-    !Array.isArray(providers)
+    !validSelection(setup?.provider, setup?.model) ||
+    !Array.isArray(providers) ||
+    providers.length !== MAX_PROVIDERS ||
+    !providers.every(validProvider)
   ) {
     throw new LocalApiError('Invalid model provider settings.');
   }
   const current = providers.find((entry) => entry.id === setup.provider);
-  if (!current) throw new LocalApiError('Invalid model provider settings.');
+  if (!current || !current.models.some((entry) => entry.id === setup.model)) {
+    throw new LocalApiError('Invalid model provider settings.');
+  }
   const apiKey = typeof setup.apiKey === 'string' ? setup.apiKey.trim() : '';
   let providerState = current;
 
@@ -115,7 +162,12 @@ export async function saveModelSetup(fetcher, capsuleId, setup, providers) {
       inferenceResponse.status,
     );
   }
-  if (inferenceBody.provider !== setup.provider || inferenceBody.model !== setup.model) {
+  if (
+    !exactKeys(inferenceBody, ['capsule', 'model', 'provider']) ||
+    inferenceBody.capsule !== capsuleId ||
+    inferenceBody.provider !== setup.provider ||
+    inferenceBody.model !== setup.model
+  ) {
     throw new LocalApiError('The Capsule inference response is invalid.', inferenceResponse.status);
   }
   return { providerState, inference: { provider: setup.provider, model: setup.model } };

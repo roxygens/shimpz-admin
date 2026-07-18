@@ -47,12 +47,13 @@ def _inference(capsule_id: str) -> tuple[str, str] | capsules.DriverResponse:
     provider = response.body.get("provider")
     model = response.body.get("model")
     try:
-        provider = modelproviders.canonical_provider(provider)
+        selected_provider = modelproviders.canonical_provider(provider)
+        selected_model = modelproviders.canonical_model(selected_provider, model)
     except modelproviders.ModelProviderError:
         return capsules.DriverResponse(HTTPStatus.BAD_GATEWAY, {"detail": "Capsule inference response is invalid"})
-    if not isinstance(model, str) or capsules._MODEL_RE.fullmatch(model) is None:
+    if provider != selected_provider:
         return capsules.DriverResponse(HTTPStatus.BAD_GATEWAY, {"detail": "Capsule inference response is invalid"})
-    return provider, model
+    return selected_provider, selected_model
 
 
 def turn(capsule_id: object, payload: object) -> capsules.DriverResponse:

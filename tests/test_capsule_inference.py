@@ -44,6 +44,10 @@ class CapsuleInferenceTests(unittest.TestCase):
             {"provider": "codex", "model": "gpt-5.5"},
             {"provider": "claude-code", "model": "claude-sonnet-5"},
             {"provider": "anthropic", "model": "bad model"},
+            {"provider": "anthropic", "model": "gpt-5.6-terra"},
+            {"provider": "openai", "model": "claude-sonnet-5"},
+            {"provider": "openai", "model": "gpt-5.7"},
+            {"provider": "OpenAI", "model": "gpt-5.6-terra"},
         )
         with mock.patch.object(capsules, "_call") as call:
             for payload in payloads:

@@ -16,6 +16,9 @@
       lead: 'The key stays in this Admin. Only provider and model are saved to the Team.',
       provider: 'Provider',
       model: 'Model',
+      input: 'input',
+      output: 'output',
+      pricing: 'Base USD rates per 1M tokens (input / output). Cache, batch, promotions, and long-context pricing are excluded.',
       key: 'API key',
       addKey: 'Paste an API key',
       keepKey: 'Leave empty to keep the saved key',
@@ -34,6 +37,9 @@
       lead: 'A chave fica neste Admin. Apenas provedor e modelo são salvos no Time.',
       provider: 'Provedor',
       model: 'Modelo',
+      input: 'entrada',
+      output: 'saída',
+      pricing: 'Valores-base em USD por 1M de tokens (entrada / saída). Cache, lotes, promoções e contexto longo não estão incluídos.',
       key: 'Chave da API',
       addKey: 'Cole uma chave de API',
       keepKey: 'Deixe vazio para manter a chave salva',
@@ -52,13 +58,22 @@
   let phase = $state('loading');
   let providers = $state([]);
   let provider = $state('openai');
-  let model = $state('gpt-5.5');
+  let model = $state('gpt-5.6-terra');
   let apiKey = $state('');
   let error = $state('');
   let saved = $state(false);
 
   let copy = $derived(COPY[$locale] ?? COPY.en);
   let selected = $derived(providers.find((entry) => entry.id === provider) ?? null);
+
+  function price(cents) {
+    const value = cents / 100;
+    return `US$ ${Number.isInteger(value) ? value : value.toFixed(2)}`;
+  }
+
+  function modelLabel(entry) {
+    return `${entry.title} · ${price(entry.input_usd_per_million_cents)} ${copy.input} / ${price(entry.output_usd_per_million_cents)} ${copy.output}`;
+  }
 
   async function load() {
     phase = 'loading';
@@ -100,7 +115,7 @@
     error = '';
     saved = false;
     try {
-      const result = await saveModelSetup(fetch, capsuleId, { provider, model: model.trim(), apiKey }, providers);
+      const result = await saveModelSetup(fetch, capsuleId, { provider, model, apiKey }, providers);
       apiKey = '';
       providers = providers.map((entry) => entry.id === provider ? result.providerState : entry);
       saved = true;
@@ -157,8 +172,13 @@
       </label>
       <label>
         <span>{copy.model}</span>
-        <input bind:value={model} maxlength="128" autocomplete="off" spellcheck="false" required disabled={phase === 'saving'} />
+        <select bind:value={model} required disabled={phase === 'saving' || !selected}>
+          {#each selected?.models ?? [] as entry (entry.id)}
+            <option value={entry.id}>{modelLabel(entry)}</option>
+          {/each}
+        </select>
       </label>
+      <p class="pricing-note">{copy.pricing}</p>
       <label class="key-field">
         <span>{copy.key}</span>
         <input
@@ -176,7 +196,7 @@
         {#if selected?.configured}
           <button class="remove" type="button" onclick={removeKey} disabled={phase === 'saving'}>{copy.remove}</button>
         {/if}
-        <button class="save" type="submit" disabled={phase === 'saving' || !model.trim()}>
+        <button class="save" type="submit" disabled={phase === 'saving' || !selected?.models.some((entry) => entry.id === model)}>
           {phase === 'saving' ? copy.saving : copy.save}
         </button>
       </div>
@@ -199,6 +219,7 @@
   input, select { width: 100%; min-width: 0; min-height: 2.35rem; border: 1px solid var(--border-strong); padding: 0 0.65rem; background: #050708; color: var(--text); font-family: var(--font-mono); font-size: 0.66rem; }
   input:focus, select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.18); }
   .key-field, .actions { grid-column: 1 / -1; }
+  .pricing-note { grid-column: 1 / -1; margin: -0.12rem 0 0; color: var(--text-faint); font-size: 0.58rem; line-height: 1.45; }
   .actions { display: flex; justify-content: flex-end; gap: 0.45rem; }
   button { min-height: 2.2rem; border: 1px solid var(--border-strong); padding: 0 0.65rem; background: transparent; color: var(--text-dim); cursor: pointer; font-family: var(--font-mono); font-size: 0.55rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
   button.save { border: 0; background: var(--accent); color: #001013; }

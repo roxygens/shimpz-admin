@@ -7,11 +7,48 @@ placed in Capsule inference metadata, or sent through the Assistant Store iframe
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import adminstore
 
+
+@dataclass(frozen=True, slots=True)
+class ModelDefinition:
+    id: str
+    title: str
+    input_usd_per_million_cents: int
+    output_usd_per_million_cents: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderDefinition:
+    title: str
+    default_model: str
+    models: tuple[ModelDefinition, ...]
+
+
+# Base rates verified 2026-07-17: https://developers.openai.com/api/docs/models and https://platform.claude.com/docs/en/about-claude/pricing
 PROVIDERS = {
-    "openai": {"title": "OpenAI", "default_model": "gpt-5.5"},
-    "anthropic": {"title": "Anthropic", "default_model": "claude-sonnet-5"},
+    "openai": ProviderDefinition(
+        title="OpenAI",
+        default_model="gpt-5.6-terra",
+        models=(
+            ModelDefinition("gpt-5.6-sol", "GPT-5.6 Sol", 500, 3_000),
+            ModelDefinition("gpt-5.6-terra", "GPT-5.6 Terra", 250, 1_500),
+            ModelDefinition("gpt-5.6-luna", "GPT-5.6 Luna", 100, 600),
+            ModelDefinition("gpt-5.5", "GPT-5.5", 500, 3_000),
+        ),
+    ),
+    "anthropic": ProviderDefinition(
+        title="Anthropic",
+        default_model="claude-sonnet-5",
+        models=(
+            ModelDefinition("claude-fable-5", "Claude Fable 5", 1_000, 5_000),
+            ModelDefinition("claude-opus-4-8", "Claude Opus 4.8", 500, 2_500),
+            ModelDefinition("claude-sonnet-5", "Claude Sonnet 5", 300, 1_500),
+            ModelDefinition("claude-haiku-4-5-20251001", "Claude Haiku 4.5", 100, 500),
+        ),
+    ),
 }
 MAX_API_KEY_BYTES = 8 * 1024
 MIN_API_KEY_BYTES = 16
@@ -26,6 +63,13 @@ def canonical_provider(value: object) -> str:
     if provider not in PROVIDERS:
         raise ModelProviderError("unsupported model provider")
     return provider
+
+
+def canonical_model(provider: object, value: object) -> str:
+    selected = canonical_provider(provider)
+    if not isinstance(value, str) or value not in {model.id for model in PROVIDERS[selected].models}:
+        raise ModelProviderError("unsupported model for provider")
+    return value
 
 
 def canonical_api_key(value: object) -> str:
@@ -60,8 +104,17 @@ def status() -> dict[str, list[dict[str, object]]]:
         providers.append(
             {
                 "id": provider,
-                "title": metadata["title"],
-                "default_model": metadata["default_model"],
+                "title": metadata.title,
+                "default_model": metadata.default_model,
+                "models": [
+                    {
+                        "id": model.id,
+                        "title": model.title,
+                        "input_usd_per_million_cents": model.input_usd_per_million_cents,
+                        "output_usd_per_million_cents": model.output_usd_per_million_cents,
+                    }
+                    for model in metadata.models
+                ],
                 "configured": configured,
                 "masked": _masked(secret) if configured else None,
             }

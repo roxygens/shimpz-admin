@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+import modelproviders
+
 log = logging.getLogger("shimpz-admin")
 
 URL = os.environ.get("SHIMPZ_CAPSULEDRIVER_URL", "http://capsule-driver:7077")
@@ -35,8 +37,6 @@ _ASSISTANT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _FILE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _MEDIA_TYPE_RE = re.compile(r"^[a-z0-9][a-z0-9!#$&^_.+\-]*/[a-z0-9][a-z0-9!#$&^_.+\-]*$")
-_MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
-_MODEL_PROVIDERS = frozenset({"anthropic", "openai"})
 MAX_CHAT_MESSAGE_CHARS = 16_000
 MAX_CHAT_FILES = 8
 
@@ -184,7 +184,7 @@ def _call(
             provider, api_key = model_credential
             encoded_key = api_key.encode("ascii") if isinstance(api_key, str) and api_key.isascii() else b""
             if (
-                provider not in _MODEL_PROVIDERS
+                provider not in modelproviders.PROVIDERS
                 or not 16 <= len(encoded_key) <= 8 * 1024
                 or any(not 33 <= byte <= 126 for byte in encoded_key)
             ):
@@ -243,11 +243,18 @@ def configure_inference(capsule_id: object, payload: object) -> DriverResponse:
         raise CapsuleRequestError("inference requires only provider and model")
     provider = payload["provider"]
     model = payload["model"]
-    if not isinstance(provider, str) or provider not in _MODEL_PROVIDERS:
-        raise CapsuleRequestError("unsupported model provider")
-    if not isinstance(model, str) or _MODEL_RE.fullmatch(model) is None:
-        raise CapsuleRequestError("model must be a safe identifier of at most 128 characters")
-    return _call("PUT", f"/v1/capsules/{cid}/inference", {"provider": provider, "model": model})
+    try:
+        selected_provider = modelproviders.canonical_provider(provider)
+        selected_model = modelproviders.canonical_model(selected_provider, model)
+    except modelproviders.ModelProviderError as exc:
+        raise CapsuleRequestError(str(exc)) from None
+    if provider != selected_provider:
+        raise CapsuleRequestError("model provider must be canonical")
+    return _call(
+        "PUT",
+        f"/v1/capsules/{cid}/inference",
+        {"provider": selected_provider, "model": selected_model},
+    )
 
 
 def canonical_chat_payload(payload: object) -> dict[str, object]:
