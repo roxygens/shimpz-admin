@@ -261,10 +261,10 @@
 </script>
 
 <svelte:head>
-  <title>Shimpz Capsule Admin</title>
+  <title>Shimpz Team Admin</title>
   <meta
     name="description"
-    content="Manage Shimpz Capsules, Space-wide Services, and integrations from your local control plane."
+    content="Manage Shimpz Teams, Space-wide Services, and integrations from your local control plane."
   />
 </svelte:head>
 

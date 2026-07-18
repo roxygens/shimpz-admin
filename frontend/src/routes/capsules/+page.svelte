@@ -29,7 +29,7 @@
       }
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        error = safeApiError(body, 'Could not reach the Capsule Driver.');
+        error = safeApiError(body, 'Could not reach the Team runtime controller.');
         return;
       }
       capsules = (await response.json()).capsules ?? [];
@@ -74,7 +74,7 @@
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        mutationError = safeApiError(body, 'Capsule creation failed.');
+        mutationError = safeApiError(body, 'Team creation failed.');
         return;
       }
       createDialog?.close();
@@ -103,7 +103,7 @@
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        mutationError = safeApiError(body, 'Capsule destruction failed.');
+        mutationError = safeApiError(body, 'Team destruction failed.');
         return;
       }
       deleteDialog?.close();
@@ -128,8 +128,8 @@
 </script>
 
 <svelte:head>
-  <title>Capsules — Shimpz Admin</title>
-  <meta name="description" content="Create and manage isolated Shimpz Capsules and their scoped Drivers." />
+  <title>Teams — Shimpz Admin</title>
+  <meta name="description" content="Create and manage isolated Shimpz Teams and their scoped Drivers." />
 </svelte:head>
 
 <AdminShell active="capsules" authenticated={phase === 'ready'} actions={shellActions}>
@@ -158,7 +158,7 @@
       </button>
     </section>
 
-    <section class:offline={error} class="runtime-bar" aria-label="Capsule runtime summary">
+    <section class:offline={error} class="runtime-bar" aria-label="Team runtime summary">
       <i aria-hidden="true"></i>
       <strong>{runningCount}</strong><span>/ {capsules.length} running</span>
     </section>
@@ -179,7 +179,7 @@
     {:else if !error}
       <section class="empty-state">
         <div class="empty-orbit" aria-hidden="true"><span></span></div>
-        <p class="kicker">Capsule // 000</p>
+        <p class="kicker">Team // 000</p>
         <h2>{$t('capsules.emptyTitle')}</h2>
         <p>{$t('capsules.emptyLead')}</p>
         <button type="button" onclick={openCreate}>{$t('capsules.create')} <span aria-hidden="true">→</span></button>
@@ -191,7 +191,7 @@
 <dialog bind:this={createDialog} onclose={() => (mutationError = '')} aria-labelledby="create-title">
   <form class="dialog-panel" onsubmit={(event) => (event.preventDefault(), create())}>
     <header>
-      <p class="dialog-kicker">Capsule // initialize</p>
+      <p class="dialog-kicker">Team // initialize</p>
       <h2 id="create-title">{$t('capsules.createTitle')}</h2>
       <p>{$t('capsules.createLead')}</p>
     </header>
@@ -233,7 +233,7 @@
 >
   <div class="dialog-panel">
     <header>
-      <p class="dialog-kicker danger">Capsule // destructive operation</p>
+      <p class="dialog-kicker danger">Team // destructive operation</p>
       <h2 id="destroy-title">{$t('capsules.destroyTitle')}</h2>
       <p>{$t('capsules.destroyLead')}</p>
     </header>

@@ -192,7 +192,7 @@
   }
 
   async function removeCredential(credential) {
-    if (busy || !confirm(`Remove credential "${credential.label}" from this Capsule?`)) return;
+    if (busy || !confirm(`Remove credential "${credential.label}" from this Team?`)) return;
     busy = true;
     panelError = "";
     notice = "";
@@ -220,7 +220,7 @@
 <details class="driver-panel" ontoggle={panelToggle}>
   <summary>
     <span class="driver-name">{title}</span>
-    <span class="driver-purpose">Capsule credentials</span>
+    <span class="driver-purpose">Team credentials</span>
   </summary>
 
   <div class="panel-body" aria-busy={loading || busy}>
@@ -242,7 +242,7 @@
       </div>
 
       {#if credentialData.credentials.length === 0}
-        <p class="muted">No Capsule override is configured.</p>
+        <p class="muted">No Team override is configured.</p>
       {:else}
         <ul class="credentials">
           {#each credentialData.credentials as credential (credential.id)}

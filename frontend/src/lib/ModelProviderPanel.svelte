@@ -13,7 +13,7 @@
   const COPY = {
     en: {
       title: 'Model provider',
-      lead: 'The key stays in this Admin. Only provider and model are saved to the Capsule.',
+      lead: 'The key stays in this Admin. Only provider and model are saved to the Team.',
       provider: 'Provider',
       model: 'Model',
       key: 'API key',
@@ -31,7 +31,7 @@
     },
     pt: {
       title: 'Provedor do modelo',
-      lead: 'A chave fica neste Admin. Apenas provedor e modelo são salvos na Cápsula.',
+      lead: 'A chave fica neste Admin. Apenas provedor e modelo são salvos no Time.',
       provider: 'Provedor',
       model: 'Modelo',
       key: 'Chave da API',

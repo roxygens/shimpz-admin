@@ -1,9 +1,9 @@
 <script>
   let {
     variant = 'compact',
-    product = 'Capsule Admin',
+    product = 'Team Admin',
     href = '/',
-    ariaLabel = 'Shimpz Capsule Admin home',
+    ariaLabel = 'Shimpz Team Admin home',
   } = $props();
 </script>
 

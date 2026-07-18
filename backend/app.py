@@ -436,10 +436,10 @@ def capsules_list():
 def capsules_create(payload: dict):
     name = str(payload.get("name", "")).strip()
     if not name:
-        raise HTTPException(status_code=400, detail="capsule name required")
+        raise HTTPException(status_code=400, detail="team name required")
     cid = capsules.to_cid(name)
     if not cid:
-        raise HTTPException(status_code=400, detail="capsule name has no usable characters")
+        raise HTTPException(status_code=400, detail="team name has no usable characters")
     response = _capsule_driver_response(lambda: capsules.create(cid, name))
     if 200 <= response.status_code < 300:
         log.info("capsule created: %s", cid)

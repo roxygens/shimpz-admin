@@ -231,7 +231,7 @@ def list_capsules() -> DriverResponse:
 def create(capsule_id: object, name: object) -> DriverResponse:
     cid = canonical_capsule_id(capsule_id)
     if not isinstance(name, str) or not name.strip() or len(name) > 80:
-        raise CapsuleRequestError("capsule name must be between 1 and 80 characters")
+        raise CapsuleRequestError("team name must be between 1 and 80 characters")
     return _call("POST", f"/v1/capsules/{cid}/create", {"name": name.strip()})
 
 
