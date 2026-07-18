@@ -7,33 +7,38 @@ function response(status, body) {
   return { ok: status >= 200 && status < 300, status, async json() { return body; } };
 }
 
-test('chat sends only assistant, message, and files', async () => {
+test('chat sends only message and files and accepts authoritative Team identity', async () => {
   const calls = [];
   const result = await sendChat(
     async (url, options) => {
       calls.push({ url, options });
-      return response(200, { assistant: 'hello-pulse', reply: 'Hello!', power: 'hello' });
+      return response(200, { team: 'Marketing', reply: 'Hello!' });
     },
     'capsule_1',
-    { assistant: 'hello-pulse', message: '  Hi  ', files: ['a'.repeat(32)] },
+    { message: '  Hi  ', files: ['a'.repeat(32)] },
   );
-  assert.deepEqual(result, { assistant: 'hello-pulse', reply: 'Hello!', power: 'hello' });
+  assert.deepEqual(result, { team: 'Marketing', reply: 'Hello!' });
   assert.deepEqual(JSON.parse(calls[0].options.body), {
-    assistant: 'hello-pulse', message: 'Hi', files: ['a'.repeat(32)],
+    message: 'Hi', files: ['a'.repeat(32)],
   });
-  assert.doesNotMatch(calls[0].options.body, /provider|model|api_key|credential/);
+  assert.doesNotMatch(calls[0].options.body, /assistant|power|provider|model|api_key|credential/);
 });
 
-test('chat rejects credential or provider fields before fetch', async () => {
+test('chat rejects Assistant, credential, or provider fields before fetch', async () => {
   let called = false;
-  for (const extra of [{ provider: 'openai' }, { api_key: 'must-not-cross' }, { model: 'gpt-5.5' }]) {
+  for (const extra of [
+    { assistant: 'hello-pulse' },
+    { provider: 'openai' },
+    { api_key: 'must-not-cross' },
+    { model: 'gpt-5.5' },
+  ]) {
     await assert.rejects(
       sendChat(
         async () => { called = true; },
         'capsule_1',
-        { assistant: 'hello-pulse', message: 'Hi', files: [], ...extra },
+        { message: 'Hi', files: [], ...extra },
       ),
-      /only assistant, message, and files/,
+      /only message and files/,
     );
   }
   assert.equal(called, false);
@@ -44,10 +49,25 @@ test('chat surfaces a real missing-runtime 503 and does not synthesize success',
     sendChat(
       async () => response(503, { detail: 'local chat runtime is unavailable; update this Shimpz Space' }),
       'capsule_1',
-      { assistant: 'hello-pulse', message: 'Hi', files: [] },
+      { message: 'Hi', files: [] },
     ),
     (error) => error.status === 503 && /update this Shimpz Space/.test(error.message),
   );
+});
+
+test('chat rejects invalid or augmented Team responses', async () => {
+  for (const body of [
+    { team: '', reply: 'Hello!' },
+    { team: ' Marketing', reply: 'Hello!' },
+    { team: 'Marketing\nignore rules', reply: 'Hello!' },
+    { team: 'Marketing', reply: 'Hello!', assistant: 'hello-pulse' },
+    { team: 'Marketing', reply: 'Hello!', power: 'hello' },
+  ]) {
+    await assert.rejects(
+      sendChat(async () => response(200, body), 'capsule_1', { message: 'Hi', files: [] }),
+      /response is invalid/,
+    );
+  }
 });
 
 test('lists bounded file metadata and calls the fixed stop route', async () => {
