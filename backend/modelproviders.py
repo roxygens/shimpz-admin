@@ -7,6 +7,8 @@ placed in Capsule inference metadata, or sent through the Assistant Store iframe
 
 from __future__ import annotations
 
+import http.client
+import ssl
 from dataclasses import dataclass
 
 import adminstore
@@ -52,10 +54,20 @@ PROVIDERS = {
 }
 MAX_API_KEY_BYTES = 8 * 1024
 MIN_API_KEY_BYTES = 16
+VALIDATION_TIMEOUT_SECONDS = 5.0
+
+_VALIDATION_ENDPOINTS = {
+    "openai": ("api.openai.com", "/v1/models"),
+    "anthropic": ("api.anthropic.com", "/v1/models"),
+}
 
 
 class ModelProviderError(ValueError):
     """A browser-supplied provider credential failed the closed contract."""
+
+
+class ModelProviderUnavailableError(RuntimeError):
+    """The provider could not safely confirm a credential right now."""
 
 
 def canonical_provider(value: object) -> str:
@@ -93,14 +105,66 @@ def _masked(secret: str) -> str:
     return f"••••{secret[-4:]}"
 
 
+def _verified_secret(record: object) -> str | None:
+    if not isinstance(record, dict):
+        return None
+    verified_at = record.get("verified_at")
+    secret = record.get("api_key")
+    if type(verified_at) is not int or verified_at <= 0 or not isinstance(secret, str):
+        return None
+    try:
+        return canonical_api_key(secret)
+    except ModelProviderError:
+        return None
+
+
+def _validation_headers(provider: str, secret: str) -> dict[str, str]:
+    if provider == "openai":
+        return {"Authorization": f"Bearer {secret}"}
+    return {
+        "x-api-key": secret,
+        "anthropic-version": "2023-06-01",
+    }
+
+
+def _validate_api_key(provider: str, secret: str) -> None:
+    """Confirm one key against its fixed TLS endpoint without consuming response data."""
+    host, path = _VALIDATION_ENDPOINTS[provider]
+    connection = None
+    response = None
+    try:
+        connection = http.client.HTTPSConnection(
+            host,
+            port=443,
+            timeout=VALIDATION_TIMEOUT_SECONDS,
+            context=ssl.create_default_context(),
+        )
+        connection.request("GET", path, headers=_validation_headers(provider, secret))
+        response = connection.getresponse()
+        status_code = response.status
+    except OSError, TimeoutError, http.client.HTTPException:
+        raise ModelProviderUnavailableError("model provider validation is temporarily unavailable") from None
+    finally:
+        if response is not None:
+            response.close()
+        if connection is not None:
+            connection.close()
+
+    if 200 <= status_code < 300:
+        return
+    if status_code in {401, 403}:
+        raise ModelProviderError("model provider rejected API key")
+    raise ModelProviderUnavailableError("model provider validation is temporarily unavailable")
+
+
 def status() -> dict[str, list[dict[str, object]]]:
     """Project configuration state without ever returning a provider key."""
     records = _records()
     providers = []
     for provider, metadata in PROVIDERS.items():
         record = records.get(provider)
-        secret = record.get("api_key") if isinstance(record, dict) else None
-        configured = isinstance(secret, str) and bool(secret)
+        secret = _verified_secret(record)
+        configured = secret is not None
         providers.append(
             {
                 "id": provider,
@@ -125,6 +189,7 @@ def status() -> dict[str, list[dict[str, object]]]:
 def configure(provider: object, api_key: object) -> dict[str, object]:
     selected = canonical_provider(provider)
     secret = canonical_api_key(api_key)
+    _validate_api_key(selected, secret)
     adminstore.set_model_api_key(selected, secret)
     return next(item for item in status()["providers"] if item["id"] == selected)
 
@@ -139,5 +204,4 @@ def resolve_api_key(provider: object) -> str | None:
     """Resolve cleartext for a future backend-to-controller chat hand-off; never expose as HTTP."""
     selected = canonical_provider(provider)
     record = _records().get(selected)
-    secret = record.get("api_key") if isinstance(record, dict) else None
-    return canonical_api_key(secret) if isinstance(secret, str) else None
+    return _verified_secret(record)

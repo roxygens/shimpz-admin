@@ -81,13 +81,18 @@ def model_credentials():
 
 
 def set_model_api_key(provider, api_key):
-    """Atomically persist one backend-only provider key in the existing 0600 Admin store."""
+    """Atomically persist one remotely verified provider key in the 0600 Admin store."""
     with _MODEL_CREDENTIAL_LOCK:
         data = _read()
         records = data.setdefault("model_credentials", {})
         if not isinstance(records, dict):
             raise RuntimeError(f"admin store {STORE_PATH} has invalid model credentials")
-        records[provider] = {"api_key": api_key, "updated": int(time.time())}
+        verified_at = int(time.time())
+        records[provider] = {
+            "api_key": api_key,
+            "updated": verified_at,
+            "verified_at": verified_at,
+        }
         _write(data)
 
 

@@ -14,6 +14,7 @@ config only. Booting the stack is `scripts/shimpz-init && docker compose up`; re
 after a config change is the marketplace's job (via shimpz-driver), not this app's.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -348,9 +349,11 @@ async def model_provider_configure(provider: str, request: Request):
     if set(payload) != {"api_key"}:
         raise HTTPException(status_code=400, detail="request body must contain only api_key")
     try:
-        return modelproviders.configure(provider, payload["api_key"])
+        return await asyncio.to_thread(modelproviders.configure, provider, payload["api_key"])
     except modelproviders.ModelProviderError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
+    except modelproviders.ModelProviderUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
 
 
 @app.delete("/api/model-providers/{provider}")
