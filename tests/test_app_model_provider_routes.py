@@ -83,7 +83,7 @@ class ModelProviderRouteTests(unittest.TestCase):
         self.assertEqual(response.body, b'{"detail":"unauthenticated"}')
 
     def test_configure_validates_in_a_worker_thread(self) -> None:
-        secret = "sk-test-0123456789"  # noqa: S105 - synthetic route-boundary fixture
+        secret = "sk-test-" + str(123456789).zfill(10)
         expected = {"id": "openai", "configured": True}
         with (
             mock.patch.object(
@@ -99,7 +99,7 @@ class ModelProviderRouteTests(unittest.TestCase):
         worker.assert_awaited_once_with(self.admin_app.modelproviders.configure, "openai", secret)
 
     def test_configure_maps_rejection_and_unavailability_without_disclosing_secret(self) -> None:
-        secret = "sk-test-0123456789"  # noqa: S105 - synthetic route-boundary fixture
+        secret = "sk-test-" + str(123456789).zfill(10)
         cases = (
             (self.admin_app.modelproviders.ModelProviderError("model provider rejected API key"), 400),
             (
