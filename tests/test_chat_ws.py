@@ -65,11 +65,11 @@ class _Socket:
         await self._incoming.put({"type": "websocket.connect"})
         return await self.next_message()
 
-    async def next_message(self, timeout: float = 1.0) -> dict:
-        return await asyncio.wait_for(self._outgoing.get(), timeout=timeout)
+    async def next_message(self, wait_seconds: float = 1.0) -> dict:
+        return await asyncio.wait_for(self._outgoing.get(), timeout=wait_seconds)
 
-    async def next_json(self, timeout: float = 1.0) -> dict:
-        message = await self.next_message(timeout)
+    async def next_json(self, wait_seconds: float = 1.0) -> dict:
+        message = await self.next_message(wait_seconds)
         if message.get("type") != "websocket.send" or "text" not in message:
             raise AssertionError(f"expected a text WebSocket frame, got {message!r}")
         return json.loads(message["text"])
@@ -92,8 +92,8 @@ class _Socket:
             await asyncio.wait_for(self._task, timeout=2)
 
 
-async def _wait_for_thread(event: threading.Event, timeout: float = 1.0) -> None:
-    deadline = asyncio.get_running_loop().time() + timeout
+async def _wait_for_thread(event: threading.Event, wait_seconds: float = 1.0) -> None:
+    deadline = asyncio.get_running_loop().time() + wait_seconds
     while not event.is_set():
         if asyncio.get_running_loop().time() >= deadline:
             raise TimeoutError("worker did not start")
@@ -321,11 +321,11 @@ class ChatWebSocketTests(unittest.TestCase):
                 self.assertEqual(await websocket.next_json(), {"type": "stopped"})
                 await websocket.send_json({"type": "stop"})
                 with self.assertRaises(TimeoutError):
-                    await websocket.next_message(timeout=0.05)
+                    await websocket.next_message(wait_seconds=0.05)
                 release.set()
                 await asyncio.sleep(0.05)
                 with self.assertRaises(TimeoutError):
-                    await websocket.next_message(timeout=0.05)
+                    await websocket.next_message(wait_seconds=0.05)
                 await websocket.disconnect()
                 self.assertEqual(turn_mock.call_count, 1)
                 self.assertEqual(stop_mock.call_count, 1)
@@ -368,7 +368,7 @@ class ChatWebSocketTests(unittest.TestCase):
                 await websocket.send_json({"type": "chat", "message": "hello"})
                 event = await websocket.next_json()
                 with self.assertRaises(TimeoutError):
-                    await websocket.next_message(timeout=0.05)
+                    await websocket.next_message(wait_seconds=0.05)
                 await websocket.disconnect()
                 return event
 

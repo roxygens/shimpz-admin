@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextlib
 import json
 import os
 import re
@@ -98,11 +99,7 @@ def canonical_origin(value: str | None) -> str | None:
 
 def _configured_origins() -> frozenset[str]:
     configured = os.environ.get("SHIMPZ_ADMIN_ALLOWED_ORIGINS", _DEFAULT_ORIGINS)
-    return frozenset(
-        origin
-        for item in configured.split(",")
-        if (origin := canonical_origin(item.strip())) is not None
-    )
+    return frozenset(origin for item in configured.split(",") if (origin := canonical_origin(item.strip())) is not None)
 
 
 ALLOWED_ORIGINS = _configured_origins()
@@ -262,14 +259,16 @@ async def _send_terminal_once(
 
 async def _deliver_turn(websocket: WebSocket, connection: _Connection, turn: _Turn, capsule_id: str) -> None:
     try:
-        try:
-            response = await asyncio.wrap_future(turn.future)
-        except asyncio.CancelledError:
-            raise
-        except capsules.CapsuleRequestError:
-            response = capsules.DriverResponse(400, {})
-        except Exception:
-            response = capsules.DriverResponse(502, {})
+        response = capsules.DriverResponse(502, {})
+        # A provider callback may raise any ordinary exception. This process boundary must fail
+        # closed while cancellation and process-control BaseExceptions continue to propagate.
+        with contextlib.suppress(Exception):
+            try:
+                response = await asyncio.wrap_future(turn.future)
+            except asyncio.CancelledError:
+                raise
+            except capsules.CapsuleRequestError:
+                response = capsules.DriverResponse(400, {})
         await _send_terminal_once(websocket, connection, turn, turn_terminal(response, capsule_id))
     finally:
         if connection.active is turn:
@@ -285,12 +284,13 @@ async def _run_stop(
     emit: bool,
 ) -> None:
     try:
-        try:
-            response = await asyncio.wrap_future(_STOP_EXECUTOR.submit(localchat.stop, capsule_id))
-        except ExecutorSaturatedError:
-            response = capsules.DriverResponse(429, {})
-        except Exception:
-            response = capsules.DriverResponse(502, {})
+        response = capsules.DriverResponse(502, {})
+        # Stop has the same fail-closed callback boundary as turn delivery.
+        with contextlib.suppress(Exception):
+            try:
+                response = await asyncio.wrap_future(_STOP_EXECUTOR.submit(localchat.stop, capsule_id))
+            except ExecutorSaturatedError:
+                response = capsules.DriverResponse(429, {})
         accepted = _stop_accepted(response, capsule_id)
         if not emit or connection.closed or turn.terminal_sent:
             return
@@ -322,9 +322,7 @@ def _request_stop(
     turn.stop_requested = True
     if turn.future.cancel():
         if emit and not connection.closed:
-            turn.stop_task = asyncio.create_task(
-                _send_terminal_once(websocket, connection, turn, {"type": "stopped"})
-            )
+            turn.stop_task = asyncio.create_task(_send_terminal_once(websocket, connection, turn, {"type": "stopped"}))
         return turn.stop_task
     turn.stop_task = asyncio.create_task(_run_stop(websocket, connection, turn, capsule_id, emit=emit))
     return turn.stop_task
@@ -369,10 +367,10 @@ def _has_subprotocol(websocket: WebSocket) -> bool:
 
 
 def _session_valid(session_ok: Callable[[Mapping[str, str]], bool], cookies: Mapping[str, str]) -> bool:
-    try:
+    # Authentication callbacks fail closed on every ordinary validation error.
+    with contextlib.suppress(Exception):
         return session_ok(cookies) is True
-    except Exception:
-        return False
+    return False
 
 
 async def serve(
@@ -424,10 +422,8 @@ async def serve(
         if active is not None:
             stop_task = _request_stop(websocket, connection, active, cid, emit=False)
             if stop_task is not None:
-                try:
+                with contextlib.suppress(asyncio.CancelledError, TimeoutError):
                     await asyncio.wait_for(asyncio.shield(stop_task), timeout=15)
-                except asyncio.CancelledError, TimeoutError:
-                    pass
             if active.delivery is not None:
                 active.delivery.cancel()
                 await asyncio.gather(active.delivery, return_exceptions=True)
