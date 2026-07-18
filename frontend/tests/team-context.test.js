@@ -178,6 +178,29 @@ test('a confirmed empty inventory is ready while malformed Team data fails close
   assert.equal(get(teamContext).selectedTeamId, '');
 });
 
+test('accepts only the backend trace identifier as optional Team envelope metadata', async () => {
+  await loadTeamContext(fixtureFetcher({
+    '/api/capsules': async () => response(200, {
+      capsules: [],
+      trace_id: 'a'.repeat(32),
+    }),
+  }));
+  assert.equal(get(teamContext).phase, 'ready');
+
+  for (const document of [
+    { capsules: [], trace_id: '../invalid' },
+    { capsules: [], debug: true },
+  ]) {
+    clearTeamContext();
+    await assert.rejects(
+      loadTeamContext(fixtureFetcher({
+        '/api/capsules': async () => response(200, document),
+      })),
+      (error) => error instanceof LocalApiError && error.message === 'The local Team inventory is invalid.',
+    );
+  }
+});
+
 test('refresh clears an invalid installed Assistant instead of presenting it as trusted', async () => {
   await loadTeamContext(fixtureFetcher(), 'marketing');
   const invalidFetcher = fixtureFetcher({
@@ -201,7 +224,13 @@ test('creates a Team with the exact payload, validates the response, and refresh
     '/api/capsules': async (options) => {
       calls.push(options);
       if (options.method === 'POST') {
-        return response(201, { created: true, id: 'growth', name: 'Growth', status: 'running' });
+        return response(201, {
+          created: true,
+          id: 'growth',
+          name: 'Growth',
+          status: 'running',
+          trace_id: 'b'.repeat(32),
+        });
       }
       return response(200, { capsules: [{ id: 'growth', name: 'Growth', status: 'running' }] });
     },

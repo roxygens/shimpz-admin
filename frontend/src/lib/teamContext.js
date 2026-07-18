@@ -4,6 +4,7 @@ import { listAssistantCatalog, listInstalledAssistants, LocalApiError, safeApiEr
 import { listCapsuleFiles } from './localChat.js';
 
 const TEAM_ID_RE = /^[a-z0-9_]{1,40}$/;
+const TRACE_ID_RE = /^[0-9a-f]{32}$/;
 const CONTROL_RE = /[\u0000-\u001f\u007f]/;
 const MAX_TEAMS = 128;
 const MAX_TEAM_NAME_CHARS = 80;
@@ -30,6 +31,16 @@ function hasExactKeys(value, expected) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const actual = Object.keys(value).sort();
   return actual.length === expected.length && expected.every((key, index) => key === actual[index]);
+}
+
+function hasExactEnvelopeKeys(value, expected) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  if ('trace_id' in value && (typeof value.trace_id !== 'string' || !TRACE_ID_RE.test(value.trace_id))) {
+    return false;
+  }
+  const payloadKeys = keys.filter((key) => key !== 'trace_id').sort();
+  return payloadKeys.length === expected.length && expected.every((key, index) => key === payloadKeys[index]);
 }
 
 async function jsonObject(response) {
@@ -78,7 +89,7 @@ async function listTeams(fetcher) {
     throw new LocalApiError(safeApiError(body, 'The local Team inventory is unavailable.'), response.status);
   }
   if (
-    !hasExactKeys(body, ['capsules']) ||
+    !hasExactEnvelopeKeys(body, ['capsules']) ||
     !Array.isArray(body.capsules) ||
     body.capsules.length > MAX_TEAMS
   ) {
@@ -321,7 +332,7 @@ export async function createTeam(fetcher, name) {
       throw new LocalApiError(safeApiError(body, 'The Team could not be created.'), response.status);
     }
     if (
-      !hasExactKeys(body, ['created', 'id', 'name', 'status']) ||
+      !hasExactEnvelopeKeys(body, ['created', 'id', 'name', 'status']) ||
       typeof body.created !== 'boolean' ||
       typeof body.id !== 'string' ||
       !TEAM_ID_RE.test(body.id) ||
