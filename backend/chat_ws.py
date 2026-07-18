@@ -30,6 +30,30 @@ MAX_PUBLIC_ERROR_CHARS = 800
 _DEFAULT_ORIGINS = "http://127.0.0.1:7777,http://localhost:7777"
 _REPLY_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+_CHAT_ERROR_DETAILS = {
+    "assistant-power-blocked": "Assistant Power execution is blocked until it is reinstalled",
+    "assistant-registry-drift": "an installed Assistant is no longer available",
+    "assistant-unavailable": "the Brain requested an unavailable Assistant",
+    "brain-runtime-failed": "the Brain runtime could not complete the Team turn",
+    "chat-active": "this Team already has an active chat turn",
+    "chat-request-failed": "the local chat request failed",
+    "chat-response-invalid": "the local chat returned an invalid response",
+    "chat-stopped": "the chat turn was stopped",
+    "file-not-found": "a selected file was not found",
+    "inference-not-configured": "the Team model provider is not configured",
+    "inference-provider-mismatch": "the configured model provider changed; retry",
+    "inference-response-invalid": "the Team model configuration is invalid",
+    "invalid-files": "the selected files are invalid",
+    "invalid-power-input": "an Assistant Power received invalid input",
+    "model-credential-missing": "the selected model provider needs an API key",
+    "model-credential-store-invalid": "the model credential store is invalid",
+    "ownership-conflict": "the Team resource ownership check failed",
+    "power-approval-required": "an Assistant Power requires approval",
+    "power-state-unavailable": "the Team Power execution state is unavailable",
+    "runtime-unavailable": "the local chat runtime is unavailable; update this Shimpz Space",
+    "team-context-changed": "the Team capabilities changed; retry",
+    "team-has-no-active-assistants": "install and start at least one Assistant before chatting",
+}
 
 
 class FrameError(ValueError):
@@ -192,8 +216,8 @@ def turn_terminal(response: object, capsule_id: str) -> dict[str, object]:
             return {"type": "done", "reply": body["reply"], "team": body["team"]}
         return _error_terminal(502, "local chat returned an invalid response")
 
-    # Never relay an upstream error body. Even a compromised dependency cannot reflect credentials
-    # or internal controller details through this public transport.
+    # ``localchat`` reduces controller/provider failures to one bounded machine code. Map only this
+    # closed allowlist to fixed public text; raw prose, tracebacks and credentials never cross here.
     details = {
         400: "invalid chat request",
         409: "chat turn could not start",
@@ -201,7 +225,14 @@ def turn_terminal(response: object, capsule_id: str) -> dict[str, object]:
         503: "local chat runtime is unavailable",
     }
     status = _safe_status(response.status)
-    return _error_terminal(status, details.get(status, "local chat request failed"))
+    fallback = details.get(status, "local chat request failed")
+    body = response.body
+    if not isinstance(body, dict) or set(body) != {"code"}:
+        return _error_terminal(status, fallback)
+    code = body.get("code")
+    if not isinstance(code, str) or code not in _CHAT_ERROR_DETAILS:
+        return _error_terminal(status, fallback)
+    return _error_terminal(status, f"{code}: {_CHAT_ERROR_DETAILS[code]}")
 
 
 def _stop_accepted(response: object, capsule_id: str) -> bool | None:

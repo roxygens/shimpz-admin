@@ -131,7 +131,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
                 {"message": "Hi", "files": []},
             )
         self.assertEqual(response.status, 503)
-        self.assertIn("update this Shimpz Space", response.body["detail"])
+        self.assertEqual(response.body, {"code": "runtime-unavailable"})
         resolve_key.assert_not_called()
         chat.assert_not_called()
 
@@ -152,15 +152,34 @@ class LocalChatOrchestrationTests(unittest.TestCase):
                 response = localchat.turn("capsule_1", {"message": "Hi", "files": []})
             self.assertEqual(
                 response,
-                capsules.DriverResponse(502, {"detail": "Capsule inference response is invalid"}),
+                capsules.DriverResponse(502, {"code": "inference-response-invalid"}),
             )
             resolve_key.assert_not_called()
             chat.assert_not_called()
 
+    def test_missing_model_credential_returns_a_stable_code_without_calling_controller(self) -> None:
+        inference = capsules.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})
+        with (
+            mock.patch.object(capsules, "get_inference", return_value=inference),
+            mock.patch.object(modelproviders, "resolve_api_key", return_value=None),
+            mock.patch.object(capsules, "chat") as chat,
+        ):
+            response = localchat.turn("capsule_1", {"message": "Hi", "files": []})
+
+        self.assertEqual(response, capsules.DriverResponse(409, {"code": "model-credential-missing"}))
+        chat.assert_not_called()
+
     def test_controller_cannot_echo_the_private_key_to_browser(self) -> None:
         api_key = "sk-test-0123456789"
         inference = capsules.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})
-        echoed = capsules.DriverResponse(502, {"detail": f"provider rejected {api_key}"})
+        echoed = capsules.DriverResponse(
+            502,
+            {
+                "error": f"provider rejected {api_key}",
+                "code": "brain-runtime-failed",
+                "trace_id": TRACE_ID,
+            },
+        )
         with (
             mock.patch.object(capsules, "get_inference", return_value=inference),
             mock.patch.object(modelproviders, "resolve_api_key", return_value=api_key),
@@ -171,6 +190,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
                 {"message": "Hi", "files": []},
             )
         self.assertEqual(response.status, 502)
+        self.assertEqual(response.body, {"code": "brain-runtime-failed"})
         self.assertNotIn(api_key, json.dumps(response.body))
 
         echoed_reply = capsules.DriverResponse(
@@ -209,7 +229,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
             ):
                 response = localchat.turn("capsule_1", {"message": "Hi", "files": []})
             self.assertEqual(response.status, 502)
-            self.assertEqual(response.body, {"detail": "local chat response is invalid"})
+            self.assertEqual(response.body, {"code": "chat-response-invalid"})
 
     def test_controller_identity_and_closed_turn_contract_fail_closed(self) -> None:
         inference = capsules.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})
@@ -233,7 +253,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
                 mock.patch.object(capsules, "chat", return_value=capsules.DriverResponse(200, controller_body)),
             ):
                 response = localchat.turn("capsule_1", {"message": "Hi", "files": []})
-            self.assertEqual(response, capsules.DriverResponse(502, {"detail": "local chat response is invalid"}))
+            self.assertEqual(response, capsules.DriverResponse(502, {"code": "chat-response-invalid"}))
 
     def test_private_key_in_team_name_is_rejected_without_echo(self) -> None:
         api_key = "sk-test-0123456789"
@@ -300,7 +320,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
                 response = localchat.stop("capsule_1")
             self.assertEqual(
                 response,
-                capsules.DriverResponse(502, {"detail": "local chat stop response is invalid"}),
+                capsules.DriverResponse(502, {"code": "chat-stop-response-invalid"}),
             )
 
 

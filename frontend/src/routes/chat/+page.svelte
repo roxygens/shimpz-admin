@@ -26,6 +26,9 @@
       loadFailed: 'Local chat data is unavailable.', needAuth: 'Sign in to use local chat.', signIn: 'Open sign-in',
       connecting: 'Connecting…', disconnected: 'The secure chat connection was interrupted. Reconnecting…',
       protocolError: 'The secure chat response was invalid.',
+      turnFailed: 'The chat turn could not start.', capacityFailed: 'The local chat is busy. Try again shortly.',
+      runtimeFailed: 'The local chat runtime is unavailable.', requestFailed: 'The Team could not complete this turn.',
+      technicalDetail: 'Technical detail',
     },
     pt: {
       kicker: 'Time // Chat', title: 'Seu Time',
@@ -37,6 +40,9 @@
       loadFailed: 'Os dados do chat local estão indisponíveis.', needAuth: 'Entre para usar o chat local.', signIn: 'Abrir login',
       connecting: 'Conectando…', disconnected: 'A conexão segura do chat foi interrompida. Reconectando…',
       protocolError: 'A resposta segura do chat era inválida.',
+      turnFailed: 'Não foi possível iniciar o turno do chat.', capacityFailed: 'O chat local está ocupado. Tente novamente em instantes.',
+      runtimeFailed: 'O runtime do chat local está indisponível.', requestFailed: 'O Time não conseguiu concluir este turno.',
+      technicalDetail: 'Detalhe técnico',
     },
   };
 
@@ -50,6 +56,7 @@
   let busy = $state(false);
   let stopping = $state(false);
   let error = $state('');
+  let errorDetail = $state('');
   let socket = $state(null);
   let socketReady = $state(false);
   let reconnectTimer;
@@ -61,6 +68,23 @@
   let teamName = $derived(activeTeam?.name ?? copy.title);
   let placeholder = $derived(copy.placeholder.replace('{team}', teamName));
   let thinking = $derived(copy.sending.replace('{team}', teamName));
+
+  function clearError() {
+    error = '';
+    errorDetail = '';
+  }
+
+  function setError(message, detail = '') {
+    error = message;
+    errorDetail = detail;
+  }
+
+  function friendlyChatError(status) {
+    if (status === 409) return copy.turnFailed;
+    if (status === 429) return copy.capacityFailed;
+    if (status === 503) return copy.runtimeFailed;
+    return copy.requestFailed;
+  }
 
   function closeSocket() {
     if (reconnectTimer) {
@@ -94,12 +118,12 @@
       if (active.protocol !== CHAT_WS_PROTOCOL) {
         socket = null;
         active.close(1002, 'Protocol required');
-        error = copy.protocolError;
+        setError(copy.protocolError);
         return;
       }
       reconnectAttempt = 0;
       socketReady = true;
-      if (error === copy.disconnected) error = '';
+      if (error === copy.disconnected) clearError();
     };
     active.onmessage = (event) => {
       if (socket !== active || capsuleId !== expectedCapsule) return;
@@ -112,7 +136,7 @@
         socketReady = false;
         busy = false;
         stopping = false;
-        error = copy.protocolError;
+        setError(copy.protocolError);
         active.close(1002, 'Invalid terminal event');
         return;
       }
@@ -122,11 +146,14 @@
       if (terminal.type === 'done') {
         capsules = capsules.map((entry) => entry.id === expectedCapsule ? { ...entry, name: terminal.team } : entry);
         turns = [...turns, { role: 'assistant', text: terminal.reply, author: terminal.team }];
-        error = '';
+        clearError();
       } else if (terminal.type === 'stopped') {
-        error = copy.stopped;
+        setError(copy.stopped);
       } else {
-        error = terminal.detail;
+        setError(
+          friendlyChatError(terminal.status),
+          `HTTP ${terminal.status} · ${terminal.detail}`,
+        );
       }
     };
     active.onclose = () => {
@@ -135,7 +162,7 @@
       socketReady = false;
       stopping = false;
       if (busy) busy = false;
-      error = copy.disconnected;
+      setError(copy.disconnected);
       scheduleReconnect(expectedCapsule);
     };
   }
@@ -161,18 +188,18 @@
     files = [];
     selectedFiles = [];
     turns = [];
-    error = '';
+    clearError();
     if (!capsuleId) return;
     try {
       files = await listCapsuleFiles(fetch, capsuleId);
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : copy.loadFailed;
+      setError(reason instanceof Error ? reason.message : copy.loadFailed);
     }
   }
 
   async function load() {
     phase = 'checking';
-    error = '';
+    clearError();
     try {
       const sessionResponse = await fetch('/api/session', { cache: 'no-store' });
       if (!sessionResponse.ok || !(await sessionResponse.json()).authenticated) {
@@ -193,7 +220,7 @@
       await loadTeamData();
       connectSocket(capsuleId);
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : copy.loadFailed;
+      setError(reason instanceof Error ? reason.message : copy.loadFailed);
       phase = 'ready';
     }
   }
@@ -222,18 +249,18 @@
     try {
       frame = createChatFrame(capsuleId, { message, files: selectedFiles });
     } catch (reason) {
-      error = reason instanceof Error ? reason.message : copy.loadFailed;
+      setError(reason instanceof Error ? reason.message : copy.loadFailed);
       return;
     }
     busy = true;
-    error = '';
+    clearError();
     turns = [...turns, { role: 'user', text: message }];
     draft = '';
     try {
       socket.send(JSON.stringify(frame));
     } catch (reason) {
       busy = false;
-      error = reason instanceof Error ? reason.message : copy.loadFailed;
+      setError(reason instanceof Error ? reason.message : copy.loadFailed);
       socket.close();
     }
   }
@@ -241,12 +268,12 @@
   function stop() {
     if (!busy || stopping || !capsuleId || !socketReady || !socket) return;
     stopping = true;
-    error = '';
+    clearError();
     try {
       socket.send(JSON.stringify(createStopFrame(capsuleId)));
     } catch (reason) {
       stopping = false;
-      error = reason instanceof Error ? reason.message : copy.loadFailed;
+      setError(reason instanceof Error ? reason.message : copy.loadFailed);
       socket.close();
     }
   }
@@ -294,7 +321,10 @@
               <p>{turn.text}</p>
             </article>{/each}{:else}<p class="conversation-empty">{placeholder}</p>{/if}
           </div>
-          {#if error}<p class="error" role="alert">{error}</p>{/if}
+          {#if error}<div class="error" role="alert">
+            <strong>{error}</strong>
+            {#if errorDetail}<code>{copy.technicalDetail}: {errorDetail}</code>{/if}
+          </div>{/if}
           <form onsubmit={send}>
             <textarea bind:value={draft} maxlength="16000" rows="3" placeholder={placeholder} disabled={busy}></textarea>
             <div>
@@ -349,7 +379,9 @@
   button.send { border: 0; background: var(--accent); color: #001013; }
   button.stop { border-color: var(--danger); color: var(--danger); }
   button:disabled { cursor: not-allowed; opacity: 0.4; }
-  .error { margin: 0; border-left: 2px solid var(--danger); padding: 0.65rem 0.9rem; color: var(--danger); font-size: 0.72rem; }
+  .error { display: grid; gap: 0.35rem; margin: 0; border-left: 2px solid var(--danger); padding: 0.65rem 0.9rem; color: var(--danger); font-size: 0.72rem; }
+  .error strong { font-weight: 600; }
+  .error code { color: var(--text-faint); font-size: 0.6rem; line-height: 1.45; overflow-wrap: anywhere; white-space: normal; }
   .files > p { color: var(--text-faint); font-size: 0.68rem; line-height: 1.5; }
   .gate a { display: inline-flex; align-items: center; }
   .gate, .center { display: grid; min-height: 25rem; place-items: center; gap: 1rem; text-align: center; }

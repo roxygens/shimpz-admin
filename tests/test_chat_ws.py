@@ -360,7 +360,7 @@ class ChatWebSocketTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_public_terminal_rejects_secret_bearing_or_augmented_responses(self) -> None:
+    def test_public_terminal_relays_only_the_closed_sanitized_error_document(self) -> None:
         async def response_for(driver_response) -> dict:
             with mock.patch.object(self.chat_ws.localchat, "turn", return_value=driver_response):
                 websocket = _Socket(self.admin_app.app, token=self.token)
@@ -373,15 +373,43 @@ class ChatWebSocketTests(unittest.TestCase):
                 return event
 
         async def scenario() -> None:
+            concrete_error = await response_for(
+                self.capsules.DriverResponse(
+                    409,
+                    {"code": "team-has-no-active-assistants"},
+                )
+            )
+            self.assertEqual(
+                concrete_error,
+                {
+                    "type": "error",
+                    "status": 409,
+                    "detail": (
+                        "team-has-no-active-assistants: install and start at least one Assistant before chatting"
+                    ),
+                },
+            )
+
             sensitive_marker = "sk-private-must-never-cross-the-websocket"
             upstream_error = await response_for(
-                self.capsules.DriverResponse(502, {"detail": f"provider failed with {sensitive_marker}"})
+                self.capsules.DriverResponse(
+                    502,
+                    {"code": "brain-runtime-failed", "debug": sensitive_marker},
+                )
             )
             self.assertEqual(
                 upstream_error,
                 {"type": "error", "status": 502, "detail": "local chat request failed"},
             )
             self.assertNotIn(sensitive_marker, json.dumps(upstream_error))
+
+            unknown_code = await response_for(
+                self.capsules.DriverResponse(409, {"code": "private-controller-diagnostic"})
+            )
+            self.assertEqual(
+                unknown_code,
+                {"type": "error", "status": 409, "detail": "chat turn could not start"},
+            )
 
             augmented_success = await response_for(
                 self.capsules.DriverResponse(
