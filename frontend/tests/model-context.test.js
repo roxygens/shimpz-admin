@@ -9,8 +9,7 @@ import {
   configureModelContext,
   loadModelContext,
   modelContext,
-  selectModelProvider,
-  selectTeamModel,
+  selectTeamBrain,
 } from '../src/lib/modelContext.js';
 
 const gateSource = readFileSync(new URL('../src/lib/ProviderSetupGate.svelte', import.meta.url), 'utf8');
@@ -40,9 +39,13 @@ const providers = [
   },
 ];
 
-function fixtureFetcher(teamId = 'marketing', inference = { provider: 'openai', model: 'gpt-5.6-terra' }) {
+function fixtureFetcher(
+  teamId = 'marketing',
+  inference = { provider: 'openai', model: 'gpt-5.6-terra' },
+  providerCatalog = providers,
+) {
   return async (url, options = {}) => {
-    if (url === '/api/model-providers') return response(200, { providers });
+    if (url === '/api/model-providers') return response(200, { providers: providerCatalog });
     if (url === `/api/capsules/${teamId}/inference` && !options.method) {
       return inference
         ? response(200, { capsule: teamId, ...inference })
@@ -72,7 +75,7 @@ test('keeps Chat locked when the Team has no inference selection', async () => {
   assert.equal(get(modelContext).ready, false);
 });
 
-test('persists sidebar model changes immediately when the provider key is verified', async () => {
+test('persists one atomic Brain change when its provider key is verified', async () => {
   const calls = [];
   const base = fixtureFetcher();
   const fetcher = async (url, options = {}) => {
@@ -81,7 +84,7 @@ test('persists sidebar model changes immediately when the provider key is verifi
   };
   await loadModelContext(fetcher, 'marketing');
   calls.length = 0;
-  await selectTeamModel(fetcher, 'marketing', 'gpt-5.5');
+  await selectTeamBrain(fetcher, 'marketing', 'openai', 'gpt-5.5');
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, '/api/capsules/marketing/inference');
@@ -90,17 +93,17 @@ test('persists sidebar model changes immediately when the provider key is verifi
   assert.equal(get(modelContext).ready, true);
 });
 
-test('selecting an unverified provider opens the gate without writing inference', async () => {
+test('selecting an unverified Brain preserves its exact model without writing inference', async () => {
   let calls = 0;
   const base = fixtureFetcher();
   const fetcher = async (...args) => { calls += 1; return base(...args); };
   await loadModelContext(fetcher, 'marketing');
   calls = 0;
-  await selectModelProvider(fetcher, 'marketing', 'anthropic');
+  await selectTeamBrain(fetcher, 'marketing', 'anthropic', 'claude-opus-4-8');
 
   assert.equal(calls, 0);
   assert.equal(get(modelContext).provider, 'anthropic');
-  assert.equal(get(modelContext).model, 'claude-sonnet-5');
+  assert.equal(get(modelContext).model, 'claude-opus-4-8');
   assert.equal(get(modelContext).ready, false);
 });
 
@@ -115,7 +118,7 @@ test('validated credential is saved before inference and unlocks the Team', asyn
     return base(url, options);
   };
   await loadModelContext(fetcher, 'marketing');
-  await selectModelProvider(fetcher, 'marketing', 'anthropic');
+  await selectTeamBrain(fetcher, 'marketing', 'anthropic', 'claude-opus-4-8');
   calls.length = 0;
   await configureModelContext(fetcher, 'marketing', 'sk-ant-test-0123456789');
 
@@ -123,6 +126,10 @@ test('validated credential is saved before inference and unlocks the Team', asyn
     '/api/model-providers/anthropic',
     '/api/capsules/marketing/inference',
   ]);
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    provider: 'anthropic',
+    model: 'claude-opus-4-8',
+  });
   assert.equal(get(modelContext).ready, true);
   assert.equal(get(modelContext).providers[1].configured, true);
 });
@@ -136,10 +143,55 @@ test('rejected credential never reaches the Team inference endpoint', async () =
     return base(url, options);
   };
   await loadModelContext(fetcher, 'marketing');
-  await selectModelProvider(fetcher, 'marketing', 'anthropic');
+  await selectTeamBrain(fetcher, 'marketing', 'anthropic', 'claude-haiku-4-5-20251001');
   await assert.rejects(configureModelContext(fetcher, 'marketing', 'sk-ant-invalid-0123456789'), /rejected/i);
   assert.equal(inferenceWrites, 0);
   assert.equal(get(modelContext).ready, false);
+});
+
+test('switching to another verified provider writes only the selected Brain once', async () => {
+  const configuredProviders = [
+    providers[0],
+    { ...providers[1], configured: true, masked: '••••test' },
+  ];
+  const calls = [];
+  const base = fixtureFetcher(
+    'marketing',
+    { provider: 'openai', model: 'gpt-5.6-terra' },
+    configuredProviders,
+  );
+  const fetcher = async (url, options = {}) => {
+    calls.push({ url, options });
+    return base(url, options);
+  };
+  await loadModelContext(fetcher, 'marketing');
+  calls.length = 0;
+
+  await selectTeamBrain(fetcher, 'marketing', 'anthropic', 'claude-fable-5');
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, '/api/capsules/marketing/inference');
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    provider: 'anthropic',
+    model: 'claude-fable-5',
+  });
+  assert.equal(get(modelContext).ready, true);
+});
+
+test('rejects an invalid Brain pair before making a network request', async () => {
+  let calls = 0;
+  const base = fixtureFetcher();
+  const fetcher = async (...args) => { calls += 1; return base(...args); };
+  await loadModelContext(fetcher, 'marketing');
+  calls = 0;
+
+  await assert.rejects(
+    selectTeamBrain(fetcher, 'marketing', 'openai', 'claude-sonnet-5'),
+    /Invalid Team model request/,
+  );
+  assert.equal(calls, 0);
+  assert.equal(get(modelContext).provider, 'openai');
+  assert.equal(get(modelContext).model, 'gpt-5.6-terra');
 });
 
 test('late model responses from the previous Team cannot replace current authority', async () => {

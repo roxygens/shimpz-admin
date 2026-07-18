@@ -10,8 +10,7 @@
     clearModelContext,
     loadModelContext,
     modelContext,
-    selectModelProvider,
-    selectTeamModel,
+    selectTeamBrain,
   } from '$lib/modelContext.js';
   import {
     createTeam,
@@ -30,9 +29,8 @@
       team: 'Team',
       selectTeam: 'Choose a Team',
       loading: 'Loading local Team…',
-      modelProvider: 'Model Provider', model: 'Model', modelLoading: 'Loading model settings…',
-      modelReady: 'Everything is ready', modelRequired: 'API key required',
-      input: 'input', output: 'output',
+      brain: 'Brain', modelLoading: 'Loading model settings…',
+      modelReady: 'Everything is ready',
       assistants: 'Assistants',
       assistantEmpty: 'No Assistants installed.',
       storeDetail: 'Open {name} in the Store',
@@ -55,9 +53,8 @@
       team: 'Time',
       selectTeam: 'Escolha um Time',
       loading: 'Carregando Time local…',
-      modelProvider: 'Model Provider', model: 'Modelo', modelLoading: 'Carregando configuração do modelo…',
-      modelReady: 'Está tudo certo', modelRequired: 'Chave da API necessária',
-      input: 'entrada', output: 'saída',
+      brain: 'Brain', modelLoading: 'Carregando configuração do modelo…',
+      modelReady: 'Está tudo certo',
       assistants: 'Assistants',
       assistantEmpty: 'Nenhum Assistant instalado.',
       storeDetail: 'Abrir {name} na Store',
@@ -88,8 +85,18 @@
     const candidate = page.url.searchParams.get('capsule') ?? '';
     return TEAM_ID_RE.test(candidate) ? candidate : '';
   });
-  let selectedProvider = $derived(
-    $modelContext.providers.find((entry) => entry.id === $modelContext.provider) ?? null,
+  let brainOptions = $derived(
+    $modelContext.providers.flatMap((provider) => provider.models.map((model) => ({
+      value: `${provider.id}:${model.id}`,
+      provider: provider.id,
+      model: model.id,
+      title: model.title,
+    }))),
+  );
+  let selectedBrain = $derived(
+    $modelContext.provider && $modelContext.model
+      ? `${$modelContext.provider}:${$modelContext.model}`
+      : '',
   );
   let installed = $derived.by(() => {
     const catalog = new Map($teamContext.catalog.map((assistant) => [assistant.id, assistant]));
@@ -110,29 +117,16 @@
     return goto(next, { replaceState: true, keepFocus: true, noScroll: true });
   }
 
-  function price(cents) {
-    const value = cents / 100;
-    return `US$ ${Number.isInteger(value) ? value : value.toFixed(2)}`;
-  }
-
-  function modelLabel(entry) {
-    return `${entry.title} · ${price(entry.input_usd_per_million_cents)} ${copy.input} / ${price(entry.output_usd_per_million_cents)} ${copy.output}`;
-  }
-
   function changeTeam(event) {
     const id = event.currentTarget.value;
     if (!id || id === $teamContext.selectedTeamId) return;
     updateLocationTeam(id).catch(() => {});
   }
 
-  function changeProvider(event) {
+  function changeBrain(event) {
     const teamId = $teamContext.selectedTeamId;
-    if (teamId) selectModelProvider(fetch, teamId, event.currentTarget.value).catch(() => {});
-  }
-
-  function changeModel(event) {
-    const teamId = $teamContext.selectedTeamId;
-    if (teamId) selectTeamModel(fetch, teamId, event.currentTarget.value).catch(() => {});
+    const brain = brainOptions.find((entry) => entry.value === event.currentTarget.value);
+    if (teamId && brain) selectTeamBrain(fetch, teamId, brain.provider, brain.model).catch(() => {});
   }
 
   function openCreateDialog() {
@@ -255,37 +249,25 @@
   </section>
 
   {#if $teamContext.selectedTeamId}
-    <section class="team-section model-section" aria-labelledby="sidebar-model-provider-title">
-      <label for="sidebar-provider-select" id="sidebar-model-provider-title">{copy.modelProvider}</label>
+    <section class="team-section model-section" aria-labelledby="sidebar-brain-title">
+      <label for="sidebar-brain-select" id="sidebar-brain-title">{copy.brain}</label>
       <select
-        id="sidebar-provider-select"
-        value={$modelContext.provider}
-        onchange={changeProvider}
-        disabled={$modelContext.phase === 'idle' || $modelContext.phase === 'loading' || $modelContext.phase === 'saving'}
+        id="sidebar-brain-select"
+        value={selectedBrain}
+        onchange={changeBrain}
+        disabled={brainOptions.length === 0 || $modelContext.phase === 'idle' || $modelContext.phase === 'loading' || $modelContext.phase === 'saving'}
       >
-        {#each $modelContext.providers as provider (provider.id)}
-          <option value={provider.id}>{provider.title}</option>
-        {/each}
-      </select>
-
-      <label for="sidebar-model-select">{copy.model}</label>
-      <select
-        id="sidebar-model-select"
-        value={$modelContext.model}
-        onchange={changeModel}
-        disabled={!selectedProvider || $modelContext.phase === 'loading' || $modelContext.phase === 'saving'}
-      >
-        {#each selectedProvider?.models ?? [] as model (model.id)}
-          <option value={model.id}>{modelLabel(model)}</option>
+        {#each brainOptions as brain (brain.value)}
+          <option value={brain.value}>{brain.title}</option>
         {/each}
       </select>
 
       {#if $modelContext.phase === 'loading' || $modelContext.phase === 'idle'}
         <p class="model-status">{copy.modelLoading}</p>
-      {:else}
-        <p class:ready={$modelContext.ready} class="model-status">
-          <span aria-hidden="true">{$modelContext.ready ? '●' : '◇'}</span>
-          {$modelContext.ready ? copy.modelReady : copy.modelRequired}
+      {:else if $modelContext.ready}
+        <p class="model-status ready">
+          <span aria-hidden="true">●</span>
+          {copy.modelReady}
         </p>
       {/if}
     </section>
@@ -467,7 +449,7 @@
     align-items: center;
     gap: 0.4rem;
     margin: 0;
-    color: var(--danger);
+    color: var(--text-faint);
     font-family: var(--font-mono);
     font-size: 0.53rem;
     letter-spacing: 0.06em;

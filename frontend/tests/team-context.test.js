@@ -349,14 +349,21 @@ test('Team sidebar hides Assistant and file inventory until a Team is selected',
   );
 });
 
-test('Team sidebar owns provider and model selection below the Team picker', () => {
-  assert.match(sidebarSource, /import \{[\s\S]*modelContext[\s\S]*selectModelProvider[\s\S]*selectTeamModel[\s\S]*\} from '\$lib\/modelContext\.js';/);
+test('Team sidebar owns one combined Brain selection below the Team picker', () => {
+  assert.match(sidebarSource, /import \{[\s\S]*modelContext[\s\S]*selectTeamBrain[\s\S]*\} from '\$lib\/modelContext\.js';/);
   const picker = sidebarSource.indexOf('class="team-section team-picker"');
-  const provider = sidebarSource.indexOf('id="sidebar-provider-select"');
-  const model = sidebarSource.indexOf('id="sidebar-model-select"');
+  const brain = sidebarSource.indexOf('id="sidebar-brain-select"');
   const assistants = sidebarSource.indexOf('id="sidebar-assistants-title"');
-  assert.ok(picker !== -1 && picker < provider && provider < model && model < assistants);
-  assert.match(sidebarSource, /class:ready=\{\$modelContext\.ready\} class="model-status"/);
+  assert.ok(picker !== -1 && picker < brain && brain < assistants);
+  const brainSection = sidebarSource.slice(sidebarSource.lastIndexOf('<section', brain), assistants);
+  assert.equal(brainSection.match(/<select/g)?.length, 1);
+  assert.match(brainSection, /<label for="sidebar-brain-select"[^>]*>\{copy\.brain\}<\/label>/);
+  assert.match(brainSection, /\{#each brainOptions as brain \(brain\.value\)\}\s*<option value=\{brain\.value\}>\{brain\.title\}<\/option>/);
+  assert.match(sidebarSource, /providers\.flatMap\(\(provider\) => provider\.models\.map/);
+  assert.match(sidebarSource, /selectTeamBrain\(fetch, teamId, brain\.provider, brain\.model\)/);
+  assert.doesNotMatch(sidebarSource, /sidebar-provider-select|sidebar-model-select|modelLabel|input_usd_per_million_cents|output_usd_per_million_cents/);
+  assert.doesNotMatch(sidebarSource, /API key required|Chave da API necessária|modelRequired/);
+  assert.match(brainSection, /\{:else if \$modelContext\.ready\}[\s\S]*\{copy\.modelReady\}/);
 });
 
 test('Team sidebar follows client-side capsule deep links without owning another loader', () => {

@@ -132,29 +132,10 @@ export async function configureModelContext(fetcher, teamId, apiKey = '') {
   return persist(fetcher, teamId, typeof apiKey === 'string' ? apiKey.trim() : '');
 }
 
-export async function selectModelProvider(fetcher, teamId, providerId) {
+export async function selectTeamBrain(fetcher, teamId, providerId, modelId) {
   requireRequest(fetcher, teamId);
   const current = get(modelContext);
   const selected = providerFrom(current, providerId);
-  if (current.teamId !== teamId || !selected || current.phase === 'loading' || current.phase === 'saving') {
-    throw new LocalApiError('Invalid Team model request.');
-  }
-  generation += 1;
-  modelContext.set({
-    ...current,
-    phase: 'ready',
-    provider: selected.id,
-    model: selected.default_model,
-    ready: false,
-    error: '',
-  });
-  return selected.configured ? persist(fetcher, teamId) : get(modelContext);
-}
-
-export async function selectTeamModel(fetcher, teamId, modelId) {
-  requireRequest(fetcher, teamId);
-  const current = get(modelContext);
-  const selected = providerFrom(current);
   if (
     current.teamId !== teamId ||
     !selected ||
@@ -165,6 +146,13 @@ export async function selectTeamModel(fetcher, teamId, modelId) {
     throw new LocalApiError('Invalid Team model request.');
   }
   generation += 1;
-  modelContext.set({ ...current, phase: 'ready', model: modelId, ready: false, error: '' });
+  modelContext.set({
+    ...current,
+    phase: 'ready',
+    provider: selected.id,
+    model: modelId,
+    ready: false,
+    error: '',
+  });
   return selected.configured ? persist(fetcher, teamId) : get(modelContext);
 }
