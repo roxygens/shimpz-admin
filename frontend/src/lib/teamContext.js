@@ -140,8 +140,28 @@ function markFailure(attempt, error, fallback, clearAuthority) {
 }
 
 async function hydrate(fetcher, preferredId, attempt, previousId = '') {
-  const [teams, catalog] = await Promise.all([listTeams(fetcher), listAssistantCatalog(fetcher)]);
+  const teams = await listTeams(fetcher);
   const selectedTeamId = selectAvailableTeam(teams, preferredId, previousId);
+  if (!selectedTeamId) {
+    const snapshot = {
+      teams,
+      selectedTeamId: '',
+      catalog: [],
+      installedAssistants: [],
+      files: [],
+    };
+    if (attempt === generation) {
+      teamContext.set({
+        phase: 'ready',
+        ...snapshot,
+        selectedFileIds: [],
+        error: '',
+      });
+    }
+    return snapshot;
+  }
+
+  const catalog = await listAssistantCatalog(fetcher);
   const inventory = await inventorySnapshot(fetcher, selectedTeamId, catalog);
   if (attempt === generation) {
     teamContext.set({
@@ -290,6 +310,7 @@ export async function createTeam(fetcher, name) {
   const attempt = ++generation;
   const current = get(teamContext);
   teamContext.set({ ...current, phase: 'loading', error: '', selectedFileIds: [] });
+  let created;
   try {
     const response = await fetcher('/api/capsules', {
       method: 'POST',
@@ -311,9 +332,15 @@ export async function createTeam(fetcher, name) {
       throw new LocalApiError('The Team creation returned an invalid response.', response.status);
     }
     canonicalTeamName(body.name, 'The Team creation returned an invalid response.');
-    await hydrate(fetcher, body.id, attempt, body.id);
-    return { created: body.created, id: body.id, name: body.name, status: body.status };
+    created = { created: body.created, id: body.id, name: body.name, status: body.status };
   } catch (error) {
     throw markFailure(attempt, error, 'The Team could not be created.', false);
   }
+
+  try {
+    await hydrate(fetcher, created.id, attempt, created.id);
+  } catch (error) {
+    markFailure(attempt, error, 'The Team was created, but its local context could not be refreshed.', false);
+  }
+  return created;
 }

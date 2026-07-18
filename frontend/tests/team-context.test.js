@@ -128,22 +128,25 @@ test('file selection accepts only current files and enforces the chat limit', as
 });
 
 test('a confirmed empty inventory is ready while malformed Team data fails closed', async () => {
+  let catalogRequests = 0;
   await loadTeamContext(fixtureFetcher({
     '/api/capsules': async () => response(200, { capsules: [] }),
+    '/api/assistants': async () => {
+      catalogRequests += 1;
+      return response(503, { error: 'catalog unavailable' });
+    },
   }));
   assert.deepEqual(get(teamContext), {
     phase: 'ready',
     teams: [],
     selectedTeamId: '',
-    catalog: [
-      { id: 'hello-pulse', name: 'Hello Pulse' },
-      { id: 'salesnator', name: 'Salesnator' },
-    ],
+    catalog: [],
     installedAssistants: [],
     files: [],
     selectedFileIds: [],
     error: '',
   });
+  assert.equal(catalogRequests, 0);
 
   await assert.rejects(
     loadTeamContext(fixtureFetcher({
@@ -200,6 +203,30 @@ test('creates a Team with the exact payload, validates the response, and refresh
   assert.deepEqual(calls[1], { cache: 'no-store', headers: { Accept: 'application/json' } });
   assert.equal(get(teamContext).phase, 'ready');
   assert.equal(get(teamContext).selectedTeamId, 'growth');
+});
+
+test('keeps a confirmed Team creation successful when its follow-up context refresh fails', async () => {
+  let postRequests = 0;
+  const fetcher = fixtureFetcher({
+    '/api/capsules': async (options) => {
+      if (options.method === 'POST') {
+        postRequests += 1;
+        return response(201, { created: true, id: 'growth', name: 'Growth', status: 'running' });
+      }
+      return response(200, { capsules: [{ id: 'growth', name: 'Growth', status: 'running' }] });
+    },
+    '/api/assistants': async () => response(503, {}),
+  });
+
+  const created = await createTeam(fetcher, 'Growth');
+
+  assert.deepEqual(created, { created: true, id: 'growth', name: 'Growth', status: 'running' });
+  assert.equal(postRequests, 1);
+  assert.equal(get(teamContext).phase, 'error');
+  assert.equal(
+    get(teamContext).error,
+    'The local Assistant catalog is unavailable.',
+  );
 });
 
 test('rejects ambiguous Team creation responses without trusting their identity', async () => {
