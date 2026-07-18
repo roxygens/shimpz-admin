@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(
-  new URL('../src/routes/capsules/+page.js', import.meta.url),
+  new URL('../src/routes/capsules/+page.ts', import.meta.url),
   'utf8',
 );
 
