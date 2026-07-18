@@ -472,7 +472,11 @@ def _run_asgi_probe(scenario: str) -> None:
     token = auth.issue_session(adminstore.get()["session_secret"])
 
     if scenario == "routes":
-        routes = {(route.path, method) for route in admin_app.app.routes for method in (route.methods or set())}
+        routes = {
+            (route.path, method)
+            for route in admin_app.app.routes
+            for method in (getattr(route, "methods", None) or set())
+        }
         expected = {
             ("/api/assistants", "GET"),
             ("/api/capsules/{cid}/assistants", "GET"),

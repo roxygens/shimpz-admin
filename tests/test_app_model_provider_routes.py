@@ -31,7 +31,11 @@ class ModelProviderRouteTests(unittest.TestCase):
             cls.admin_app = importlib.import_module("app")
 
     def test_exposes_only_masked_credential_management_routes(self) -> None:
-        routes = {(route.path, method) for route in self.admin_app.app.routes for method in (route.methods or set())}
+        routes = {
+            (route.path, method)
+            for route in self.admin_app.app.routes
+            for method in (getattr(route, "methods", None) or set())
+        }
         self.assertTrue(
             {
                 ("/api/model-providers", "GET"),
@@ -39,10 +43,16 @@ class ModelProviderRouteTests(unittest.TestCase):
                 ("/api/model-providers/{provider}", "DELETE"),
                 ("/api/capsules/{cid}/inference", "GET"),
                 ("/api/capsules/{cid}/inference", "PUT"),
-                ("/api/capsules/{cid}/chat", "POST"),
-                ("/api/capsules/{cid}/chat/stop", "POST"),
             }.issubset(routes)
         )
+        websocket_paths = {
+            route.path
+            for route in self.admin_app.app.routes
+            if route.__class__.__name__ == "APIWebSocketRoute"
+        }
+        self.assertIn("/api/capsules/{cid}/chat/ws", websocket_paths)
+        self.assertNotIn(("/api/capsules/{cid}/chat", "POST"), routes)
+        self.assertNotIn(("/api/capsules/{cid}/chat/stop", "POST"), routes)
         self.assertFalse(any("resolve" in path or "secret" in path for path, _method in routes))
 
     def test_model_provider_routes_require_the_local_admin_session(self) -> None:

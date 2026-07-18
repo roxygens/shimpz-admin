@@ -34,7 +34,11 @@ class DriverRouteTest(unittest.TestCase):
             cls.admin_app = importlib.import_module("app")
 
     def test_exposes_exact_generic_driver_routes(self):
-        routes = {(route.path, method) for route in self.admin_app.app.routes for method in (route.methods or set())}
+        routes = {
+            (route.path, method)
+            for route in self.admin_app.app.routes
+            for method in (getattr(route, "methods", None) or set())
+        }
         expected = {
             ("/api/capsules/{cid}/drivers/{driver_id}", "GET"),
             ("/api/capsules/{cid}/drivers/{driver_id}/credentials", "POST"),
@@ -47,7 +51,7 @@ class DriverRouteTest(unittest.TestCase):
             route
             for route in self.admin_app.app.routes
             if route.path == "/api/capsules/{cid}/drivers/{driver_id}/credentials/{credential_id}"
-            and "DELETE" in route.methods
+            and "DELETE" in (getattr(route, "methods", None) or set())
         )
         self.assertTrue(delete_route.body_field.field_info.is_required())
 

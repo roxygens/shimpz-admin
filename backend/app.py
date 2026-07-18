@@ -20,7 +20,7 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
@@ -31,11 +31,11 @@ import adminstore
 import auth
 import capsules
 import catalog
+import chat_ws
 import driver_proxy
 import envfile
 import integrations
 import keyset
-import localchat
 import modelproviders
 import validate_live
 
@@ -466,21 +466,9 @@ async def capsule_inference_configure(cid: str, request: Request):
     )
 
 
-@app.post("/api/capsules/{cid}/chat")
-async def capsule_chat(cid: str, request: Request):
-    payload = await _bounded_json_object(request, capsules.MAX_CHAT_JSON_BODY_BYTES)
-    return await run_in_threadpool(
-        _capsule_driver_response,
-        lambda: localchat.turn(cid, payload),
-    )
-
-
-@app.post("/api/capsules/{cid}/chat/stop")
-async def capsule_chat_stop(cid: str):
-    return await run_in_threadpool(
-        _capsule_driver_response,
-        lambda: localchat.stop(cid),
-    )
+@app.websocket("/api/capsules/{cid}/chat/ws")
+async def capsule_chat_ws(websocket: WebSocket, cid: str):
+    await chat_ws.serve(websocket, cid, session_ok=_session_ok)
 
 
 @app.get("/api/assistants")
