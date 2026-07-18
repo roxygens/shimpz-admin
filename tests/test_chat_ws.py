@@ -373,15 +373,15 @@ class ChatWebSocketTests(unittest.TestCase):
                 return event
 
         async def scenario() -> None:
-            secret = "sk-private-must-never-cross-the-websocket"
+            sensitive_marker = "sk-private-must-never-cross-the-websocket"
             upstream_error = await response_for(
-                self.capsules.DriverResponse(502, {"detail": f"provider failed with {secret}"})
+                self.capsules.DriverResponse(502, {"detail": f"provider failed with {sensitive_marker}"})
             )
             self.assertEqual(
                 upstream_error,
                 {"type": "error", "status": 502, "detail": "local chat request failed"},
             )
-            self.assertNotIn(secret, json.dumps(upstream_error))
+            self.assertNotIn(sensitive_marker, json.dumps(upstream_error))
 
             augmented_success = await response_for(
                 self.capsules.DriverResponse(
@@ -390,7 +390,7 @@ class ChatWebSocketTests(unittest.TestCase):
                         "capsule": "capsule_1",
                         "team": "Marketing",
                         "reply": "hello",
-                        "debug": secret,
+                        "debug": sensitive_marker,
                     },
                 )
             )
@@ -398,7 +398,7 @@ class ChatWebSocketTests(unittest.TestCase):
                 augmented_success,
                 {"type": "error", "status": 502, "detail": "local chat returned an invalid response"},
             )
-            self.assertNotIn(secret, json.dumps(augmented_success))
+            self.assertNotIn(sensitive_marker, json.dumps(augmented_success))
 
         asyncio.run(scenario())
 
@@ -407,7 +407,7 @@ class ChatWebSocketTests(unittest.TestCase):
         release = threading.Event()
         future = executor.submit(release.wait)
         try:
-            with self.assertRaises(self.chat_ws.ExecutorSaturated):
+            with self.assertRaises(self.chat_ws.ExecutorSaturatedError):
                 executor.submit(lambda: None)
         finally:
             release.set()

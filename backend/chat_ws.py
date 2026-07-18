@@ -17,10 +17,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from fastapi import WebSocket, WebSocketDisconnect
-
 import capsules
 import localchat
+from fastapi import WebSocket, WebSocketDisconnect
 
 CHAT_SUBPROTOCOL = "shimpz.chat.v1"
 MAX_FRAME_BYTES = 128 * 1024
@@ -40,7 +39,7 @@ class FrameError(ValueError):
         self.close_code = close_code
 
 
-class ExecutorSaturated(RuntimeError):
+class ExecutorSaturatedError(RuntimeError):
     """The fixed worker and queue budget has no free admission slot."""
 
 
@@ -55,7 +54,7 @@ class BoundedExecutor:
 
     def submit(self, function: Callable, /, *args) -> concurrent.futures.Future:
         if not self._slots.acquire(blocking=False):
-            raise ExecutorSaturated("chat worker capacity reached")
+            raise ExecutorSaturatedError("chat worker capacity reached")
         try:
             future = self._executor.submit(function, *args)
         except BaseException:
@@ -288,7 +287,7 @@ async def _run_stop(
     try:
         try:
             response = await asyncio.wrap_future(_STOP_EXECUTOR.submit(localchat.stop, capsule_id))
-        except ExecutorSaturated:
+        except ExecutorSaturatedError:
             response = capsules.DriverResponse(429, {})
         except Exception:
             response = capsules.DriverResponse(502, {})
@@ -346,7 +345,7 @@ async def _dispatch(websocket: WebSocket, connection: _Connection, capsule_id: s
             return
         try:
             future = _TURN_EXECUTOR.submit(localchat.turn, capsule_id, payload)
-        except ExecutorSaturated:
+        except ExecutorSaturatedError:
             await _send_event(websocket, _error_terminal(429, "local chat capacity reached"))
             return
         turn = _Turn(future=future)
