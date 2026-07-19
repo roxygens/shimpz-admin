@@ -488,8 +488,8 @@ def team_assistants_list(team_id: str):
 
 
 @app.get("/api/teams/{team_id}/assistants/{assistant_id}/help")
-def team_assistant_help(team_id: str, assistant_id: str):
-    response = _team_driver_response(lambda: teams.assistant_help(team_id, assistant_id))
+def team_assistant_help(team_id: str, assistant_id: str, locale: str = "en"):
+    response = _team_driver_response(lambda: teams.assistant_help(team_id, assistant_id, locale))
     response.headers["Cache-Control"] = "no-store"
     return response
 

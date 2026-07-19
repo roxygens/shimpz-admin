@@ -6,14 +6,14 @@
   let { open = false, teamId = '', assistants = [], onclose = undefined } = $props();
 
   const COPY = {
-    en: { kicker: 'Assistant // Help', title: 'How to use', choose: 'Assistant', close: 'Close Help', loading: 'Loading Help…', failed: 'This Assistant Help is unavailable.' },
-    pt: { kicker: 'Assistant // Ajuda', title: 'Como usar', choose: 'Assistant', close: 'Fechar ajuda', loading: 'Carregando ajuda…', failed: 'A ajuda deste Assistant está indisponível.' },
-    es: { kicker: 'Assistant // Ayuda', title: 'Cómo usar', choose: 'Assistant', close: 'Cerrar ayuda', loading: 'Cargando ayuda…', failed: 'La ayuda de este Assistant no está disponible.' },
-    zh: { kicker: 'Assistant // 帮助', title: '使用方法', choose: 'Assistant', close: '关闭帮助', loading: '正在加载帮助…', failed: '此 Assistant 的帮助暂不可用。' },
-    fr: { kicker: 'Assistant // Aide', title: 'Comment l’utiliser', choose: 'Assistant', close: 'Fermer l’aide', loading: 'Chargement de l’aide…', failed: 'L’aide de cet Assistant est indisponible.' },
-    de: { kicker: 'Assistant // Hilfe', title: 'Verwendung', choose: 'Assistant', close: 'Hilfe schließen', loading: 'Hilfe wird geladen…', failed: 'Die Hilfe dieses Assistants ist nicht verfügbar.' },
-    ja: { kicker: 'Assistant // ヘルプ', title: '使い方', choose: 'Assistant', close: 'ヘルプを閉じる', loading: 'ヘルプを読み込み中…', failed: 'この Assistant のヘルプは利用できません。' },
-    ar: { kicker: 'Assistant // المساعدة', title: 'طريقة الاستخدام', choose: 'Assistant', close: 'إغلاق المساعدة', loading: 'جارٍ تحميل المساعدة…', failed: 'مساعدة هذا الـ Assistant غير متاحة.' },
+    en: { kicker: 'Assistant // Help', choose: 'Assistant', close: 'Close Help', loading: 'Loading Help…', failed: 'This Assistant Help is unavailable.' },
+    pt: { kicker: 'Assistant // Ajuda', choose: 'Assistant', close: 'Fechar ajuda', loading: 'Carregando ajuda…', failed: 'A ajuda deste Assistant está indisponível.' },
+    es: { kicker: 'Assistant // Ayuda', choose: 'Assistant', close: 'Cerrar ayuda', loading: 'Cargando ayuda…', failed: 'La ayuda de este Assistant no está disponible.' },
+    zh: { kicker: 'Assistant // 帮助', choose: 'Assistant', close: '关闭帮助', loading: '正在加载帮助…', failed: '此 Assistant 的帮助暂不可用。' },
+    fr: { kicker: 'Assistant // Aide', choose: 'Assistant', close: 'Fermer l’aide', loading: 'Chargement de l’aide…', failed: 'L’aide de cet Assistant est indisponible.' },
+    de: { kicker: 'Assistant // Hilfe', choose: 'Assistant', close: 'Hilfe schließen', loading: 'Hilfe wird geladen…', failed: 'Die Hilfe dieses Assistants ist nicht verfügbar.' },
+    ja: { kicker: 'Assistant // ヘルプ', choose: 'Assistant', close: 'ヘルプを閉じる', loading: 'ヘルプを読み込み中…', failed: 'この Assistant のヘルプは利用できません。' },
+    ar: { kicker: 'Assistant // المساعدة', choose: 'Assistant', close: 'إغلاق المساعدة', loading: 'جارٍ تحميل المساعدة…', failed: 'مساعدة هذا الـ Assistant غير متاحة.' },
   };
 
   let selectedId = $state('');
@@ -28,10 +28,6 @@
       ? selectedId
       : (assistants[0]?.id ?? ''),
   );
-  let activeAssistant = $derived(
-    assistants.find((assistant) => assistant.id === activeId) ?? null,
-  );
-
   function changeAssistant(event) {
     selectedId = event.currentTarget.value;
   }
@@ -52,6 +48,7 @@
   $effect(() => {
     const currentTeam = teamId;
     const currentAssistant = activeId;
+    const currentLocale = $locale;
     if (!open || !currentTeam || !currentAssistant) {
       phase = 'idle';
       markdown = '';
@@ -61,7 +58,7 @@
     const sequence = ++requestSequence;
     phase = 'loading';
     markdown = '';
-    getAssistantHelp(fetch, currentTeam, currentAssistant)
+    getAssistantHelp(fetch, currentTeam, currentAssistant, currentLocale)
       .then((result) => {
         if (sequence !== requestSequence || !open || teamId !== currentTeam || activeId !== currentAssistant) return;
         markdown = result.markdown;
@@ -79,10 +76,7 @@
 
 <aside id="assistant-help-drawer" aria-labelledby="assistant-help-title" hidden={!open}>
   <header>
-    <div>
-      <p>{copy.kicker}</p>
-      <h2 id="assistant-help-title">{activeAssistant?.name ?? copy.title}</h2>
-    </div>
+    <p id="assistant-help-title">{copy.kicker}</p>
     <button bind:this={closeButton} type="button" onclick={() => onclose?.()} aria-label={copy.close} title={copy.close}>×</button>
   </header>
 
@@ -127,7 +121,6 @@
   header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 0.75rem; }
   header { grid-row: 1; }
   header p, label { margin: 0 0 0.25rem; color: var(--accent); font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; }
-  h2 { margin: 0; font-size: 1.05rem; line-height: 1.2; }
   button { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border: 1px solid var(--border-strong); padding: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 1.1rem; }
   button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .picker { grid-row: 2; }

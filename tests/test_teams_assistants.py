@@ -131,7 +131,7 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
     def test_forwards_only_the_fixed_assistant_routes_with_existing_bearer(self):
         teams.list_assistants()
         teams.list_installed_assistants("team_1")
-        teams.assistant_help("team_1", "shimpz-assistant")
+        teams.assistant_help("team_1", "shimpz-assistant", "pt")
         teams.install_assistant("team_1", {"assistant": "hello-pulse"})
         teams.uninstall_assistant("team_1", "hello-pulse")
 
@@ -140,7 +140,7 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
             [
                 ("GET", "/v1/assistants"),
                 ("GET", "/v1/teams/team_1/assistants"),
-                ("GET", "/v1/teams/team_1/assistants/shimpz-assistant/help"),
+                ("GET", "/v1/teams/team_1/assistants/shimpz-assistant/help/pt"),
                 ("POST", "/v1/teams/team_1/assistants"),
                 ("DELETE", "/v1/teams/team_1/assistants/hello-pulse"),
             ],
@@ -268,6 +268,7 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
             lambda: teams.list_installed_assistants("Team_1"),
             lambda: teams.install_assistant("team_1", {"assistant": "../hello-pulse"}),
             lambda: teams.assistant_help("team_1", "../escape"),
+            lambda: teams.assistant_help("team_1", "shimpz-assistant", "../pt"),
             lambda: teams.install_assistant("team_1", {"assistant": "hello-pulse", "extra": True}),
             lambda: teams.uninstall_assistant("team_1", "../hello-pulse"),
         )
@@ -337,7 +338,7 @@ class TeamAssistantRouteTest(_LiveDriverCase):
         request = _DriverHandler.requests[0]
         self.assertEqual(
             (request["method"], request["path"]),
-            ("GET", "/v1/teams/team_1/assistants/shimpz-assistant/help"),
+            ("GET", "/v1/teams/team_1/assistants/shimpz-assistant/help/en"),
         )
         self.assertEqual(request["headers"]["authorization"], "Bearer internal-test-bearer")
 

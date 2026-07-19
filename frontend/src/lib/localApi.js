@@ -1,5 +1,6 @@
 const TEAM_ID_RE = /^[a-z0-9_]{1,40}$/;
 const ASSISTANT_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const ASSISTANT_HELP_LOCALES = new Set(['en', 'pt', 'es', 'zh', 'fr', 'de', 'ja', 'ar']);
 const RUNTIME_STATUS_RE = /^[a-z]{2,24}$/;
 const MAX_INSTALLED_ASSISTANTS = 128;
 const MAX_ASSISTANT_HELP_BYTES = 32 * 1024;
@@ -106,19 +107,20 @@ export async function listInstalledAssistants(fetcher, teamId) {
 }
 
 /** Load Help only for one installed Assistant; Markdown remains untrusted display input. */
-export async function getAssistantHelp(fetcher, teamId, assistantId) {
+export async function getAssistantHelp(fetcher, teamId, assistantId, locale = 'en') {
   if (
     typeof fetcher !== 'function' ||
     !TEAM_ID_RE.test(teamId) ||
     typeof assistantId !== 'string' ||
     assistantId.length > 80 ||
-    !ASSISTANT_ID_RE.test(assistantId)
+    !ASSISTANT_ID_RE.test(assistantId) ||
+    !ASSISTANT_HELP_LOCALES.has(locale)
   ) {
     throw new LocalApiError('Invalid local Assistant Help request.');
   }
 
   const response = await fetcher(
-    `/api/teams/${encodeURIComponent(teamId)}/assistants/${encodeURIComponent(assistantId)}/help`,
+    `/api/teams/${encodeURIComponent(teamId)}/assistants/${encodeURIComponent(assistantId)}/help?locale=${locale}`,
     { cache: 'no-store', headers: { Accept: 'application/json' } },
   );
   const body = await jsonObject(response);

@@ -134,7 +134,9 @@ test('opens installed Assistant Help immediately before Send and clears it on Te
 test('loads Help lazily per installed Assistant with an accessible multilingual drawer', () => {
   assert.match(drawerSource, /import \{ getAssistantHelp \} from '\$lib\/localApi\.js';/);
   assert.match(drawerSource, /if \(!open \|\| !currentTeam \|\| !currentAssistant\)/);
-  assert.match(drawerSource, /getAssistantHelp\(fetch, currentTeam, currentAssistant\)/);
+  assert.match(drawerSource, /const currentLocale = \$locale;/);
+  assert.match(drawerSource, /getAssistantHelp\(fetch, currentTeam, currentAssistant, currentLocale\)/);
+  assert.doesNotMatch(drawerSource, /activeAssistant\?\.name/);
   assert.match(drawerSource, /assistants\.length > 1[\s\S]*<select id="assistant-help-select"/);
   assert.match(drawerSource, /event\.key === 'Escape'[\s\S]*onclose\?\.\(\)/);
   assert.match(drawerSource, /bind:this=\{closeButton\}/);

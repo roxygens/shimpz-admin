@@ -114,12 +114,12 @@ test('loads bounded Help lazily for one exact installed Assistant', async () => 
     });
   };
 
-  assert.deepEqual(await getAssistantHelp(fetcher, 'team_1', 'shimpz-assistant'), {
+  assert.deepEqual(await getAssistantHelp(fetcher, 'team_1', 'shimpz-assistant', 'pt'), {
     assistant: 'shimpz-assistant',
     markdown: '# Shimpz Assistant\n\nTry asking for the weather.',
   });
   assert.deepEqual(calls, [{
-    url: '/api/teams/team_1/assistants/shimpz-assistant/help',
+    url: '/api/teams/team_1/assistants/shimpz-assistant/help?locale=pt',
     options: { cache: 'no-store', headers: { Accept: 'application/json' } },
   }]);
 });
@@ -161,6 +161,10 @@ test('rejects Help path injection before making a request', async () => {
       (error) => error instanceof LocalApiError && error.message === 'Invalid local Assistant Help request.',
     );
   }
+  await assert.rejects(
+    getAssistantHelp(fetcher, 'team_1', 'shimpz-assistant', '../pt'),
+    (error) => error instanceof LocalApiError && error.message === 'Invalid local Assistant Help request.',
+  );
   assert.equal(calls, 0);
 });
 

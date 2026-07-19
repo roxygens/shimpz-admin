@@ -34,6 +34,7 @@ CONTROL_TIMEOUT_SECONDS = 180
 
 _TEAM_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 _ASSISTANT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+ASSISTANT_HELP_LOCALES = frozenset({"en", "pt", "es", "zh", "fr", "de", "ja", "ar"})
 _FILE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -69,6 +70,12 @@ def canonical_team_id(value: object) -> str:
 
 def canonical_assistant_id(value: object) -> str:
     return _canonical_id(value, field="assistant id", pattern=_ASSISTANT_ID_RE, maximum=80)
+
+
+def canonical_assistant_help_locale(value: object) -> str:
+    if not isinstance(value, str) or value not in ASSISTANT_HELP_LOCALES:
+        raise TeamRequestError("unsupported Assistant Help locale")
+    return value
 
 
 def canonical_filename(value: object) -> str:
@@ -362,9 +369,10 @@ def list_installed_assistants(team_id: object) -> DriverResponse:
     return _call("GET", _assistant_path(team_id))
 
 
-def assistant_help(team_id: object, assistant_id: object) -> DriverResponse:
+def assistant_help(team_id: object, assistant_id: object, locale: object = "en") -> DriverResponse:
     """Return one installed Assistant's bounded, controller-owned Help document."""
-    return _call("GET", f"{_assistant_path(team_id, assistant_id)}/help")
+    canonical_locale = canonical_assistant_help_locale(locale)
+    return _call("GET", f"{_assistant_path(team_id, assistant_id)}/help/{canonical_locale}")
 
 
 def install_assistant(team_id: object, payload: object) -> DriverResponse:
