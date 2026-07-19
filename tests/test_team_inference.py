@@ -12,12 +12,31 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 import teams
 
+TRACE_GET = "0123456789abcdef0123456789abcdef"
+TRACE_PUT = "fedcba9876543210fedcba9876543210"
+
 
 class TeamInferenceTests(unittest.TestCase):
-    def test_forwards_only_provider_and_model_and_adds_browser_team_authority(self) -> None:
+    def test_get_and_put_project_the_real_controller_envelope(self) -> None:
         responses = (
-            teams.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"}),
-            teams.DriverResponse(200, {"provider": "anthropic", "model": "claude-sonnet-5"}),
+            teams.DriverResponse(
+                200,
+                {
+                    "team_id": "team_1",
+                    "provider": "openai",
+                    "model": "gpt-5.5",
+                    "trace_id": TRACE_GET,
+                },
+            ),
+            teams.DriverResponse(
+                200,
+                {
+                    "team_id": "team_1",
+                    "provider": "anthropic",
+                    "model": "claude-sonnet-5",
+                    "trace_id": TRACE_PUT,
+                },
+            ),
         )
         with mock.patch.object(teams, "_call", side_effect=responses) as call:
             self.assertEqual(
@@ -54,13 +73,54 @@ class TeamInferenceTests(unittest.TestCase):
             ],
         )
 
-    def test_rejects_secret_bearing_or_invalid_controller_metadata_without_reflecting_it(self) -> None:
+    def test_rejects_mismatched_team_or_invalid_trace(self) -> None:
+        invalid_responses = (
+            {
+                "team_id": "team_2",
+                "provider": "openai",
+                "model": "gpt-5.5",
+                "trace_id": TRACE_GET,
+            },
+            {
+                "team_id": "team_1",
+                "provider": "openai",
+                "model": "gpt-5.5",
+                "trace_id": "not-a-trace",
+            },
+            {
+                "team_id": "team_1",
+                "provider": "openai",
+                "model": "gpt-5.5",
+                "trace_id": TRACE_GET.upper(),
+            },
+        )
+        for body in invalid_responses:
+            with (
+                self.subTest(body=body),
+                mock.patch.object(teams, "_call", return_value=teams.DriverResponse(200, body)),
+            ):
+                self.assertEqual(
+                    teams.get_inference("team_1"),
+                    teams.DriverResponse(502, {"detail": "Team inference response is invalid."}),
+                )
+
+    def test_rejects_secret_bearing_or_extra_controller_metadata_without_reflecting_it(self) -> None:
         secret = "-".join(("sk", "private", "controller", "marker"))
         invalid_responses = (
-            {"provider": "openai", "model": "gpt-5.5", "api_key": secret},
-            {"provider": "openai", "model": "claude-sonnet-5"},
-            {"provider": "OpenAI", "model": "gpt-5.5"},
-            {"provider": "openai"},
+            {
+                "team_id": "team_1",
+                "provider": "openai",
+                "model": "gpt-5.5",
+                "trace_id": TRACE_GET,
+                "api_key": secret,
+            },
+            {
+                "team_id": "team_1",
+                "provider": "openai",
+                "model": "gpt-5.5",
+                "trace_id": TRACE_GET,
+                "internal": "controller detail",
+            },
         )
         for body in invalid_responses:
             with (

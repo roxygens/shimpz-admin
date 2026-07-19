@@ -35,6 +35,7 @@ CONTROL_TIMEOUT_SECONDS = 180
 _TEAM_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 _ASSISTANT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _FILE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+_TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _MEDIA_TYPE_RE = re.compile(r"^[a-z0-9][a-z0-9!#$&^_.+\-]*/[a-z0-9][a-z0-9!#$&^_.+\-]*$")
 MAX_CHAT_MESSAGE_CHARS = 16_000
@@ -236,21 +237,31 @@ def _project_inference_response(
     *,
     expected: tuple[str, str] | None = None,
 ) -> DriverResponse:
-    """Add browser authority only after validating the controller's secret-free metadata."""
+    """Project the authenticated controller envelope into the smaller browser contract."""
     if not 200 <= response.status < 300:
         return response
     try:
-        if set(response.body) != {"provider", "model"}:
+        if set(response.body) != {"team_id", "provider", "model", "trace_id"}:
             raise ValueError("unexpected inference fields")
+        response_team_id = response.body["team_id"]
         provider = response.body["provider"]
         model = response.body["model"]
+        trace_id = response.body["trace_id"]
+        selected_team_id = canonical_team_id(response_team_id)
         selected_provider = modelproviders.canonical_provider(provider)
         selected_model = modelproviders.canonical_model(selected_provider, model)
-        if provider != selected_provider or model != selected_model:
+        if (
+            response_team_id != selected_team_id
+            or selected_team_id != team_id
+            or provider != selected_provider
+            or model != selected_model
+            or not isinstance(trace_id, str)
+            or _TRACE_ID_RE.fullmatch(trace_id) is None
+        ):
             raise ValueError("non-canonical inference metadata")
         if expected is not None and (selected_provider, selected_model) != expected:
             raise ValueError("mismatched inference metadata")
-    except KeyError, TypeError, ValueError, modelproviders.ModelProviderError:
+    except KeyError, TypeError, ValueError, TeamRequestError, modelproviders.ModelProviderError:
         # Never reflect controller fields: an invalid response could contain credentials or internals.
         log.warning("team-driver returned an invalid inference response")
         return DriverResponse(502, {"detail": "Team inference response is invalid."})
