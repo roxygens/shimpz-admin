@@ -2,18 +2,27 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
+import { messages } from '../src/lib/messages.js';
+
 const source = readFileSync(
   new URL('../src/routes/assistants/+page.svelte', import.meta.url),
   'utf8',
 );
+const dialog = readFileSync(
+  new URL('../src/lib/AssistantActionDialog.svelte', import.meta.url),
+  'utf8',
+);
 
-test('holds Store admission through modal close and intercepts Escape while busy', () => {
+test('holds each Store admission through the shared action modal', () => {
   assert.match(source, /storeActionLatch\.acquire\('install'\)/);
   assert.match(source, /storeActionLatch\.acquire\('uninstall'\)/);
-  assert.match(source, /function closeInstallDialog\(\) \{\s+if \(busy\) return;/);
-  assert.match(source, /function cancelInstallDialog\(event\) \{\s+event\.preventDefault\(\);\s+if \(busy\) return;/);
-  assert.match(source, /<dialog[^>]+oncancel=\{cancelInstallDialog\}/);
-  assert.match(source, /finally \{\s+storeActionLatch\.release\('uninstall'\);/);
+  assert.match(source, /import AssistantActionDialog from '\$lib\/AssistantActionDialog\.svelte';/);
+  assert.match(source, /<AssistantActionDialog\s+bind:open=\{dialogOpen\}/);
+  assert.match(source, /function closeAssistantDialog\(\) \{\s+if \(busy\) return;/);
+  assert.match(source, /storeActionLatch\.release\(action\)/);
+  assert.match(dialog, /open = \$bindable\(false\)/);
+  assert.match(dialog, /<dialog[^>]+oncancel=\{cancel\}/);
+  assert.match(dialog, /if \(!busy\) oncancel\(\)/);
 });
 
 test('pins Store protocol while preserving the independent reload counter', () => {
@@ -23,21 +32,50 @@ test('pins Store protocol while preserving the independent reload counter', () =
   );
 });
 
-test('publishes transient Store feedback through the global Admin notice', () => {
+test('closes successful install admission and publishes friendly transient feedback', () => {
   assert.match(source, /import \{ showAdminNotice \} from '\$lib\/adminNotice\.js';/);
   assert.match(
     source,
-    /await refreshInstalled\(team\.id\);\s+showAdminNotice\(\{\s+tone: 'success',\s+label: copy\.uninstall,\s+message: format\(copy\.removed,/,
+    /async function confirmInstall\(\)[\s\S]*?await refreshInstalled\(team\.id\);\s+const assistantName = pendingAssistantName;\s+finishAssistantDialog\(\);\s+showAdminNotice\(\{\s+tone: 'success',\s+label: \$t\('store\.assistantInstalledLabel'\),\s+message: \$t\('store\.assistantInstalledMessage'/,
+  );
+});
+
+test('opens uninstall in the shared modal without native confirm and reports success globally', () => {
+  assert.doesNotMatch(source, /window\.confirm|\bconfirm\(/);
+  assert.match(
+    source,
+    /function beginStoreUninstall\(assistantId\)[\s\S]*?dialogAction = 'uninstall';[\s\S]*?dialogMode = 'uninstall';\s+showAssistantDialog\(\);/,
   );
   assert.match(
     source,
-    /catch \(error\) \{[\s\S]*?await refreshInstalled\(team\.id\);\s+showAdminNotice\(\{\s+tone: 'error',\s+label: copy\.failureTitle,\s+message: failure,/,
+    /async function confirmUninstall\(\)[\s\S]*?await refreshInstalled\(team\.id\);\s+finishAssistantDialog\(\);\s+showAdminNotice\(\{\s+tone: 'success',\s+label: \$t\('store\.assistantUninstalledLabel'\),\s+message: \$t\('store\.assistantUninstalledMessage'/,
   );
-  assert.doesNotMatch(source, /let (?:actionError|evaluation)|class="(?:action-error|sidebar-result)"/);
-  assert.doesNotMatch(
-    source,
-    /async function confirmInstall\(\)[\s\S]*?showAdminNotice\([\s\S]*?async function runStoreInstall/,
-  );
+  assert.match(source, /catch \(error\) \{[\s\S]*?dialogError = failure;\s+dialogMode = 'error';/);
+  assert.match(dialog, /class:dialog-danger=\{destructive\}/);
+});
+
+test('localizes the new Assistant lifecycle feedback in every Admin locale', () => {
+  const keys = [
+    'assistantInstalledLabel',
+    'assistantInstalledMessage',
+    'assistantUninstallTitle',
+    'assistantUninstallLead',
+    'assistantUninstallConfirm',
+    'assistantUninstalling',
+    'assistantActionCancel',
+    'assistantActionRetry',
+    'assistantDestinationTeam',
+    'assistantUninstalledLabel',
+    'assistantUninstalledMessage',
+    'assistantUninstallFailureTitle',
+    'assistantUninstallFailureLead',
+  ];
+  for (const [locale, localeMessages] of Object.entries(messages)) {
+    for (const key of keys) {
+      assert.equal(typeof localeMessages.store[key], 'string', `${locale}.store.${key}`);
+      assert.notEqual(localeMessages.store[key], '', `${locale}.store.${key}`);
+    }
+  }
 });
 
 test('uses Team terminology without exposing direct Power controls', () => {

@@ -13,6 +13,7 @@
     projectReleasedStoreAssistantIds,
   } from '$lib/assistantIntent.js';
   import { showAdminNotice } from '$lib/adminNotice.js';
+  import AssistantActionDialog from '$lib/AssistantActionDialog.svelte';
   import { installAssistant, safeApiError } from '$lib/localApi.js';
   import { t, locale } from '$lib/i18n.js';
   import { refreshTeamInventory, teamContext } from '$lib/teamContext.js';
@@ -21,8 +22,6 @@
   const FRAME_READY_TIMEOUT_MS = 8000;
   const LOCAL_COPY = {
     en: {
-      installedNow: 'Installed now',
-      alreadyInstalled: 'Already installed',
       createFromSidebar: 'Close this dialog and create a Team from the sidebar.',
       confirmTitle: 'Install Shimpz Assistant?',
       confirmLead: 'Choose the exact Team. The Store cannot choose it or install anything for you.',
@@ -34,8 +33,6 @@
       noTeamLead: 'Your request reached this Admin, but nothing was installed because there is no local destination yet.',
       unavailableTitle: 'Shimpz Assistant is unavailable right now.',
       unavailableLead: 'The local catalog or installed inventory could not be verified. Retry the local data before installing.',
-      successTitle: 'Shimpz Assistant is ready.',
-      successLead: 'The Assistant was installed without running any Power or routine.',
       failureTitle: 'The local action did not finish.',
       failureLead: 'Nothing was hidden. Review the error below and retry when the local controller is available.',
       teamLabel: 'Destination Team',
@@ -46,9 +43,6 @@
       confirm: 'Confirm install',
       retryAction: 'Try again',
       working: 'Installing…',
-      uninstall: 'Uninstall from Team',
-      uninstallConfirm: 'Uninstall {assistant} from {team}?',
-      removed: '{assistant} was uninstalled from {team}.',
       genericFailure: 'The local evaluation could not be completed.',
       frameLoading: 'Loading the Assistant Store…',
       frameFailureTitle: 'The Store did not finish loading.',
@@ -57,8 +51,6 @@
       openStore: 'Open Store',
     },
     pt: {
-      installedNow: 'Instalado agora',
-      alreadyInstalled: 'Já estava instalado',
       createFromSidebar: 'Feche esta janela e crie um Time pela barra lateral.',
       confirmTitle: 'Instalar o Shimpz Assistant?',
       confirmLead: 'Escolha o Time exato. A Store não pode escolhê-lo nem instalar nada por você.',
@@ -70,8 +62,6 @@
       noTeamLead: 'Seu pedido chegou a este Admin, mas nada foi instalado porque ainda não existe um destino local.',
       unavailableTitle: 'O Shimpz Assistant está indisponível agora.',
       unavailableLead: 'Não foi possível verificar o catálogo local ou o inventário instalado. Atualize os dados locais antes de instalar.',
-      successTitle: 'O Shimpz Assistant está pronto.',
-      successLead: 'O Assistant foi instalado sem executar nenhuma Power ou rotina.',
       failureTitle: 'A ação local não foi concluída.',
       failureLead: 'Nada foi ocultado. Revise o erro abaixo e tente novamente quando o controller local estiver disponível.',
       teamLabel: 'Time de destino',
@@ -82,9 +72,6 @@
       confirm: 'Confirmar instalação',
       retryAction: 'Tentar novamente',
       working: 'Instalando…',
-      uninstall: 'Desinstalar do Time',
-      uninstallConfirm: 'Desinstalar {assistant} de {team}?',
-      removed: '{assistant} foi desinstalado de {team}.',
       genericFailure: 'Não foi possível concluir a avaliação local.',
       frameLoading: 'Carregando a Store de Assistants…',
       frameFailureTitle: 'A Store não terminou de carregar.',
@@ -99,9 +86,9 @@
   let selectedTeam = $state('');
   let pendingAssistant = $state('');
   let iframeElement = $state();
-  let confirmDialog = $state();
+  let dialogOpen = $state(false);
+  let dialogAction = $state('install');
   let dialogMode = $state('install');
-  let dialogResult = $state(null);
   let dialogAttempt = 0;
   let framePhase = $state('loading');
   let frameHeight = $state(420);
@@ -126,24 +113,65 @@
     runningTeams.find((team) => team.id === $teamContext.selectedTeamId) ?? null,
   );
   let selectedTeamRecord = $derived(runningTeams.find((team) => team.id === selectedTeam) ?? null);
-  let dialogTitle = $derived({
-    checking: copy.checkingTitle,
-    install: copy.confirmTitle,
-    installed: copy.alreadyTitle,
-    'no-team': copy.noTeamTitle,
-    unavailable: copy.unavailableTitle,
-    success: copy.successTitle,
-    error: copy.failureTitle,
-  }[dialogMode] ?? copy.confirmTitle);
-  let dialogLead = $derived({
-    checking: copy.checkingLead,
-    install: copy.confirmLead,
-    installed: copy.alreadyLead,
-    'no-team': copy.noTeamLead,
-    unavailable: copy.unavailableLead,
-    success: copy.successLead,
-    error: copy.failureLead,
-  }[dialogMode] ?? copy.confirmLead);
+  let pendingAssistantName = $derived(
+    $teamContext.catalog.find((entry) => entry.id === pendingAssistant)?.name ?? pendingAssistant,
+  );
+  let dialogTitle = $derived(
+    dialogAction === 'uninstall'
+      ? dialogMode === 'error'
+        ? $t('store.assistantUninstallFailureTitle')
+        : $t('store.assistantUninstallTitle', { assistant: pendingAssistantName })
+      : ({
+          checking: copy.checkingTitle,
+          install: copy.confirmTitle,
+          installed: copy.alreadyTitle,
+          'no-team': copy.noTeamTitle,
+          unavailable: copy.unavailableTitle,
+          error: copy.failureTitle,
+        }[dialogMode] ?? copy.confirmTitle),
+  );
+  let dialogLead = $derived(
+    dialogAction === 'uninstall'
+      ? dialogMode === 'error'
+        ? $t('store.assistantUninstallFailureLead')
+        : $t('store.assistantUninstallLead', {
+            assistant: pendingAssistantName,
+            team: selectedTeamRecord?.name ?? '',
+          })
+      : ({
+          checking: copy.checkingLead,
+          install: copy.confirmLead,
+          installed: copy.alreadyLead,
+          'no-team': copy.noTeamLead,
+          unavailable: copy.unavailableLead,
+          error: copy.failureLead,
+        }[dialogMode] ?? copy.confirmLead),
+  );
+  let dialogPrimaryVisible = $derived(
+    dialogAction === 'uninstall'
+      ? ['uninstall', 'error'].includes(dialogMode)
+      : ['install', 'error'].includes(dialogMode),
+  );
+  let dialogPrimaryLabel = $derived(
+    busy
+      ? dialogAction === 'uninstall'
+        ? $t('store.assistantUninstalling')
+        : copy.working
+      : dialogMode === 'error'
+        ? dialogAction === 'uninstall'
+          ? $t('store.assistantActionRetry')
+          : copy.retryAction
+        : dialogAction === 'uninstall'
+          ? $t('store.assistantUninstallConfirm')
+          : copy.confirm,
+  );
+  let dialogSecondaryLabel = $derived(
+    ['install', 'uninstall'].includes(dialogMode)
+      ? dialogAction === 'uninstall'
+        ? $t('store.assistantActionCancel')
+        : copy.cancel
+      : $t('integration.close'),
+  );
 
   $effect(() => {
     const context = $teamContext;
@@ -159,12 +187,6 @@
   async function jsonObject(response) {
     const body = await response.json().catch(() => ({}));
     return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
-  }
-
-  function format(message, values) {
-    let output = message;
-    for (const [key, value] of Object.entries(values)) output = output.replaceAll(`{${key}}`, value);
-    return output;
   }
 
   function publishStoreSnapshot(
@@ -220,18 +242,18 @@
     }
   }
 
-  function showInstallDialog() {
-    if (confirmDialog && !confirmDialog.open) confirmDialog.showModal();
+  function showAssistantDialog() {
+    dialogOpen = true;
   }
 
   async function beginInstall(assistantId) {
     const attempt = ++dialogAttempt;
+    dialogAction = 'install';
     pendingAssistant = assistantId;
     selectedTeam = activeTeamRecord?.id ?? '';
     dialogError = '';
-    dialogResult = null;
     dialogMode = 'checking';
-    showInstallDialog();
+    showAssistantDialog();
 
     if (assistantId !== OFFICIAL_ASSISTANT_ID) {
       dialogMode = 'unavailable';
@@ -322,12 +344,19 @@
 
     busy = true;
     dialogError = '';
-    dialogResult = null;
     try {
-      const { installed } = await installAssistant(fetch, team.id, OFFICIAL_ASSISTANT_ID);
-      dialogResult = { note: installed ? copy.installedNow : copy.alreadyInstalled };
-      dialogMode = 'success';
+      await installAssistant(fetch, team.id, OFFICIAL_ASSISTANT_ID);
       await refreshInstalled(team.id);
+      const assistantName = pendingAssistantName;
+      finishAssistantDialog();
+      showAdminNotice({
+        tone: 'success',
+        label: $t('store.assistantInstalledLabel'),
+        message: $t('store.assistantInstalledMessage', {
+          assistant: assistantName,
+          team: team.name,
+        }),
+      });
     } catch (error) {
       const failure = error instanceof Error ? error.message : copy.genericFailure;
       await refreshInstalled(team.id);
@@ -343,7 +372,7 @@
       await beginInstall(assistantId);
     } catch (error) {
       dialogError = error instanceof Error ? error.message : copy.genericFailure;
-      if (confirmDialog?.open) {
+      if (dialogOpen) {
         dialogMode = 'error';
       } else {
         storeActionLatch.release('install');
@@ -352,77 +381,92 @@
     }
   }
 
-  function closeInstallDialog() {
-    if (busy) return;
+  function finishAssistantDialog() {
     dialogAttempt += 1;
-    confirmDialog?.close();
-    storeActionLatch.release('install');
+    const action = dialogAction;
+    dialogOpen = false;
+    storeActionLatch.release(action);
     publishStoreSnapshot();
   }
 
-  function cancelInstallDialog(event) {
-    event.preventDefault();
+  function closeAssistantDialog() {
     if (busy) return;
-    closeInstallDialog();
+    finishAssistantDialog();
   }
 
-  async function uninstallInstalled(assistant) {
-    if (busy || !activeTeamRecord) return;
-    const team = activeTeamRecord;
-    const question = format(copy.uninstallConfirm, {
-      assistant: assistant.assistant,
-      team: team.name,
-    });
-    if (!window.confirm(question)) {
-      publishStoreSnapshot();
-      return;
-    }
+  function cancelAssistantDialog() {
+    closeAssistantDialog();
+  }
+
+  async function confirmUninstall() {
+    if (busy || !selectedTeamRecord || dialogAction !== 'uninstall') return;
+    const team = selectedTeamRecord;
+    const assistantId = pendingAssistant;
+    const assistantName = pendingAssistantName;
     busy = true;
+    dialogError = '';
     try {
       const response = await fetch(
-        `/api/teams/${encodeURIComponent(team.id)}/assistants/${encodeURIComponent(assistant.assistant)}`,
+        `/api/teams/${encodeURIComponent(team.id)}/assistants/${encodeURIComponent(assistantId)}`,
         { method: 'DELETE', headers: { Accept: 'application/json' } },
       );
       const body = await jsonObject(response);
       if (!response.ok) throw new Error(safeApiError(body, copy.genericFailure));
       await refreshInstalled(team.id);
+      finishAssistantDialog();
       showAdminNotice({
         tone: 'success',
-        label: copy.uninstall,
-        message: format(copy.removed, {
-          assistant: assistant.assistant,
+        label: $t('store.assistantUninstalledLabel'),
+        message: $t('store.assistantUninstalledMessage', {
+          assistant: assistantName,
           team: team.name,
         }),
       });
     } catch (error) {
       const failure = error instanceof Error ? error.message : copy.genericFailure;
       await refreshInstalled(team.id);
-      showAdminNotice({
-        tone: 'error',
-        label: copy.failureTitle,
-        message: failure,
-      });
+      dialogError = failure;
+      dialogMode = 'error';
     } finally {
       busy = false;
     }
   }
 
-  async function beginStoreUninstall(assistantId) {
+  function confirmAssistantAction() {
+    if (dialogAction === 'uninstall') {
+      void confirmUninstall();
+      return;
+    }
+    void confirmInstall();
+  }
+
+  function beginStoreUninstall(assistantId) {
     const installed = $teamContext.phase === 'ready'
       ? $teamContext.installedAssistants.find((entry) => entry.assistant === assistantId)
       : null;
     if (!activeTeamRecord || !installed || busy) {
+      storeActionLatch.release('uninstall');
       publishStoreSnapshot();
       return;
     }
-    await uninstallInstalled(installed);
+    dialogAction = 'uninstall';
+    pendingAssistant = installed.assistant;
+    selectedTeam = activeTeamRecord.id;
+    dialogError = '';
+    dialogMode = 'uninstall';
+    showAssistantDialog();
   }
 
-  async function runStoreUninstall(assistantId) {
+  function runStoreUninstall(assistantId) {
     try {
-      await beginStoreUninstall(assistantId);
-    } finally {
-      storeActionLatch.release('uninstall');
+      beginStoreUninstall(assistantId);
+    } catch (error) {
+      dialogError = error instanceof Error ? error.message : copy.genericFailure;
+      if (dialogOpen) {
+        dialogMode = 'error';
+      } else {
+        storeActionLatch.release('uninstall');
+      }
       publishStoreSnapshot();
     }
   }
@@ -479,60 +523,26 @@
 
 <p class="trust-boundary"><span aria-hidden="true">◇</span>{$t('store.boundary')}</p>
 
-<dialog bind:this={confirmDialog} aria-labelledby="assistant-confirm-title" oncancel={cancelInstallDialog}>
-  <form class="dialog-panel" onsubmit={(event) => { event.preventDefault(); confirmInstall(); }}>
-    <header>
-      <p class="dialog-kicker">Assistant // local admission</p>
-      <h2 id="assistant-confirm-title">{dialogTitle}</h2>
-      <p>{dialogLead}</p>
-    </header>
-    {#if selectedTeamRecord}
-      <div class="dialog-target">
-        <span>{copy.teamLabel}</span>
-        <strong>{selectedTeamRecord.name}</strong>
-        <code>{selectedTeamRecord.id}</code>
-      </div>
-    {/if}
-    {#if dialogMode === 'checking'}
-      <p class="dialog-progress" role="status">{copy.preparing}</p>
-    {:else if dialogMode === 'no-team'}
-      <p class="dialog-route-hint">{copy.createFromSidebar}</p>
-    {/if}
-    {#if dialogError}<p class="dialog-error" role="alert">{dialogError}</p>{/if}
-    {#if dialogResult}
-      <div class="dialog-result" role="status">
-        <span>{dialogResult.note}</span>
-        {#if dialogResult.message}<strong>{dialogResult.message}</strong>{/if}
-      </div>
-    {/if}
-    <footer>
-      <button type="button" class="dialog-secondary" disabled={busy} onclick={closeInstallDialog}>
-        {dialogMode === 'install' ? copy.cancel : copy.close}
-      </button>
-      {#if ['install', 'error'].includes(dialogMode)}
-        <button type="submit" class="dialog-primary" disabled={busy || !selectedTeam || !officialAssistantAvailable}>
-          {busy
-            ? copy.working
-            : dialogMode === 'error'
-                ? copy.retryAction
-                : copy.confirm}
-        </button>
-      {/if}
-    </footer>
-  </form>
-</dialog>
+<AssistantActionDialog
+  bind:open={dialogOpen}
+  title={dialogTitle}
+  lead={dialogLead}
+  targetLabel={dialogAction === 'uninstall' ? $t('store.assistantDestinationTeam') : copy.teamLabel}
+  targetName={selectedTeamRecord?.name ?? ''}
+  targetId={selectedTeamRecord?.id ?? ''}
+  progress={dialogMode === 'checking' ? copy.preparing : ''}
+  hint={dialogMode === 'no-team' ? copy.createFromSidebar : ''}
+  error={dialogError}
+  primaryLabel={dialogPrimaryLabel}
+  secondaryLabel={dialogSecondaryLabel}
+  primaryVisible={dialogPrimaryVisible}
+  primaryDisabled={!selectedTeamRecord || !officialAssistantAvailable}
+  {busy}
+  destructive={dialogAction === 'uninstall'}
+  onconfirm={confirmAssistantAction}
+  oncancel={cancelAssistantDialog} />
 
 <style>
-  .dialog-kicker {
-    margin: 0 0 0.9rem;
-    color: var(--accent);
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.19em;
-    text-transform: uppercase;
-  }
-
   .frame-actions a {
     display: inline-flex;
     min-height: 2.5rem;
@@ -557,8 +567,6 @@
     filter: drop-shadow(0 0 9px rgba(0, 240, 255, 0.32));
   }
 
-  .dialog-primary,
-  .dialog-secondary,
   .frame-actions button {
     min-height: 2.8rem;
     border: 0;
@@ -602,24 +610,6 @@
   .trust-boundary { display: flex; max-width: 78ch; align-items: flex-start; gap: 0.65rem; margin: 1rem 0 0; color: var(--text-faint); font-size: 0.76rem; line-height: 1.6; }
   .trust-boundary span { color: var(--accent-alt); }
 
-  dialog { width: min(34rem, calc(100vw - 2rem)); border: 0; padding: 0; background: transparent; color: var(--text); }
-  dialog::backdrop { background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); }
-  .dialog-panel { padding: clamp(1.4rem, 4vw, 2.2rem); background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--border-strong), 0 24px 80px rgba(0, 0, 0, 0.65); clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
-  .dialog-panel h2 { margin: 0; font-size: clamp(1.6rem, 4vw, 2.5rem); letter-spacing: -0.05em; }
-  .dialog-panel header > p:last-child { margin: 0.8rem 0 1.5rem; color: var(--text-dim); line-height: 1.6; }
-  .dialog-target { display: grid; gap: 0.2rem; border: 1px solid var(--border-strong); padding: 0.8rem; background: #050708; }
-  .dialog-target span { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; }
-  .dialog-target strong { font-size: 0.9rem; }
-  .dialog-target code { color: var(--accent); font-size: 0.65rem; }
-  .dialog-progress { margin: 1rem 0 0; color: var(--accent); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
-  .dialog-route-hint { margin: 1rem 0 0; border-inline-start: 2px solid var(--accent); padding: 0.7rem 0.85rem; color: var(--text-dim); font-size: 0.72rem; line-height: 1.5; }
-  .dialog-error { margin: 0.8rem 0 0; color: var(--danger); font-size: 0.78rem; line-height: 1.5; }
-  .dialog-result { display: grid; gap: 0.35rem; margin-top: 1rem; border-left: 2px solid var(--success); padding: 0.85rem 1rem; background: rgba(5, 255, 161, 0.045); }
-  .dialog-result span { color: var(--success); font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; }
-  .dialog-result strong { font-size: 0.9rem; }
-  .dialog-panel footer { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; }
-  .dialog-secondary { background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--text-dim); }
-
   @media (max-width: 720px) {
     .frame-error { grid-template-columns: auto minmax(0, 1fr); align-content: center; }
     .frame-actions { grid-column: 1 / -1; }
@@ -629,6 +619,5 @@
     .frame-error-mark { margin: 0 auto; }
     .frame-actions { display: grid; }
     .frame-actions a, .frame-actions button { width: 100%; }
-    .dialog-panel footer { align-items: stretch; flex-direction: column-reverse; }
   }
 </style>
