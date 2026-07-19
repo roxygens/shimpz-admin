@@ -40,6 +40,17 @@ test('accepts only a bounded, internally consistent notification envelope', () =
     () => parseNotificationEnvelope({ notifications: [{ ...notification, changelog: 'bad\u0000markdown' }], unread_count: 1 }),
     /invalid notification changelog/,
   );
+  assert.doesNotThrow(() => parseNotificationEnvelope({
+    notifications: [{ ...notification, changelog: 'x'.repeat(9 * 1024) }],
+    unread_count: 1,
+  }));
+  assert.throws(
+    () => parseNotificationEnvelope({
+      notifications: [{ ...notification, changelog: 'x'.repeat((32 * 1024) + 1) }],
+      unread_count: 1,
+    }),
+    /invalid notification changelog/,
+  );
 });
 
 test('validates the exact non-executable sync summary contract', () => {

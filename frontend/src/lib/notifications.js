@@ -4,7 +4,7 @@ const UTC_RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const MAX_NOTIFICATIONS = 256;
 const MAX_ASSISTANT_ID_LENGTH = 80;
 const MAX_HEADLINE_LENGTH = 160;
-const MAX_CHANGELOG_BYTES = 8 * 1024;
+const MAX_CHANGELOG_BYTES = 32 * 1024;
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
