@@ -55,11 +55,12 @@ test('places the Admin brand in the Team rail and keeps only locale controls in 
 test('keeps Chat viewport-bound while normal pages use a constrained responsive workspace', () => {
   assert.match(shell, /--admin-divider: var\(--border-strong\);/);
   assert.match(shell, /\.topbar \{[\s\S]*border-bottom: 1px solid var\(--admin-divider\);/);
+  assert.match(shell, /\.admin-shell\.authenticated \.topbar \{\s*border-bottom: 0;/);
   assert.match(shell, /\.shell-sidebar \{[\s\S]*border-inline-end: 1px solid var\(--admin-divider\);/);
   assert.match(shell, /\.admin-shell\.authenticated \{[\s\S]*height: 100dvh;[\s\S]*'sidebar header' auto[\s\S]*'sidebar main' minmax\(0, 1fr\)[\s\S]*overflow: hidden;/);
   assert.match(shell, /minmax\(18rem, 20rem\) minmax\(0, 1fr\)/);
   assert.match(shell, /\.shell-sidebar \{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\);/);
-  assert.match(shell, /\.sidebar-brand \{[\s\S]*min-height: calc\(5\.25rem \+ 1px\);/);
+  assert.match(shell, /\.sidebar-brand \{[\s\S]*min-height: 4\.5rem;/);
   assert.doesNotMatch(shell, /\.sidebar-brand \{[^}]*border-bottom:/s);
   assert.doesNotMatch(shell, /\.shell-sidebar \{[^}]*border-bottom:/s);
   assert.match(shell, /\.admin-shell\.chat-mode \{[\s\S]*height: 100dvh;[\s\S]*overflow: hidden;/);

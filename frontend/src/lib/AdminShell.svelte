@@ -98,6 +98,10 @@
     background: rgba(0, 0, 0, 0.82);
   }
 
+  .admin-shell.authenticated .topbar {
+    border-bottom: 0;
+  }
+
   .topbar-inner {
     display: grid;
     width: 100%;
@@ -137,7 +141,7 @@
   .sidebar-brand {
     display: flex;
     min-width: 0;
-    min-height: calc(5.25rem + 1px);
+    min-height: 4.5rem;
     align-items: center;
     padding: 0 1.15rem;
   }

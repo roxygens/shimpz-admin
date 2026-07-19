@@ -384,14 +384,14 @@
     min-width: 0;
     min-height: 100%;
     flex-direction: column;
-    padding: 0.8rem 0;
+    padding: 0;
   }
 
   .team-section {
     display: grid;
     min-width: 0;
-    gap: 0.75rem;
-    padding: 1rem 1.15rem 1.2rem;
+    gap: 0.6rem;
+    padding: 0.75rem 1.15rem;
   }
 
   .section-heading {
