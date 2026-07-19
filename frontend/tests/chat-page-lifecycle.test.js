@@ -139,6 +139,22 @@ test('fills the main column while keeping turns scrollable and the composer visi
   assert.doesNotMatch(source, /class="heading"|max-height: 32rem/);
 });
 
+test('uses the full composer rail for Team replies while keeping user turns bounded', () => {
+  assert.match(
+    source,
+    /article\.assistant \{\s*align-self: stretch;\s*width: 100%;\s*max-width: none;/,
+  );
+  assert.match(
+    source,
+    /article\.user \{\s*align-self: flex-end;\s*width: fit-content;\s*max-width: min\(80%, 46rem\);/,
+  );
+  assert.match(source, /article \{[\s\S]*?background: transparent;/);
+  assert.match(source, /article\.assistant::before \{[\s\S]*?background: var\(--accent-alt\);/);
+  assert.match(source, /article\.user::before \{[\s\S]*?background: var\(--accent\);/);
+  assert.match(source, /@media \(max-width: 640px\) \{\s*article\.user \{ max-width: 92%; \}/);
+  assert.doesNotMatch(source, /@media \(max-width: 640px\) \{\s*article \{ max-width:/);
+});
+
 test('shows the accessible Shimpz motion mark only while the Team is working', () => {
   assert.match(source, /import ShimpzThinking from '\$lib\/ShimpzThinking\.svelte';/);
   assert.match(source, /\{#if busy\}<ShimpzThinking label=\{thinking\} \/>\{\/if\}/);

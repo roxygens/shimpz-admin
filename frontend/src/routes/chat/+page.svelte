@@ -493,7 +493,8 @@
 
   article {
     position: relative;
-    max-width: min(80%, 46rem);
+    min-width: 0;
+    box-sizing: border-box;
     padding: 0.3rem 1rem;
     background: transparent;
   }
@@ -510,6 +511,8 @@
 
   article.user {
     align-self: flex-end;
+    width: fit-content;
+    max-width: min(80%, 46rem);
     color: var(--accent);
   }
 
@@ -519,7 +522,9 @@
   }
 
   article.assistant {
-    align-self: flex-start;
+    align-self: stretch;
+    width: 100%;
+    max-width: none;
     color: var(--accent-alt);
   }
 
@@ -708,7 +713,7 @@
   }
 
   @media (max-width: 640px) {
-    article { max-width: 92%; }
+    article.user { max-width: 92%; }
     .conversation { --chat-rail-gutter: 0.6rem; }
     .composer { gap: 0.45rem; padding: 0.6rem 0; }
     .composer-input { gap: 0.45rem; }
