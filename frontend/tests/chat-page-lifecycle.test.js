@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/routes/chat/+page.svelte', import.meta.url), 'utf8');
+const thinkingSource = readFileSync(new URL('../src/lib/ShimpzThinking.svelte', import.meta.url), 'utf8');
 const drawerSource = readFileSync(new URL('../src/lib/AssistantHelpDrawer.svelte', import.meta.url), 'utf8');
 const markdownSource = readFileSync(new URL('../src/lib/HelpMarkdown.svelte', import.meta.url), 'utf8');
 const inlineSource = readFileSync(new URL('../src/lib/HelpInline.svelte', import.meta.url), 'utf8');
@@ -99,7 +100,15 @@ test('fills the main column while keeping turns scrollable and the composer visi
   );
   assert.match(source, /\.turns \{[\s\S]*?min-height: 0;[\s\S]*?overflow-y: auto;/);
   assert.match(source, /\.empty-conversation \.turns \{\s*display: none;/);
-  assert.match(source, /\.composer \{[\s\S]*?width: min\(calc\(100% - 1\.6rem\), 52rem\);[\s\S]*?grid-row: 3;/);
+  assert.match(source, /--chat-rail-gutter: 0\.8rem;[\s\S]*?--chat-rail-width: 52rem;/);
+  assert.match(
+    source,
+    /\.turns \{[\s\S]*?padding-inline: max\([\s\S]*?var\(--chat-rail-gutter\),[\s\S]*?calc\(\(100% - var\(--chat-rail-width\)\) \/ 2\)[\s\S]*?\);/,
+  );
+  assert.match(
+    source,
+    /\.composer \{[\s\S]*?width: min\([\s\S]*?var\(--chat-rail-width\)[\s\S]*?\);[\s\S]*?grid-row: 3;/,
+  );
   assert.match(source, /\.empty-conversation \.composer \{\s*grid-row: 1;\s*align-self: center;/);
   assert.match(source, /textarea \{[\s\S]*?height: 3\.2rem;[\s\S]*?resize: none;[\s\S]*?overflow-y: auto;/);
   assert.doesNotMatch(source, /\.composer \{[^}]*border-top:/s);
@@ -110,6 +119,23 @@ test('fills the main column while keeping turns scrollable and the composer visi
   );
   assert.match(source, /\.error \{[\s\S]*?max-height: min\(8rem, 24dvh\);[\s\S]*?overflow-y: auto;/);
   assert.doesNotMatch(source, /class="heading"|max-height: 32rem/);
+});
+
+test('shows the accessible Shimpz motion mark only while the Team is working', () => {
+  assert.match(source, /import ShimpzThinking from '\$lib\/ShimpzThinking\.svelte';/);
+  assert.match(source, /\{#if busy\}<ShimpzThinking label=\{thinking\} \/>\{\/if\}/);
+  assert.match(thinkingSource, /role="status"/);
+  assert.match(thinkingSource, /shimpz-thinking\.svg/);
+  assert.match(thinkingSource, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
+test('renders only Assistant replies through the closed Markdown component', () => {
+  assert.match(source, /import HelpMarkdown from '\$lib\/HelpMarkdown\.svelte';/);
+  assert.match(
+    source,
+    /\{#if turn\.role === 'assistant'\}[\s\S]*?<HelpMarkdown markdown=\{turn\.text\} variant="chat" \/>[\s\S]*?\{:else\}[\s\S]*?<p>\{turn\.text\}<\/p>/,
+  );
+  assert.doesNotMatch(source, /\{@html/);
 });
 
 test('keeps friendly i18n and sanitized technical diagnostics separate', () => {

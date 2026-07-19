@@ -1,9 +1,11 @@
 <script>
   import { onMount } from 'svelte';
   import AssistantHelpDrawer from '$lib/AssistantHelpDrawer.svelte';
+  import HelpMarkdown from '$lib/HelpMarkdown.svelte';
   import { locale } from '$lib/i18n.js';
   import { modelContext } from '$lib/modelContext.js';
   import ProviderSetupGate from '$lib/ProviderSetupGate.svelte';
+  import ShimpzThinking from '$lib/ShimpzThinking.svelte';
   import { teamContext } from '$lib/teamContext.js';
   import {
     CHAT_WS_PROTOCOL,
@@ -313,9 +315,14 @@
           {#each turns as turn}
             <article class={turn.role}>
               <small>{turn.role === 'user' ? copy.you : turn.author}</small>
-              <p>{turn.text}</p>
+              {#if turn.role === 'assistant'}
+                <HelpMarkdown markdown={turn.text} variant="chat" />
+              {:else}
+                <p>{turn.text}</p>
+              {/if}
             </article>
           {/each}
+          {#if busy}<ShimpzThinking label={thinking} />{/if}
         </div>
 
         {#if visibleError}
@@ -407,6 +414,8 @@
   }
 
   .conversation {
+    --chat-rail-gutter: 0.8rem;
+    --chat-rail-width: 52rem;
     display: grid;
     height: 100%;
     min-width: 0;
@@ -437,7 +446,11 @@
     gap: 0.8rem;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 1rem;
+    padding-block: 1rem;
+    padding-inline: max(
+      var(--chat-rail-gutter),
+      calc((100% - var(--chat-rail-width)) / 2)
+    );
   }
 
   .empty-conversation .turns {
@@ -487,8 +500,13 @@
 
   .error {
     grid-row: 2;
+    width: min(
+      calc(100% - (2 * var(--chat-rail-gutter))),
+      var(--chat-rail-width)
+    );
     max-height: min(8rem, 24dvh);
-    margin: 0 0.9rem;
+    margin: 0;
+    justify-self: center;
     overflow-y: auto;
   }
 
@@ -508,7 +526,10 @@
 
   .composer {
     display: grid;
-    width: min(calc(100% - 1.6rem), 52rem);
+    width: min(
+      calc(100% - (2 * var(--chat-rail-gutter))),
+      var(--chat-rail-width)
+    );
     grid-template-columns: minmax(0, 1fr) auto;
     grid-row: 3;
     align-items: end;
@@ -620,7 +641,8 @@
 
   @media (max-width: 640px) {
     article { max-width: 92%; }
-    .composer { width: min(calc(100% - 1.2rem), 52rem); gap: 0.45rem; padding: 0.6rem 0; }
+    .conversation { --chat-rail-gutter: 0.6rem; }
+    .composer { gap: 0.45rem; padding: 0.6rem 0; }
     .composer > div { gap: 0.3rem; }
     button { padding-inline: 0.65rem; }
   }
