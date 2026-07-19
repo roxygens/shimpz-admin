@@ -100,7 +100,7 @@ def _canonical_headline(value: object) -> str:
 
 
 def _canonical_changelog(value: object) -> str:
-    if not isinstance(value, str) or not value or value.strip() != value:
+    if not isinstance(value, str) or not value.strip():
         raise ValueError("invalid release changelog")
     try:
         encoded = value.encode("utf-8")

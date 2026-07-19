@@ -89,6 +89,14 @@ class NotificationStateTests(unittest.TestCase):
             mock.patch.object(notifications.teams, "list_installed_assistants", return_value=inventory),
         )
 
+    def test_release_changelog_preserves_canonical_markdown_final_newline(self) -> None:
+        release = _release("shimpz-assistant", 1)
+        release["changelog"] = "# Changelog\n\n## 0.1.1\n\n- Safe patch.\n"
+
+        validated = notifications.validate_feed(_feed(release), allow_empty=False)
+
+        self.assertEqual(validated["releases"][0]["changelog"], release["changelog"])
+
     def test_first_current_observation_baselines_only_installed_assistants(self) -> None:
         feed = _feed(_release("shimpz-assistant", 1), _release("other-assistant", 1))
         fetch, list_teams, list_installed = self._sync_mocks(
