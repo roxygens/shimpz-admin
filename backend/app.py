@@ -51,6 +51,8 @@ EXAMPLE_PATH = REPO / ".env.example"  # the scaffolding baseline (mounted :ro); 
 UI_DIR = Path(__file__).resolve().parent.parent / "frontend" / "build"
 COOKIE = "shimpz_admin"
 MIN_PASSWORD_LEN = 12
+MAX_TEAM_DELETE_BODY_BYTES = 8 * 1024
+MAX_ADMIN_PASSWORD_CHARS = 4 * 1024
 
 # Boot preflight: an upgraded install must explicitly remove and rotate deprecated global Brain keys.
 # The exception names only offending variable names, never their values.
@@ -453,8 +455,36 @@ def teams_create(payload: dict):
 
 
 @app.delete("/api/teams/{team_id}")
-def teams_destroy(team_id: str):
-    return _team_driver_response(lambda: teams.destroy(team_id))
+async def teams_destroy(team_id: str, request: Request):
+    payload = await _bounded_json_object(request, MAX_TEAM_DELETE_BODY_BYTES)
+    if set(payload) != {"team_name", "password"}:
+        raise HTTPException(status_code=400, detail="request body must contain only team_name and password")
+    team_name = payload["team_name"]
+    password = payload["password"]
+    if not isinstance(team_name, str) or not isinstance(password, str):
+        raise HTTPException(status_code=400, detail="Team name and password must be strings")
+    if not 1 <= len(password) <= MAX_ADMIN_PASSWORD_CHARS:
+        raise HTTPException(status_code=400, detail="admin password is invalid")
+
+    record = adminstore.get()
+    try:
+        password_ok = await asyncio.to_thread(
+            auth.verify_password,
+            password,
+            record.get("salt", ""),
+            record.get("password_hash", ""),
+        )
+    except TypeError, ValueError:
+        log.warning("admin password record is invalid")
+        raise HTTPException(status_code=503, detail="admin password verification is unavailable") from None
+    if not password_ok:
+        log.info("Team deletion password confirmation failed")
+        raise HTTPException(status_code=403, detail="admin password is incorrect")
+
+    return await run_in_threadpool(
+        _team_driver_response,
+        lambda: teams.destroy(team_id, team_name),
+    )
 
 
 @app.get("/api/teams/{team_id}/inference")

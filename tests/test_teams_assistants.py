@@ -24,6 +24,7 @@ import teams
 
 class _DriverHandler(BaseHTTPRequestHandler):
     requests: ClassVar[list[dict[str, object]]] = []
+    response_by_route: ClassVar[dict[tuple[str, str], tuple[int, bytes]]] = {}
     response_status = 200
     response_body = b'{"ok":true}'
     response_headers: ClassVar[dict[str, str]] = {"Content-Type": "application/json"}
@@ -45,14 +46,18 @@ class _DriverHandler(BaseHTTPRequestHandler):
         )
         if self.__class__.response_delay_seconds:
             time.sleep(self.__class__.response_delay_seconds)
-        self.send_response(self.__class__.response_status)
+        status, response_body = self.__class__.response_by_route.get(
+            (self.command, self.path),
+            (self.__class__.response_status, self.__class__.response_body),
+        )
+        self.send_response(status)
         headers = dict(self.__class__.response_headers)
-        headers.setdefault("Content-Length", str(len(self.__class__.response_body)))
+        headers.setdefault("Content-Length", str(len(response_body)))
         for key, value in headers.items():
             self.send_header(key, value)
         self.end_headers()
-        if self.__class__.response_body:
-            self.wfile.write(self.__class__.response_body)
+        if response_body:
+            self.wfile.write(response_body)
 
     do_GET = _handle
     do_POST = _handle
@@ -64,6 +69,7 @@ class _LiveDriverCase(unittest.TestCase):
 
     def setUp(self):
         _DriverHandler.requests = []
+        _DriverHandler.response_by_route = {}
         _DriverHandler.response_status = 200
         _DriverHandler.response_body = b'{"ok":true}'
         _DriverHandler.response_headers = {"Content-Type": "application/json"}
@@ -160,6 +166,63 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
         self.assertEqual(
             response,
             teams.DriverResponse(409, {"detail": "assistant already installed"}),
+        )
+
+    def test_destroy_requires_the_authoritative_name_and_forwards_no_confirmation_secret(self):
+        _DriverHandler.response_by_route = {
+            (
+                "GET",
+                "/v1/teams",
+            ): (
+                200,
+                json.dumps(
+                    {
+                        "teams": [{"team_id": "team_1", "team_name": "Marketing", "status": "running"}],
+                        "trace_id": "a" * 32,
+                    },
+                    separators=(",", ":"),
+                ).encode(),
+            ),
+            (
+                "DELETE",
+                "/v1/teams/team_1",
+            ): (
+                200,
+                b'{"team_id":"team_1","destroyed":true,"assistants_removed":1,"storage_removed":true}',
+            ),
+        }
+
+        with self.assertRaisesRegex(teams.TeamRequestError, "Team name confirmation does not match"):
+            teams.destroy("team_1", "Not Marketing")
+        response = teams.destroy("team_1", "Marketing")
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            [(request["method"], request["path"]) for request in _DriverHandler.requests],
+            [
+                ("GET", "/v1/teams"),
+                ("GET", "/v1/teams"),
+                ("DELETE", "/v1/teams/team_1"),
+            ],
+        )
+        deleted = _DriverHandler.requests[-1]
+        self.assertEqual(deleted["body"], b"")
+        self.assertNotIn("content-type", deleted["headers"])
+
+    def test_destroy_rejects_an_ambiguous_inventory_before_delete(self):
+        _DriverHandler.response_body = json.dumps(
+            {
+                "teams": [{"team_id": "team_1", "team_name": "Marketing", "status": "running", "extra": True}],
+            },
+            separators=(",", ":"),
+        ).encode()
+
+        response = teams.destroy("team_1", "Marketing")
+
+        self.assertEqual(response, teams.DriverResponse(502, {"detail": "Team inventory response is invalid."}))
+        self.assertEqual(
+            [(request["method"], request["path"]) for request in _DriverHandler.requests],
+            [("GET", "/v1/teams")],
         )
 
     def test_storage_bridge_forwards_only_opaque_metadata_and_fixed_routes(self):
@@ -383,6 +446,44 @@ class TeamAssistantRouteTest(_LiveDriverCase):
         self.assertEqual(json.loads(request["body"]), {"team_name": "Marketing"})
         self.assertEqual(request["headers"]["authorization"], "Bearer internal-test-bearer")
 
+    def test_destroy_route_requires_name_and_password_without_forwarding_either(self):
+        _DriverHandler.response_by_route = {
+            (
+                "GET",
+                "/v1/teams",
+            ): (200, b'{"teams":[{"team_id":"team_1","team_name":"Marketing","status":"running"}]}'),
+            (
+                "DELETE",
+                "/v1/teams/team_1",
+            ): (200, b'{"team_id":"team_1","destroyed":true,"assistants_removed":1,"storage_removed":true}'),
+        }
+
+        document = self._run_asgi_probe("team-delete")
+
+        self.assertEqual(
+            document["malformed"],
+            {"status": 400, "body": {"detail": "request body must contain only team_name and password"}},
+        )
+        self.assertEqual(document["wrong_password"], {"status": 403, "body": {"detail": "admin password is incorrect"}})
+        self.assertEqual(
+            document["wrong_name"], {"status": 400, "body": {"detail": "Team name confirmation does not match"}}
+        )
+        self.assertEqual(document["valid"]["status"], 200)
+        self.assertEqual(
+            [(request["method"], request["path"]) for request in _DriverHandler.requests],
+            [
+                ("GET", "/v1/teams"),
+                ("GET", "/v1/teams"),
+                ("DELETE", "/v1/teams/team_1"),
+            ],
+        )
+        delete_request = _DriverHandler.requests[-1]
+        self.assertEqual(delete_request["body"], b"")
+        self.assertNotIn("content-type", delete_request["headers"])
+        forwarded = b"".join(request["body"] for request in _DriverHandler.requests)
+        self.assertNotIn(b"test-admin-password", forwarded)
+        self.assertNotIn(b"Marketing", forwarded)
+
     def test_multipart_upload_is_bounded_and_forwarded_as_json_without_a_path(self):
         content = b"Team private data"
         file_id = "b" * 32
@@ -529,6 +630,7 @@ def _run_asgi_probe(scenario: str) -> None:
         }
         expected = {
             ("/api/assistants", "GET"),
+            ("/api/teams/{team_id}", "DELETE"),
             ("/api/teams/{team_id}/assistants", "GET"),
             ("/api/teams/{team_id}/assistants", "POST"),
             ("/api/teams/{team_id}/assistants/{assistant_id}", "DELETE"),
@@ -598,6 +700,27 @@ def _run_asgi_probe(scenario: str) -> None:
             return results
 
         output = asyncio.run(create_requests())
+    elif scenario == "team-delete":
+
+        async def delete_requests():
+            results = {}
+            for key, payload in (
+                ("malformed", {"team_name": "Marketing", "password": "test-admin-password", "extra": True}),
+                ("wrong_password", {"team_name": "Marketing", "password": "wrong-admin-password"}),
+                ("wrong_name", {"team_name": "Not Marketing", "password": "test-admin-password"}),
+                ("valid", {"team_name": "Marketing", "password": "test-admin-password"}),
+            ):
+                status, body = await _asgi_request(
+                    admin_app,
+                    "DELETE",
+                    "/api/teams/team_1",
+                    json.dumps(payload, separators=(",", ":")).encode(),
+                    token=token,
+                )
+                results[key] = {"status": status, "body": body}
+            return results
+
+        output = asyncio.run(delete_requests())
     elif scenario == "file-upload":
         boundary = "shimpz-admin-upload-boundary"
         payload = _multipart_file_body(boundary, b"Team private data")

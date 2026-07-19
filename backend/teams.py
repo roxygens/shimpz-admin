@@ -42,6 +42,8 @@ _MEDIA_TYPE_RE = re.compile(r"^[a-z0-9][a-z0-9!#$&^_.+\-]*/[a-z0-9][a-z0-9!#$&^_
 MAX_CHAT_MESSAGE_CHARS = 16_000
 MAX_CHAT_FILES = 8
 MAX_CHAT_ASSISTANTS = 16
+MAX_TEAMS = 128
+MAX_TEAM_NAME_CHARS = 80
 
 
 class TeamRequestError(ValueError):
@@ -67,6 +69,17 @@ def _canonical_id(value: object, *, field: str, pattern: re.Pattern[str], maximu
 
 def canonical_team_id(value: object) -> str:
     return _canonical_id(value, field="team id", pattern=_TEAM_ID_RE, maximum=40)
+
+
+def canonical_team_name(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or not 1 <= len(value) <= MAX_TEAM_NAME_CHARS
+        or value.strip() != value
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        raise TeamRequestError("team name must contain 1 to 80 trimmed characters")
+    return value
 
 
 def canonical_assistant_id(value: object) -> str:
@@ -229,13 +242,55 @@ def list_teams() -> DriverResponse:
 
 def create(team_id: object, team_name: object) -> DriverResponse:
     canonical_id = canonical_team_id(team_id)
-    if not isinstance(team_name, str) or not team_name.strip() or len(team_name) > 80:
+    if not isinstance(team_name, str) or not team_name.strip() or len(team_name) > MAX_TEAM_NAME_CHARS:
         raise TeamRequestError("team name must be between 1 and 80 characters")
     return _call("POST", f"/v1/teams/{canonical_id}/create", {"team_name": team_name.strip()})
 
 
-def destroy(team_id: object) -> DriverResponse:
+def _authoritative_team_name(response: DriverResponse, team_id: str) -> DriverResponse | str:
+    """Project one strict Team identity from the controller inventory before destruction."""
+    if not 200 <= response.status < 300:
+        return response
+    try:
+        allowed_envelope = {"teams"}
+        if "trace_id" in response.body:
+            allowed_envelope.add("trace_id")
+            trace_id = response.body["trace_id"]
+            if not isinstance(trace_id, str) or _TRACE_ID_RE.fullmatch(trace_id) is None:
+                raise ValueError("invalid trace id")
+        if set(response.body) != allowed_envelope:
+            raise ValueError("unexpected inventory fields")
+        inventory = response.body["teams"]
+        if not isinstance(inventory, list) or len(inventory) > MAX_TEAMS:
+            raise ValueError("invalid inventory")
+        names: dict[str, str] = {}
+        for item in inventory:
+            if not isinstance(item, dict) or set(item) != {"team_id", "team_name", "status"}:
+                raise ValueError("invalid Team fields")
+            item_id = canonical_team_id(item["team_id"])
+            item_name = canonical_team_name(item["team_name"])
+            if item["team_id"] != item_id or item["team_name"] != item_name or item["status"] != "running":
+                raise ValueError("non-canonical Team identity")
+            if item_id in names:
+                raise ValueError("duplicate Team identity")
+            names[item_id] = item_name
+    except KeyError, TypeError, ValueError, TeamRequestError:
+        log.warning("team-driver returned an invalid Team inventory")
+        return DriverResponse(502, {"detail": "Team inventory response is invalid."})
+    try:
+        return names[team_id]
+    except KeyError:
+        return DriverResponse(404, {"detail": "Team not found"})
+
+
+def destroy(team_id: object, expected_team_name: object) -> DriverResponse:
     canonical_id = canonical_team_id(team_id)
+    expected_name = canonical_team_name(expected_team_name)
+    authoritative = _authoritative_team_name(list_teams(), canonical_id)
+    if isinstance(authoritative, DriverResponse):
+        return authoritative
+    if authoritative != expected_name:
+        raise TeamRequestError("Team name confirmation does not match")
     return _call("DELETE", f"/v1/teams/{canonical_id}")
 
 
