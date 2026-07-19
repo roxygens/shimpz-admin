@@ -351,6 +351,11 @@ def list_installed_assistants(team_id: object) -> DriverResponse:
     return _call("GET", _assistant_path(team_id))
 
 
+def assistant_help(team_id: object, assistant_id: object) -> DriverResponse:
+    """Return one installed Assistant's bounded, controller-owned Help document."""
+    return _call("GET", f"{_assistant_path(team_id, assistant_id)}/help")
+
+
 def install_assistant(team_id: object, payload: object) -> DriverResponse:
     if not isinstance(payload, dict) or set(payload) != {"assistant"}:
         raise TeamRequestError("request body must contain only assistant")

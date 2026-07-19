@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import AssistantHelpDrawer from '$lib/AssistantHelpDrawer.svelte';
   import { locale } from '$lib/i18n.js';
   import { modelContext } from '$lib/modelContext.js';
   import ProviderSetupGate from '$lib/ProviderSetupGate.svelte';
@@ -24,6 +25,7 @@
       turnFailed: 'The chat turn could not start.', capacityFailed: 'The local chat is busy. Try again shortly.',
       runtimeFailed: 'The local chat runtime is unavailable.', requestFailed: 'The Team could not complete this turn.',
       technicalDetail: 'Technical detail',
+      help: 'Assistant Help',
     },
     pt: {
       kicker: 'Time // Chat', title: 'Seu Time',
@@ -36,7 +38,14 @@
       turnFailed: 'Não foi possível iniciar o turno do chat.', capacityFailed: 'O chat local está ocupado. Tente novamente em instantes.',
       runtimeFailed: 'O runtime do chat local está indisponível.', requestFailed: 'O Time não conseguiu concluir este turno.',
       technicalDetail: 'Detalhe técnico',
+      help: 'Ajuda dos Assistants',
     },
+    es: { help: 'Ayuda de Assistants' },
+    zh: { help: 'Assistant 帮助' },
+    fr: { help: 'Aide des Assistants' },
+    de: { help: 'Assistant-Hilfe' },
+    ja: { help: 'Assistant ヘルプ' },
+    ar: { help: 'مساعدة الـ Assistants' },
   };
 
   let mounted = false;
@@ -51,8 +60,10 @@
   let socketReady = $state(false);
   let reconnectTimer;
   let reconnectAttempt = 0;
+  let helpOpen = $state(false);
+  let helpButton = $state();
 
-  let copy = $derived(COPY[$locale] ?? COPY.en);
+  let copy = $derived({ ...COPY.en, ...(COPY[$locale] ?? {}) });
   let selectedTeamId = $derived($teamContext.selectedTeamId);
   let activeTeam = $derived(
     $teamContext.teams.find((entry) => entry.id === selectedTeamId) ?? null,
@@ -63,6 +74,13 @@
   let teamName = $derived(activeTeam?.name ?? copy.title);
   let placeholder = $derived(copy.placeholder.replace('{team}', teamName));
   let thinking = $derived(copy.sending.replace('{team}', teamName));
+  let helpAssistants = $derived.by(() => {
+    const catalog = new Map($teamContext.catalog.map((assistant) => [assistant.id, assistant]));
+    return $teamContext.installedAssistants.map((runtime) => ({
+      id: runtime.assistant,
+      name: catalog.get(runtime.assistant)?.name ?? runtime.assistant,
+    }));
+  });
   let contextLoading = $derived(
     $teamContext.phase === 'idle' || $teamContext.phase === 'loading',
   );
@@ -198,8 +216,14 @@
     stopping = false;
     draft = '';
     turns = [];
+    helpOpen = false;
     clearError();
     if (nextTeamId) connectSocket(nextTeamId);
+  }
+
+  function closeHelp() {
+    helpOpen = false;
+    queueMicrotask(() => helpButton?.focus());
   }
 
   function send(event) {
@@ -263,6 +287,10 @@
     activateTeam(nextTeamId);
   });
 
+  $effect(() => {
+    if (helpOpen && helpAssistants.length === 0) helpOpen = false;
+  });
+
   onMount(() => {
     mounted = true;
     const initialTeamId = chatTeamId;
@@ -279,7 +307,8 @@
 <div class="chat-route">
   {#if activeTeam}
     {#if chatTeamId}
-      <section class="conversation" aria-label={`${copy.kicker}: ${teamName}`}>
+      <div class="chat-workspace" class:help-open={helpOpen}>
+        <section class="conversation" aria-label={`${copy.kicker}: ${teamName}`}>
         <header class="team-header">
           <i aria-hidden="true"></i>
           <div>
@@ -308,7 +337,7 @@
           </div>
         {/if}
 
-        <form class="composer" onsubmit={send}>
+          <form class="composer" onsubmit={send}>
           <textarea
             bind:value={draft}
             maxlength="16000"
@@ -317,14 +346,32 @@
             disabled={busy}
             onkeydown={handleComposerKeydown}
           ></textarea>
-          <div>
-            {#if busy}<button class="stop" type="button" onclick={stop} disabled={stopping}>{copy.stop}</button>{/if}
-            <button class="send" type="submit" disabled={busy || !socketReady || !draft.trim()}>
-              {busy ? thinking : socketReady ? copy.send : copy.connecting}
-            </button>
-          </div>
-        </form>
-      </section>
+            <div>
+              {#if busy}<button class="stop" type="button" onclick={stop} disabled={stopping}>{copy.stop}</button>{/if}
+              <button
+                bind:this={helpButton}
+                class="help"
+                type="button"
+                onclick={() => { helpOpen = !helpOpen; }}
+                disabled={helpAssistants.length === 0}
+                aria-label={copy.help}
+                title={copy.help}
+                aria-expanded={helpOpen}
+                aria-controls="assistant-help-drawer"
+              >?</button>
+              <button class="send" type="submit" disabled={busy || !socketReady || !draft.trim()}>
+                {busy ? thinking : socketReady ? copy.send : copy.connecting}
+              </button>
+            </div>
+          </form>
+        </section>
+        <AssistantHelpDrawer
+          open={helpOpen}
+          teamId={chatTeamId}
+          assistants={helpAssistants}
+          onclose={closeHelp}
+        />
+      </div>
     {:else}
       <section class="provider-setup" aria-live="polite">
         <ProviderSetupGate />
@@ -354,6 +401,21 @@
     min-height: 0;
     grid-template-rows: minmax(0, 1fr);
     overflow: hidden;
+  }
+
+  .chat-workspace {
+    position: relative;
+    display: grid;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .chat-workspace.help-open {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .conversation {
@@ -542,6 +604,12 @@
     border: 0;
     background: var(--accent);
     color: #001013;
+  }
+
+  button.help {
+    width: 3.2rem;
+    padding: 0;
+    font-size: 0.9rem;
   }
 
   button.stop {

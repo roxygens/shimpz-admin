@@ -131,6 +131,7 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
     def test_forwards_only_the_fixed_assistant_routes_with_existing_bearer(self):
         teams.list_assistants()
         teams.list_installed_assistants("team_1")
+        teams.assistant_help("team_1", "shimpz-assistant")
         teams.install_assistant("team_1", {"assistant": "hello-pulse"})
         teams.uninstall_assistant("team_1", "hello-pulse")
 
@@ -139,11 +140,12 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
             [
                 ("GET", "/v1/assistants"),
                 ("GET", "/v1/teams/team_1/assistants"),
+                ("GET", "/v1/teams/team_1/assistants/shimpz-assistant/help"),
                 ("POST", "/v1/teams/team_1/assistants"),
                 ("DELETE", "/v1/teams/team_1/assistants/hello-pulse"),
             ],
         )
-        self.assertEqual(json.loads(_DriverHandler.requests[2]["body"]), {"assistant": "hello-pulse"})
+        self.assertEqual(json.loads(_DriverHandler.requests[3]["body"]), {"assistant": "hello-pulse"})
         for request in _DriverHandler.requests:
             self.assertEqual(request["headers"]["accept"], "application/json")
             self.assertEqual(request["headers"]["authorization"], "Bearer internal-test-bearer")
@@ -265,6 +267,7 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
         invalid = (
             lambda: teams.list_installed_assistants("Team_1"),
             lambda: teams.install_assistant("team_1", {"assistant": "../hello-pulse"}),
+            lambda: teams.assistant_help("team_1", "../escape"),
             lambda: teams.install_assistant("team_1", {"assistant": "hello-pulse", "extra": True}),
             lambda: teams.uninstall_assistant("team_1", "../hello-pulse"),
         )
@@ -317,6 +320,26 @@ class TeamAssistantRouteTest(_LiveDriverCase):
         self.assertEqual(document["anonymous_status"], 401)
         self.assertEqual(document["anonymous_body"], {"detail": "unauthenticated"})
         self.assertEqual(_DriverHandler.requests, [])
+
+    def test_help_route_is_authenticated_and_forwards_only_the_fixed_installed_path(self):
+        _DriverHandler.response_body = b'{"assistant":"shimpz-assistant","markdown":"# Shimpz Assistant"}'
+
+        document = self._run_asgi_probe("assistant-help")
+
+        self.assertEqual(
+            document,
+            {
+                "status": 200,
+                "body": {"assistant": "shimpz-assistant", "markdown": "# Shimpz Assistant"},
+            },
+        )
+        self.assertEqual(len(_DriverHandler.requests), 1)
+        request = _DriverHandler.requests[0]
+        self.assertEqual(
+            (request["method"], request["path"]),
+            ("GET", "/v1/teams/team_1/assistants/shimpz-assistant/help"),
+        )
+        self.assertEqual(request["headers"]["authorization"], "Bearer internal-test-bearer")
 
     def test_install_route_preserves_conflict_and_forwards_exact_body(self):
         _DriverHandler.response_status = 409
@@ -508,6 +531,7 @@ def _run_asgi_probe(scenario: str) -> None:
             ("/api/teams/{team_id}/assistants", "GET"),
             ("/api/teams/{team_id}/assistants", "POST"),
             ("/api/teams/{team_id}/assistants/{assistant_id}", "DELETE"),
+            ("/api/teams/{team_id}/assistants/{assistant_id}/help", "GET"),
             ("/api/teams/{team_id}/files", "GET"),
             ("/api/teams/{team_id}/files", "POST"),
             ("/api/teams/{team_id}/files/{file_id}", "DELETE"),
@@ -539,6 +563,16 @@ def _run_asgi_probe(scenario: str) -> None:
                 "POST",
                 "/api/teams/team_1/assistants",
                 payload,
+                token=token,
+            )
+        )
+        output = {"status": status, "body": body}
+    elif scenario == "assistant-help":
+        status, body = asyncio.run(
+            _asgi_request(
+                admin_app,
+                "GET",
+                "/api/teams/team_1/assistants/shimpz-assistant/help",
                 token=token,
             )
         )

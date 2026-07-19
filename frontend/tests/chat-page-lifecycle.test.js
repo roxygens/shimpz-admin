@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../src/routes/chat/+page.svelte', import.meta.url), 'utf8');
+const drawerSource = readFileSync(new URL('../src/lib/AssistantHelpDrawer.svelte', import.meta.url), 'utf8');
+const markdownSource = readFileSync(new URL('../src/lib/HelpMarkdown.svelte', import.meta.url), 'utf8');
+const inlineSource = readFileSync(new URL('../src/lib/HelpInline.svelte', import.meta.url), 'utf8');
 
 test('consumes the shared Team context without duplicating the persistent shell or sidebar', () => {
   assert.match(source, /import \{ teamContext \} from '\$lib\/teamContext\.js';/);
@@ -39,7 +42,7 @@ test('changes Team by closing stale transport and clearing route-scoped conversa
   );
   assert.match(
     source,
-    /function activateTeam\(nextTeamId\) \{\s+closeSocket\(\);\s+socketTeamId = nextTeamId;[\s\S]*?busy = false;\s+stopping = false;\s+draft = '';\s+turns = \[\];\s+clearError\(\);\s+if \(nextTeamId\) connectSocket\(nextTeamId\);/,
+    /function activateTeam\(nextTeamId\) \{\s+closeSocket\(\);\s+socketTeamId = nextTeamId;[\s\S]*?busy = false;\s+stopping = false;\s+draft = '';\s+turns = \[\];\s+helpOpen = false;\s+clearError\(\);\s+if \(nextTeamId\) connectSocket\(nextTeamId\);/,
   );
   assert.match(source, /if \(socket !== active \|\| chatTeamId !== expectedTeamId\) return;/);
   assert.match(source, /current\?\.close\(1000, 'Team changed'\)/);
@@ -113,4 +116,38 @@ test('keeps friendly i18n and sanitized technical diagnostics separate', () => {
   assert.match(source, /<div class="error" role="alert">/);
   assert.match(source, /\{copy\.technicalDetail\}: \{visibleErrorDetail\}/);
   assert.doesNotMatch(source, /\{@html[^}]*?(?:error|detail)/i);
+});
+
+test('opens installed Assistant Help immediately before Send and clears it on Team change', () => {
+  assert.match(source, /import AssistantHelpDrawer from '\$lib\/AssistantHelpDrawer\.svelte';/);
+  assert.match(source, /class="help"[\s\S]*aria-expanded=\{helpOpen\}[\s\S]*aria-controls="assistant-help-drawer"/);
+  assert.match(
+    source,
+    /<button[\s\S]*class="help"[\s\S]*>\?<\/button>[\s\S]*<button class="send"/,
+  );
+  assert.match(source, /disabled=\{helpAssistants\.length === 0\}/);
+  assert.match(source, /function activateTeam\(nextTeamId\)[\s\S]*helpOpen = false;/);
+  assert.match(source, /<AssistantHelpDrawer[\s\S]*teamId=\{chatTeamId\}[\s\S]*assistants=\{helpAssistants\}/);
+  assert.match(source, /\.chat-workspace\.help-open \{\s*grid-template-columns: minmax\(0, 1fr\) auto;/);
+});
+
+test('loads Help lazily per installed Assistant with an accessible multilingual drawer', () => {
+  assert.match(drawerSource, /import \{ getAssistantHelp \} from '\$lib\/localApi\.js';/);
+  assert.match(drawerSource, /if \(!open \|\| !currentTeam \|\| !currentAssistant\)/);
+  assert.match(drawerSource, /getAssistantHelp\(fetch, currentTeam, currentAssistant\)/);
+  assert.match(drawerSource, /assistants\.length > 1[\s\S]*<select id="assistant-help-select"/);
+  assert.match(drawerSource, /event\.key === 'Escape'[\s\S]*onclose\?\.\(\)/);
+  assert.match(drawerSource, /bind:this=\{closeButton\}/);
+  for (const locale of ['en', 'pt', 'es', 'zh', 'fr', 'de', 'ja', 'ar']) {
+    assert.match(drawerSource, new RegExp(`\\b${locale}: \\{`));
+  }
+});
+
+test('renders only closed Svelte Help nodes without an HTML injection escape hatch', () => {
+  assert.doesNotMatch(`${drawerSource}\n${markdownSource}\n${inlineSource}`, /\{@html/i);
+  for (const element of ['h1', 'h2', 'h3', 'p', 'ul', 'ol', 'pre', 'code', 'strong', 'em']) {
+    assert.match(`${markdownSource}\n${inlineSource}`, new RegExp(`<${element}(?:>|\\s)`));
+  }
+  assert.match(inlineSource, /target="_blank" rel="noopener noreferrer"/);
+  assert.doesNotMatch(inlineSource, /src=|style=|onerror=|onclick=/i);
 });

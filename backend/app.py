@@ -487,6 +487,13 @@ def team_assistants_list(team_id: str):
     return _team_driver_response(lambda: teams.list_installed_assistants(team_id))
 
 
+@app.get("/api/teams/{team_id}/assistants/{assistant_id}/help")
+def team_assistant_help(team_id: str, assistant_id: str):
+    response = _team_driver_response(lambda: teams.assistant_help(team_id, assistant_id))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.post("/api/teams/{team_id}/assistants")
 async def team_assistant_install(team_id: str, request: Request):
     payload = await _bounded_json_object(request)
