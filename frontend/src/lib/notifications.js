@@ -18,8 +18,9 @@ function hasExactKeys(value, expected) {
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 }
 
-function isBoundedText(value, maximum, { multiline = false } = {}) {
-  if (typeof value !== 'string' || value.length === 0 || value.length > maximum || value.trim() !== value) return false;
+function isBoundedText(value, maximum, { multiline = false, allowBoundaryWhitespace = false } = {}) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > maximum) return false;
+  if (allowBoundaryWhitespace ? value.trim().length === 0 : value.trim() !== value) return false;
   const forbiddenControls = multiline
     ? /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/
     : /[\u0000-\u001f\u007f]/;
@@ -42,7 +43,7 @@ function parseNotification(value) {
   if (!Number.isSafeInteger(value.sequence) || value.sequence < 1) throw new Error('invalid notification sequence');
   if (!isBoundedText(value.headline, MAX_HEADLINE_LENGTH)) throw new Error('invalid notification headline');
   if (
-    !isBoundedText(value.changelog, MAX_CHANGELOG_BYTES, { multiline: true })
+    !isBoundedText(value.changelog, MAX_CHANGELOG_BYTES, { multiline: true, allowBoundaryWhitespace: true })
     || new TextEncoder().encode(value.changelog).length > MAX_CHANGELOG_BYTES
   ) {
     throw new Error('invalid notification changelog');

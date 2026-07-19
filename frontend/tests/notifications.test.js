@@ -42,6 +42,14 @@ test('accepts only a bounded, internally consistent notification envelope', () =
     () => parseNotificationEnvelope({ notifications: [{ ...notification, changelog: 'bad\u0000markdown' }], unread_count: 1 }),
     /invalid notification changelog/,
   );
+  assert.throws(
+    () => parseNotificationEnvelope({ notifications: [{ ...notification, changelog: ' \n\t' }], unread_count: 1 }),
+    /invalid notification changelog/,
+  );
+  assert.throws(
+    () => parseNotificationEnvelope({ notifications: [{ ...notification, headline: `${notification.headline}\n` }], unread_count: 1 }),
+    /invalid notification headline/,
+  );
   assert.doesNotThrow(() => parseNotificationEnvelope({
     notifications: [{ ...notification, changelog: 'x'.repeat(9 * 1024) }],
     unread_count: 1,
@@ -53,6 +61,21 @@ test('accepts only a bounded, internally consistent notification envelope', () =
     }),
     /invalid notification changelog/,
   );
+});
+
+test('preserves canonical changelog Markdown boundary whitespace in envelope and sync responses', () => {
+  const changelog = `\n${notification.changelog}\n\t`;
+  const withCanonicalMarkdown = {
+    notifications: [{ ...notification, changelog }],
+    unread_count: 1,
+  };
+  const sync = {
+    ...withCanonicalMarkdown,
+    sync: { status: 'ok', updated_assistants: 1, notifications_added: 1, failed_updates: 0 },
+  };
+
+  assert.equal(parseNotificationEnvelope(withCanonicalMarkdown).notifications[0].changelog, changelog);
+  assert.equal(parseNotificationSyncEnvelope(sync).notifications[0].changelog, changelog);
 });
 
 test('validates the exact non-executable sync summary contract', () => {
