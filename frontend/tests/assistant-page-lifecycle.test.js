@@ -62,7 +62,7 @@ test('refreshes shared inventory after Store mutations without requiring Power m
   assert.match(source, /await refreshTeamInventory\(fetch\)/);
   assert.match(
     source,
-    /helloAvailable = \$derived\(\$teamContext\.catalog\.some\(\(entry\) => entry\.id === HELLO_ID\)\)/,
+    /officialAssistantAvailable = \$derived\([\s\S]*?entry\.id === OFFICIAL_ASSISTANT_ID/,
   );
   assert.doesNotMatch(source, /declaresHello/);
 });

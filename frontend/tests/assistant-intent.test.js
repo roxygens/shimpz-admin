@@ -32,8 +32,8 @@ test('pins the embedded Store lifecycle protocol cache key', () => {
 
 test('builds only canonical Assistant detail links on the Store origin', () => {
   assert.equal(
-    assistantStoreHref('en', 'hello-pulse'),
-    'https://shimpz.com/en/assistants/hello-pulse',
+    assistantStoreHref('en', 'shimpz-assistant'),
+    'https://shimpz.com/en/assistants/shimpz-assistant',
   );
   assert.equal(
     assistantStoreHref('pt', 'salesnator'),
@@ -46,7 +46,7 @@ test('builds only canonical Assistant detail links on the Store origin', () => {
   }
 });
 
-test('accepts only the exact Hello Pulse intent from the embedded Store window', () => {
+test('accepts only the exact Shimpz Assistant intent from the embedded Store window', () => {
   const iframeWindow = {};
   const event = { origin: STORE_ORIGIN, source: iframeWindow, data: { ...INSTALL_INTENT } };
 
@@ -85,7 +85,7 @@ test('acknowledges an accepted intent without exposing any local state', () => {
     message: {
       type: INSTALL_ACK_TYPE,
       version: 1,
-      assistant: 'hello-pulse',
+      assistant: 'shimpz-assistant',
       accepted: true,
     },
     targetOrigin: STORE_ORIGIN,
@@ -127,7 +127,7 @@ test('keeps exactly one Store action latched until its matching release', () => 
   assert.equal(latch.acquire('unknown'), false);
 });
 
-test('accepts and acknowledges only the exact Hello Pulse uninstall intent', () => {
+test('accepts and acknowledges only the exact Shimpz Assistant uninstall intent', () => {
   const acknowledgements = [];
   const iframeWindow = {
     postMessage(message, targetOrigin) { acknowledgements.push({ message, targetOrigin }); },
@@ -140,7 +140,7 @@ test('accepts and acknowledges only the exact Hello Pulse uninstall intent', () 
     message: {
       type: UNINSTALL_ACK_TYPE,
       version: 1,
-      assistant: 'hello-pulse',
+      assistant: 'shimpz-assistant',
       accepted: true,
     },
     targetOrigin: STORE_ORIGIN,
@@ -224,7 +224,7 @@ test('posts only exact bounded Assistant Store state to the canonical iframe ori
   };
 
   assert.equal(postStoreAssistantState(iframeWindow, 'loading', []), true);
-  assert.equal(postStoreAssistantState(iframeWindow, 'ready', ['hello-pulse']), true);
+  assert.equal(postStoreAssistantState(iframeWindow, 'ready', ['shimpz-assistant']), true);
   assert.equal(postStoreAssistantState(iframeWindow, 'error', []), true);
   assert.deepEqual(messages, [
     {
@@ -236,7 +236,7 @@ test('posts only exact bounded Assistant Store state to the canonical iframe ori
         type: STORE_STATE_TYPE,
         version: 1,
         status: 'ready',
-        installed: ['hello-pulse'],
+        installed: ['shimpz-assistant'],
       },
       targetOrigin: STORE_ORIGIN,
     },
@@ -267,11 +267,11 @@ test('rejects malformed, ambiguous, and oversized Assistant Store state', () => 
     [null, 'ready', []],
     [{}, 'ready', []],
     [iframeWindow, 'unknown', []],
-    [iframeWindow, 'loading', ['hello-pulse']],
-    [iframeWindow, 'error', ['hello-pulse']],
+    [iframeWindow, 'loading', ['shimpz-assistant']],
+    [iframeWindow, 'error', ['shimpz-assistant']],
     [iframeWindow, 'ready', null],
     [iframeWindow, 'ready', ['Hello-Pulse']],
-    [iframeWindow, 'ready', ['hello-pulse', 'hello-pulse']],
+    [iframeWindow, 'ready', ['shimpz-assistant', 'shimpz-assistant']],
     [iframeWindow, 'ready', tooMany],
   ];
   for (const [target, status, installed] of cases) {
@@ -293,13 +293,13 @@ test('rejects consecutive and trailing hyphens in Assistant Store state ids', ()
 test('projects only released Store Assistants from private local inventory', () => {
   const inventory = [
     { assistant: 'private-captain-tool', status: 'running' },
-    { assistant: 'hello-pulse', status: 'running' },
+    { assistant: 'shimpz-assistant', status: 'running' },
     { assistant: 'custom-customer-agent', status: 'created' },
   ];
 
-  assert.deepEqual(projectReleasedStoreAssistantIds(inventory), ['hello-pulse']);
+  assert.deepEqual(projectReleasedStoreAssistantIds(inventory), ['shimpz-assistant']);
   assert.deepEqual(
-    projectReleasedStoreAssistantIds(inventory.filter((entry) => entry.assistant !== 'hello-pulse')),
+    projectReleasedStoreAssistantIds(inventory.filter((entry) => entry.assistant !== 'shimpz-assistant')),
     [],
   );
   assert.deepEqual(projectReleasedStoreAssistantIds(null), []);

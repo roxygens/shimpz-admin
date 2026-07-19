@@ -3,7 +3,7 @@
 </script>
 
 <span class="assistant-icon" style={`width:${size}px;height:${size}px`} aria-hidden="true">
-  {#if assistant === 'hello-pulse'}
+  {#if assistant === 'shimpz-assistant'}
     <svg viewBox="0 0 48 48" fill="none" role="presentation">
       <path class="frame" d="M8 8h32v32H8z" />
       <path class="pulse" d="M4 25h9l4-11 7 22 6-17 4 6h10" />

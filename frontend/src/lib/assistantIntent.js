@@ -2,12 +2,12 @@ export const STORE_ORIGIN = 'https://shimpz.com';
 export const INSTALL_INTENT = Object.freeze({
   type: 'shimpz:assistant-install',
   version: 1,
-  assistant: 'hello-pulse',
+  assistant: 'shimpz-assistant',
 });
 export const UNINSTALL_INTENT = Object.freeze({
   type: 'shimpz:assistant-uninstall',
   version: 1,
-  assistant: 'hello-pulse',
+  assistant: 'shimpz-assistant',
 });
 export const INSTALL_ACK_TYPE = 'shimpz:assistant-install-ack';
 export const UNINSTALL_ACK_TYPE = 'shimpz:assistant-uninstall-ack';

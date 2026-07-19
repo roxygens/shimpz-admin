@@ -17,24 +17,24 @@
   import { t, locale } from '$lib/i18n.js';
   import { refreshTeamInventory, teamContext } from '$lib/teamContext.js';
 
-  const HELLO_ID = INSTALL_INTENT.assistant;
+  const OFFICIAL_ASSISTANT_ID = INSTALL_INTENT.assistant;
   const FRAME_READY_TIMEOUT_MS = 8000;
   const LOCAL_COPY = {
     en: {
       installedNow: 'Installed now',
       alreadyInstalled: 'Already installed',
       createFromSidebar: 'Close this dialog and create a Team from the sidebar.',
-      confirmTitle: 'Install Hello Pulse?',
+      confirmTitle: 'Install Shimpz Assistant?',
       confirmLead: 'Choose the exact Team. The Store cannot choose it or install anything for you.',
       checkingTitle: 'Preparing the local action…',
       checkingLead: 'The Admin is checking the selected Team and its installed Assistants.',
-      alreadyTitle: 'Hello Pulse is already installed.',
+      alreadyTitle: 'Shimpz Assistant is already installed.',
       alreadyLead: 'Nothing was installed twice. The Assistant remains ready for your Team.',
       noTeamTitle: 'Installation needs a running Team.',
       noTeamLead: 'Your request reached this Admin, but nothing was installed because there is no local destination yet.',
-      unavailableTitle: 'Hello Pulse is unavailable right now.',
+      unavailableTitle: 'Shimpz Assistant is unavailable right now.',
       unavailableLead: 'The local catalog or installed inventory could not be verified. Retry the local data before installing.',
-      successTitle: 'Hello Pulse is ready.',
+      successTitle: 'Shimpz Assistant is ready.',
       successLead: 'The Assistant was installed without running any Power or routine.',
       failureTitle: 'The local action did not finish.',
       failureLead: 'Nothing was hidden. Review the error below and retry when the local controller is available.',
@@ -60,17 +60,17 @@
       installedNow: 'Instalado agora',
       alreadyInstalled: 'Já estava instalado',
       createFromSidebar: 'Feche esta janela e crie um Time pela barra lateral.',
-      confirmTitle: 'Instalar o Hello Pulse?',
+      confirmTitle: 'Instalar o Shimpz Assistant?',
       confirmLead: 'Escolha o Time exato. A Store não pode escolhê-lo nem instalar nada por você.',
       checkingTitle: 'Preparando a ação local…',
       checkingLead: 'O Admin está verificando o Time selecionado e seus Assistants instalados.',
-      alreadyTitle: 'O Hello Pulse já está instalado.',
+      alreadyTitle: 'O Shimpz Assistant já está instalado.',
       alreadyLead: 'Nada foi instalado duas vezes. O Assistant continua pronto para o seu Time.',
       noTeamTitle: 'A instalação precisa de um Time em execução.',
       noTeamLead: 'Seu pedido chegou a este Admin, mas nada foi instalado porque ainda não existe um destino local.',
-      unavailableTitle: 'O Hello Pulse está indisponível agora.',
+      unavailableTitle: 'O Shimpz Assistant está indisponível agora.',
       unavailableLead: 'Não foi possível verificar o catálogo local ou o inventário instalado. Atualize os dados locais antes de instalar.',
-      successTitle: 'O Hello Pulse está pronto.',
+      successTitle: 'O Shimpz Assistant está pronto.',
       successLead: 'O Assistant foi instalado sem executar nenhuma Power ou rotina.',
       failureTitle: 'A ação local não foi concluída.',
       failureLead: 'Nada foi ocultado. Revise o erro abaixo e tente novamente quando o controller local estiver disponível.',
@@ -119,7 +119,9 @@
     `${storePageUrl}/embed?store-protocol=${STORE_LIFECYCLE_PROTOCOL_VERSION}&admin-frame=${frameReload}`,
   );
   let runningTeams = $derived($teamContext.teams.filter((team) => team.status === 'running'));
-  let helloAvailable = $derived($teamContext.catalog.some((entry) => entry.id === HELLO_ID));
+  let officialAssistantAvailable = $derived(
+    $teamContext.catalog.some((entry) => entry.id === OFFICIAL_ASSISTANT_ID),
+  );
   let activeTeamRecord = $derived(
     runningTeams.find((team) => team.id === $teamContext.selectedTeamId) ?? null,
   );
@@ -231,7 +233,7 @@
     dialogMode = 'checking';
     showInstallDialog();
 
-    if (assistantId !== HELLO_ID) {
+    if (assistantId !== OFFICIAL_ASSISTANT_ID) {
       dialogMode = 'unavailable';
       return;
     }
@@ -248,11 +250,13 @@
       dialogMode = 'no-team';
       return;
     }
-    if (!helloAvailable) {
+    if (!officialAssistantAvailable) {
       dialogMode = 'unavailable';
       return;
     }
-    dialogMode = $teamContext.installedAssistants.some((entry) => entry.assistant === HELLO_ID)
+    dialogMode = $teamContext.installedAssistants.some(
+      (entry) => entry.assistant === OFFICIAL_ASSISTANT_ID,
+    )
       ? 'installed'
       : 'install';
   }
@@ -309,8 +313,8 @@
   async function confirmInstall() {
     if (
       busy ||
-      pendingAssistant !== HELLO_ID ||
-      !helloAvailable ||
+      pendingAssistant !== OFFICIAL_ASSISTANT_ID ||
+      !officialAssistantAvailable ||
       !['install', 'error'].includes(dialogMode)
     ) return;
     const team = runningTeams.find((item) => item.id === selectedTeam);
@@ -320,7 +324,7 @@
     dialogError = '';
     dialogResult = null;
     try {
-      const { installed } = await installAssistant(fetch, team.id, HELLO_ID);
+      const { installed } = await installAssistant(fetch, team.id, OFFICIAL_ASSISTANT_ID);
       dialogResult = { note: installed ? copy.installedNow : copy.alreadyInstalled };
       dialogMode = 'success';
       await refreshInstalled(team.id);
@@ -506,7 +510,7 @@
         {dialogMode === 'install' ? copy.cancel : copy.close}
       </button>
       {#if ['install', 'error'].includes(dialogMode)}
-        <button type="submit" class="dialog-primary" disabled={busy || !selectedTeam || !helloAvailable}>
+        <button type="submit" class="dialog-primary" disabled={busy || !selectedTeam || !officialAssistantAvailable}>
           {busy
             ? copy.working
             : dialogMode === 'error'
