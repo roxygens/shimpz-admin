@@ -35,7 +35,7 @@
   h2 { font-size: 0.92rem; }
   h3 { font-size: 0.8rem; }
   p, ul, ol { margin: 0.55rem 0; }
-  .chat > :first-child { margin-top: 0.35rem; }
+  .chat > :first-child { margin-top: 0; }
   .chat > :last-child { margin-bottom: 0; }
   ul, ol { padding-inline-start: 1.3rem; }
   li + li { margin-top: 0.28rem; }

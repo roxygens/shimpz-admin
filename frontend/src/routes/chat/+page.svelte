@@ -313,8 +313,10 @@
         <section class="conversation" class:empty-conversation={turns.length === 0} aria-label={teamName}>
         <div class="turns" aria-live="polite">
           {#each turns as turn}
-            <article class={turn.role}>
-              <small>{turn.role === 'user' ? copy.you : turn.author}</small>
+            <article
+              class={turn.role}
+              aria-label={turn.role === 'user' ? copy.you : turn.author}
+            >
               {#if turn.role === 'assistant'}
                 <HelpMarkdown markdown={turn.text} variant="chat" />
               {:else}
@@ -458,31 +460,45 @@
   }
 
   article {
+    position: relative;
     max-width: min(80%, 46rem);
-    padding: 0.8rem 1rem;
-    background: #080b0d;
-    box-shadow: inset 0 0 0 1px var(--border);
+    padding: 0.3rem 1rem;
+    background: transparent;
+  }
+
+  article::before {
+    position: absolute;
+    top: 0.85rem;
+    width: 0.3rem;
+    height: 0.3rem;
+    border-radius: 50%;
+    content: '';
+    box-shadow: 0 0 0.4rem currentColor;
   }
 
   article.user {
     align-self: flex-end;
-    border-right: 2px solid var(--accent);
+    color: var(--accent);
+  }
+
+  article.user::before {
+    inset-inline-end: 0;
+    background: var(--accent);
   }
 
   article.assistant {
     align-self: flex-start;
-    border-left: 2px solid var(--accent-alt);
+    color: var(--accent-alt);
   }
 
-  article small {
-    color: var(--accent);
-    font-family: var(--font-mono);
-    font-size: 0.55rem;
-    text-transform: uppercase;
+  article.assistant::before {
+    inset-inline-start: 0;
+    background: var(--accent-alt);
   }
 
   article p {
-    margin: 0.35rem 0 0;
+    margin: 0;
+    color: var(--text);
     white-space: pre-wrap;
     line-height: 1.55;
     overflow-wrap: anywhere;
