@@ -78,11 +78,15 @@ test('localizes the new Assistant lifecycle feedback in every Admin locale', () 
   }
 });
 
-test('names the selected Team above the Store and localizes its installation destination', () => {
+test('offers an immersive Team destination chooser above the Store', () => {
   assert.match(
     source,
-    /\{#if activeTeamRecord\}\s*<header class="store-destination"[^>]*>[\s\S]*<h2 id="store-destination-team">\{activeTeamRecord\.name\}<\/h2>[\s\S]*\$t\('store\.destinationLead', \{ team: activeTeamRecord\.name \}\)/,
+    /<header class="store-destination"[^>]*>[\s\S]*<button[\s\S]*class="destination-trigger"[\s\S]*aria-haspopup="dialog"[\s\S]*activeTeamRecord\?\.name[\s\S]*\$t\('store\.destinationLead', \{ team: activeTeamRecord\.name \}\)/,
   );
+  assert.match(source, /<dialog[\s\S]*id="store-team-destination-dialog"[\s\S]*aria-labelledby="store-team-destination-title"/);
+  assert.match(source, /\{#each runningTeams as team \(team\.id\)\}[\s\S]*chooseDestinationTeam\(team\.id\)[\s\S]*aria-current=/);
+  assert.match(source, /<dialog[\s\S]*bind:this=\{createTeamDialog\}[\s\S]*<form class="destination-dialog-panel" onsubmit=\{submitDestinationTeam\}>/);
+  assert.doesNotMatch(source, /<select/);
   assert.ok(source.indexOf('class="store-destination"') < source.indexOf('class="store-frame"'));
   for (const [locale, localeMessages] of Object.entries(messages)) {
     for (const key of ['destinationKicker', 'destinationLead']) {
@@ -97,17 +101,23 @@ test('uses Team terminology without exposing direct Power controls', () => {
   assert.doesNotMatch(source, /invokeHelloPulse|\/powers\/|runHello/);
 });
 
-test('leaves initial Team loading and selection exclusively to the persistent sidebar', () => {
+test('leaves initial Team loading in the sidebar while safely syncing Store destination changes', () => {
   assert.match(
     source,
-    /import \{ refreshTeamInventory, teamContext \} from '\$lib\/teamContext\.js';/,
+    /import \{ createTeam, refreshTeamInventory, teamContext \} from '\$lib\/teamContext\.js';/,
   );
-  assert.doesNotMatch(source, /loadTeamContext|refreshLocalData|loadLocalData|selectTeam/);
+  assert.doesNotMatch(source, /loadTeamContext|refreshLocalData|loadLocalData/);
   assert.doesNotMatch(source, /<select|team-context|team-picker|installed-inventory/);
+  assert.match(source, /next\.searchParams\.set\('team', teamId\)/);
+  assert.match(source, /goto\(destinationUrl\(teamId\), \{ replaceState: true, keepFocus: true, noScroll: true \}\)/);
+  assert.match(source, /const created = await createTeam\(fetch, newTeamName\)/);
+  assert.match(source, /goto\(destinationUrl\(created\.id\), \{ replaceState: true, keepFocus: true, noScroll: true \}\)/);
   assert.match(source, /await waitForTeamContext\(\)/);
   assert.match(source, /queueMicrotask\(\(\) => unsubscribe\(\)\)/);
   assert.doesNotMatch(source, /href="\/teams\/"/);
-  assert.match(source, /createFromSidebar: 'Close this dialog and create a Team from the sidebar\.'/);
+  for (const code of ['en', 'pt', 'es', 'zh', 'fr', 'de', 'ja', 'ar']) {
+    assert.match(source, new RegExp(`\\b${code}: \\{`));
+  }
 });
 
 test('refreshes shared inventory after Store mutations without requiring Power metadata', () => {

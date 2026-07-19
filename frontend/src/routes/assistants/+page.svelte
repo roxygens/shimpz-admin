@@ -1,4 +1,6 @@
 <script>
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import {
     INSTALL_INTENT,
@@ -16,13 +18,63 @@
   import AssistantActionDialog from '$lib/AssistantActionDialog.svelte';
   import { installAssistant, safeApiError } from '$lib/localApi.js';
   import { t, locale } from '$lib/i18n.js';
-  import { refreshTeamInventory, teamContext } from '$lib/teamContext.js';
+  import { createTeam, refreshTeamInventory, teamContext } from '$lib/teamContext.js';
 
   const OFFICIAL_ASSISTANT_ID = INSTALL_INTENT.assistant;
   const FRAME_READY_TIMEOUT_MS = 8000;
+  const DESTINATION_COPY = {
+    en: {
+      change: 'Change Team', chooseTitle: 'Choose a destination Team',
+      chooseLead: 'Every Assistant installed from this Store goes only to the Team selected here.',
+      current: 'Current', empty: 'Create a Team to give new Assistants a private destination.',
+      switchFailed: 'The destination Team could not be changed.', createFailed: 'The Team could not be created.',
+    },
+    pt: {
+      change: 'Trocar Time', chooseTitle: 'Escolha o Time de destino',
+      chooseLead: 'Cada Assistant instalado nesta Store vai somente para o Time selecionado aqui.',
+      current: 'Atual', empty: 'Crie um Time para dar aos novos Assistants um destino privado.',
+      switchFailed: 'Não foi possível trocar o Time de destino.', createFailed: 'Não foi possível criar o Time.',
+    },
+    es: {
+      change: 'Cambiar Equipo', chooseTitle: 'Elige el Equipo de destino',
+      chooseLead: 'Cada Assistant instalado desde esta Store irá únicamente al Equipo seleccionado aquí.',
+      current: 'Actual', empty: 'Crea un Equipo para dar a los nuevos Assistants un destino privado.',
+      switchFailed: 'No se pudo cambiar el Equipo de destino.', createFailed: 'No se pudo crear el Equipo.',
+    },
+    zh: {
+      change: '切换团队', chooseTitle: '选择目标团队',
+      chooseLead: '从此 Store 安装的每个 Assistant 只会进入此处选择的团队。',
+      current: '当前', empty: '创建一个团队，为新的 Assistants 提供私有目标。',
+      switchFailed: '无法切换目标团队。', createFailed: '无法创建团队。',
+    },
+    fr: {
+      change: 'Changer d’Équipe', chooseTitle: 'Choisir l’Équipe de destination',
+      chooseLead: 'Chaque Assistant installé depuis ce Store rejoint uniquement l’Équipe sélectionnée ici.',
+      current: 'Actuelle', empty: 'Créez une Équipe pour offrir une destination privée aux nouveaux Assistants.',
+      switchFailed: 'Impossible de changer l’Équipe de destination.', createFailed: 'Impossible de créer l’Équipe.',
+    },
+    de: {
+      change: 'Team wechseln', chooseTitle: 'Ziel-Team auswählen',
+      chooseLead: 'Jeder Assistant aus diesem Store wird nur im hier ausgewählten Team installiert.',
+      current: 'Aktuell', empty: 'Erstelle ein Team als privates Ziel für neue Assistants.',
+      switchFailed: 'Das Ziel-Team konnte nicht gewechselt werden.', createFailed: 'Das Team konnte nicht erstellt werden.',
+    },
+    ja: {
+      change: 'チームを変更', chooseTitle: 'インストール先チームを選択',
+      chooseLead: 'この Store からインストールした Assistant は、ここで選択したチームだけに追加されます。',
+      current: '現在', empty: '新しい Assistants の非公開のインストール先となるチームを作成してください。',
+      switchFailed: 'インストール先チームを変更できませんでした。', createFailed: 'チームを作成できませんでした。',
+    },
+    ar: {
+      change: 'تغيير الفريق', chooseTitle: 'اختر فريق الوجهة',
+      chooseLead: 'يُثبَّت كل Assistant من هذا المتجر في الفريق المحدد هنا فقط.',
+      current: 'الحالي', empty: 'أنشئ فريقًا ليكون وجهة خاصة للـ Assistants الجدد.',
+      switchFailed: 'تعذر تغيير فريق الوجهة.', createFailed: 'تعذر إنشاء الفريق.',
+    },
+  };
   const LOCAL_COPY = {
     en: {
-      createFromSidebar: 'Close this dialog and create a Team from the sidebar.',
+      createFromSidebar: 'Close this dialog and create a Team from the Store destination.',
       confirmTitle: 'Install Shimpz Assistant?',
       confirmLead: 'Choose the exact Team. The Store cannot choose it or install anything for you.',
       checkingTitle: 'Preparing the local action…',
@@ -51,7 +103,7 @@
       openStore: 'Open Store',
     },
     pt: {
-      createFromSidebar: 'Feche esta janela e crie um Time pela barra lateral.',
+      createFromSidebar: 'Feche esta janela e crie um Time no destino da Store.',
       confirmTitle: 'Instalar o Shimpz Assistant?',
       confirmLead: 'Escolha o Time exato. A Store não pode escolhê-lo nem instalar nada por você.',
       checkingTitle: 'Preparando a ação local…',
@@ -83,6 +135,12 @@
 
   let dialogError = $state('');
   let busy = $state(false);
+  let destinationDialog = $state();
+  let destinationTrigger = $state();
+  let createTeamDialog = $state();
+  let destinationBusy = $state(false);
+  let destinationError = $state('');
+  let newTeamName = $state('');
   let selectedTeam = $state('');
   let pendingAssistant = $state('');
   let iframeElement = $state();
@@ -100,6 +158,7 @@
 
   let currentLocale = $derived($locale);
   let copy = $derived(LOCAL_COPY[currentLocale] ?? LOCAL_COPY.en);
+  let destinationCopy = $derived(DESTINATION_COPY[currentLocale] ?? DESTINATION_COPY.en);
   let storeLocale = $derived(currentLocale === 'pt' ? 'pt' : 'en');
   let storePageUrl = $derived(`https://shimpz.com/${storeLocale}/assistants`);
   let storeUrl = $derived(
@@ -172,6 +231,88 @@
         : copy.cancel
       : $t('integration.close'),
   );
+
+  function openDestinationDialog() {
+    if (destinationBusy || $teamContext.phase === 'loading') return;
+    destinationError = '';
+    if (!destinationDialog?.open) destinationDialog?.showModal();
+  }
+
+  function focusDestinationTrigger() {
+    queueMicrotask(() => destinationTrigger?.focus());
+  }
+
+  function closeDestinationDialog() {
+    if (destinationBusy) return;
+    destinationDialog?.close();
+    focusDestinationTrigger();
+  }
+
+  function cancelDestinationDialog(event) {
+    event.preventDefault();
+    closeDestinationDialog();
+  }
+
+  function destinationUrl(teamId) {
+    const next = new URL(page.url);
+    next.searchParams.set('team', teamId);
+    return next;
+  }
+
+  async function chooseDestinationTeam(teamId) {
+    if (destinationBusy || !runningTeams.some((team) => team.id === teamId)) return;
+    if (teamId === activeTeamRecord?.id) {
+      closeDestinationDialog();
+      return;
+    }
+    destinationBusy = true;
+    destinationError = '';
+    try {
+      await goto(destinationUrl(teamId), { replaceState: true, keepFocus: true, noScroll: true });
+      destinationDialog?.close();
+      focusDestinationTrigger();
+    } catch {
+      destinationError = destinationCopy.switchFailed;
+    } finally {
+      destinationBusy = false;
+    }
+  }
+
+  function openCreateTeamDialog() {
+    if (destinationBusy) return;
+    destinationDialog?.close();
+    newTeamName = '';
+    destinationError = '';
+    queueMicrotask(() => createTeamDialog?.showModal());
+  }
+
+  function closeCreateTeamDialog() {
+    if (destinationBusy) return;
+    createTeamDialog?.close();
+    focusDestinationTrigger();
+  }
+
+  function cancelCreateTeamDialog(event) {
+    event.preventDefault();
+    closeCreateTeamDialog();
+  }
+
+  async function submitDestinationTeam(event) {
+    event.preventDefault();
+    if (destinationBusy || !newTeamName.trim()) return;
+    destinationBusy = true;
+    destinationError = '';
+    try {
+      const created = await createTeam(fetch, newTeamName);
+      await goto(destinationUrl(created.id), { replaceState: true, keepFocus: true, noScroll: true });
+      createTeamDialog?.close();
+      focusDestinationTrigger();
+    } catch {
+      destinationError = destinationCopy.createFailed;
+    } finally {
+      destinationBusy = false;
+    }
+  }
 
   $effect(() => {
     const context = $teamContext;
@@ -489,13 +630,28 @@
 
 <h1 class="sr-only">{$t('store.nav')}</h1>
 
-{#if activeTeamRecord}
-  <header class="store-destination" aria-labelledby="store-destination-team">
-    <p>{$t('store.destinationKicker')}</p>
-    <h2 id="store-destination-team">{activeTeamRecord.name}</h2>
-    <span>{$t('store.destinationLead', { team: activeTeamRecord.name })}</span>
-  </header>
-{/if}
+<header class="store-destination" aria-labelledby="store-destination-team">
+  <p>{$t('store.destinationKicker')}</p>
+  <h2 id="store-destination-team">
+    <button
+      bind:this={destinationTrigger}
+      class="destination-trigger"
+      type="button"
+      onclick={openDestinationDialog}
+      disabled={destinationBusy || $teamContext.phase === 'loading'}
+      aria-haspopup="dialog"
+      aria-controls="store-team-destination-dialog"
+    >
+      <span>{activeTeamRecord?.name ?? destinationCopy.chooseTitle}</span>
+      <small>{destinationCopy.change}<b aria-hidden="true">↘</b></small>
+    </button>
+  </h2>
+  <span>
+    {activeTeamRecord
+      ? $t('store.destinationLead', { team: activeTeamRecord.name })
+      : destinationCopy.empty}
+  </span>
+</header>
 
 <section class="store-frame" aria-label={$t('store.frameTitle')} aria-busy={framePhase === 'loading'}>
       <div class="frame-stage" style={`height:${frameHeight}px`}>
@@ -530,6 +686,96 @@
 </section>
 
 <p class="trust-boundary"><span aria-hidden="true">◇</span>{$t('store.boundary')}</p>
+
+<dialog
+  id="store-team-destination-dialog"
+  class="destination-dialog"
+  bind:this={destinationDialog}
+  aria-labelledby="store-team-destination-title"
+  oncancel={cancelDestinationDialog}
+>
+  <div class="destination-dialog-panel">
+    <header>
+      <p>{$t('store.destinationKicker')}</p>
+      <h2 id="store-team-destination-title">{destinationCopy.chooseTitle}</h2>
+      <span>{destinationCopy.chooseLead}</span>
+    </header>
+
+    {#if runningTeams.length > 0}
+      <ul class="destination-team-list">
+        {#each runningTeams as team (team.id)}
+          <li>
+            <button
+              type="button"
+              onclick={() => chooseDestinationTeam(team.id)}
+              disabled={destinationBusy}
+              aria-current={team.id === activeTeamRecord?.id ? 'true' : undefined}
+            >
+              <i aria-hidden="true"></i>
+              <span><strong>{team.name}</strong><small>{team.id}</small></span>
+              {#if team.id === activeTeamRecord?.id}<b>{destinationCopy.current}</b>{/if}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <p class="destination-empty">{destinationCopy.empty}</p>
+    {/if}
+
+    {#if destinationError}<p class="destination-error" role="alert">{destinationError}</p>{/if}
+
+    <footer>
+      <button class="dialog-secondary" type="button" onclick={closeDestinationDialog} disabled={destinationBusy}>
+        {$t('integration.close')}
+      </button>
+      <button class="dialog-primary" type="button" onclick={openCreateTeamDialog} disabled={destinationBusy}>
+        {$t('teams.create')}
+      </button>
+    </footer>
+  </div>
+</dialog>
+
+<dialog
+  class="destination-dialog"
+  bind:this={createTeamDialog}
+  aria-labelledby="store-create-team-title"
+  oncancel={cancelCreateTeamDialog}
+>
+  <form class="destination-dialog-panel" onsubmit={submitDestinationTeam}>
+    <header>
+      <p>{$t('store.destinationKicker')}</p>
+      <h2 id="store-create-team-title">{$t('teams.createTitle')}</h2>
+      <span>{$t('teams.createLead')}</span>
+    </header>
+
+    <label class="destination-field" for="store-create-team-name">
+      <span>{$t('teams.name')}</span>
+      <input
+        id="store-create-team-name"
+        type="text"
+        bind:value={newTeamName}
+        placeholder={$t('teams.placeholder')}
+        maxlength="80"
+        autocomplete="off"
+        autocapitalize="words"
+        spellcheck="false"
+        required
+        disabled={destinationBusy}
+      />
+    </label>
+
+    {#if destinationError}<p class="destination-error" role="alert">{destinationError}</p>{/if}
+
+    <footer>
+      <button class="dialog-secondary" type="button" onclick={closeCreateTeamDialog} disabled={destinationBusy}>
+        {$t('teams.cancel')}
+      </button>
+      <button class="dialog-primary" type="submit" disabled={destinationBusy || !newTeamName.trim()}>
+        {destinationBusy ? $t('teams.creating') : $t('teams.createAction')}
+      </button>
+    </footer>
+  </form>
+</dialog>
 
 <AssistantActionDialog
   bind:open={dialogOpen}
@@ -586,9 +832,7 @@
   }
 
   .store-destination h2 {
-    overflow-wrap: anywhere;
-    font-size: clamp(1.35rem, 3vw, 2rem);
-    letter-spacing: -0.04em;
+    min-width: 0;
   }
 
   .store-destination span {
@@ -596,6 +840,147 @@
     font-size: 0.76rem;
     line-height: 1.55;
   }
+
+  .destination-trigger {
+    display: inline-grid;
+    max-width: 100%;
+    grid-template-columns: minmax(0, auto) auto;
+    align-items: baseline;
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    text-align: start;
+  }
+
+  .destination-trigger > span {
+    overflow-wrap: anywhere;
+    color: inherit;
+    font-family: var(--font-display);
+    font-size: clamp(1.35rem, 3vw, 2rem);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+  }
+
+  .destination-trigger small {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.52rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .destination-trigger small b { font-size: 0.75rem; }
+  .destination-trigger:hover > span { color: var(--accent); }
+  .destination-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 0.35rem; }
+  .destination-trigger:disabled { cursor: wait; opacity: 0.55; }
+
+  .destination-dialog {
+    width: min(34rem, calc(100dvw - 1rem));
+    max-height: calc(100dvh - 2rem);
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--text);
+  }
+
+  .destination-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.84);
+    backdrop-filter: blur(8px);
+  }
+
+  .destination-dialog-panel {
+    display: grid;
+    max-height: calc(100dvh - 2rem);
+    gap: 1.1rem;
+    padding: clamp(1.25rem, 4vw, 2rem);
+    background: var(--surface-1);
+    box-shadow: inset 0 0 0 1px var(--border-strong), 0 24px 80px rgba(0, 0, 0, 0.65);
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+    overflow: auto;
+  }
+
+  .destination-dialog-panel > header { display: grid; gap: 0.45rem; }
+  .destination-dialog-panel > header p { margin: 0; color: var(--accent); font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .destination-dialog-panel > header h2 { margin: 0; font-size: clamp(1.4rem, 4vw, 2.1rem); letter-spacing: -0.05em; }
+  .destination-dialog-panel > header span { color: var(--text-dim); font-size: 0.74rem; line-height: 1.55; }
+
+  .destination-team-list {
+    display: grid;
+    gap: 1px;
+    margin: 0;
+    padding: 1px;
+    background: var(--border-strong);
+    list-style: none;
+  }
+
+  .destination-team-list li { min-width: 0; }
+  .destination-team-list button {
+    display: grid;
+    width: 100%;
+    min-height: 3.7rem;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.8rem;
+    border: 0;
+    padding: 0.65rem 0.8rem;
+    background: #050708;
+    color: var(--text);
+    cursor: pointer;
+    text-align: start;
+  }
+
+  .destination-team-list button:hover,
+  .destination-team-list button[aria-current='true'] { background: rgba(0, 240, 255, 0.065); }
+  .destination-team-list button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+  .destination-team-list button:disabled { cursor: wait; opacity: 0.55; }
+  .destination-team-list i { width: 0.48rem; height: 0.48rem; border: 1px solid var(--accent); transform: rotate(45deg); }
+  .destination-team-list button[aria-current='true'] i { background: var(--accent); box-shadow: 0 0 10px rgba(0, 240, 255, 0.55); }
+  .destination-team-list span { display: grid; min-width: 0; gap: 0.15rem; }
+  .destination-team-list strong { overflow: hidden; font-family: var(--font-mono); font-size: 0.72rem; text-overflow: ellipsis; white-space: nowrap; }
+  .destination-team-list small { overflow: hidden; color: var(--text-faint); font-family: var(--font-mono); font-size: 0.53rem; text-overflow: ellipsis; white-space: nowrap; }
+  .destination-team-list b { color: var(--accent); font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  .destination-empty,
+  .destination-error { margin: 0; font-size: 0.7rem; line-height: 1.5; }
+  .destination-empty { color: var(--text-dim); }
+  .destination-error { color: var(--danger); }
+
+  .destination-dialog-panel footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.6rem;
+  }
+
+  .destination-dialog-panel footer button {
+    min-height: 2.7rem;
+    border: 1px solid var(--border-strong);
+    padding: 0 1rem;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .destination-dialog-panel footer button:focus-visible,
+  .destination-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .destination-dialog-panel footer button:disabled { cursor: wait; opacity: 0.45; }
+  .dialog-secondary { background: transparent; color: var(--text-dim); }
+  .dialog-primary { border-color: var(--accent) !important; background: var(--accent); color: #001013; }
+
+  .destination-field { display: grid; gap: 0.4rem; }
+  .destination-field > span { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; }
+  .destination-field input { width: 100%; min-height: 3.2rem; border: 1px solid var(--border-strong); padding: 0 0.85rem; background: #020304; color: var(--text); font-family: var(--font-mono); }
 
   .frame-actions a {
     display: inline-flex;
