@@ -25,7 +25,7 @@ test('owns the Admin setup and login lifecycle in the persistent root layout', (
   assert.match(page, /<title>Shimpz Admin<\/title>/);
 });
 
-test('places the Admin brand, locale, and Chat navigation in the Team rail', () => {
+test('places the Admin brand, locale, and primary navigation in the Team rail', () => {
   assert.match(shell, /import LocaleMenu from '\$lib\/LocaleMenu\.svelte'/);
   assert.match(shell, /import TeamSidebar from '\$lib\/TeamSidebar\.svelte'/);
   assert.match(shell, /<TeamSidebar \{active\} \/>/);
@@ -50,17 +50,22 @@ test('places the Admin brand, locale, and Chat navigation in the Team rail', () 
   const sidebar = shell.indexOf('<aside class="shell-sidebar">');
   const sidebarBrand = shell.indexOf('<ShimpzBrand product="Admin" href="/chat/" ariaLabel="Shimpz Admin home" />');
   const sidebarLocale = shell.indexOf('<LocaleMenu wide />');
-  const chatButton = shell.indexOf('class="chat-button"');
+  const assistantsButton = shell.indexOf("class:active={active === 'assistants'}");
+  const chatButton = shell.indexOf("class:active={active === 'chat'}");
   const teamContext = shell.indexOf('<TeamSidebar {active} />');
   assert.ok(
     headerEnd !== -1 &&
       headerEnd < sidebar &&
       sidebar < sidebarBrand &&
       sidebarBrand < sidebarLocale &&
+      sidebarLocale < assistantsButton &&
+      assistantsButton < chatButton &&
       sidebarLocale < chatButton &&
       chatButton < teamContext,
   );
+  assert.match(shell, /aria-current=\{active === 'assistants' \? 'page' : undefined\}/);
   assert.match(shell, /aria-current=\{active === 'chat' \? 'page' : undefined\}/);
+  assert.match(shell, /\{\$t\('store\.nav'\)\}/);
   assert.match(shell, /\{\$t\('chat\.nav'\)\}/);
 });
 
@@ -101,7 +106,8 @@ test('keeps the unauthenticated header and authenticated Chat rail usable on nar
   assert.match(shell, /@media \(max-width: 760px\)[\s\S]*\.topbar-inner \{[\s\S]*row-gap: 0;/);
   assert.match(shell, /\.header-actions \{[\s\S]*grid-column: 2;[\s\S]*justify-content: flex-end;[\s\S]*margin-inline-start: auto;/);
   assert.match(shell, /\.sidebar-controls \{[\s\S]*padding: 0 1\.15rem 1rem;/);
-  assert.match(shell, /\.chat-button \{[\s\S]*clip-path: polygon\(/);
+  assert.match(shell, /\.sidebar-navigation \{[\s\S]*border-top: 1px solid var\(--admin-divider\);/);
+  assert.match(shell, /\.rail-button \{[\s\S]*clip-path: polygon\(/);
   assert.match(shell, /@media \(max-width: 760px\) and \(max-height: 600px\)/);
   assert.match(shell, /\.chat-mode \.team-sidebar-region \{\s*max-height: 5\.25rem;/);
   assert.match(shell, /\.chat-mode \.shell-sidebar \{\s*grid-template-rows: auto auto minmax\(0, 1fr\);/);

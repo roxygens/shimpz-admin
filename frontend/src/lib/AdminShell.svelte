@@ -31,19 +31,33 @@
       </div>
       <div class="sidebar-controls">
         <LocaleMenu wide />
-        <a
-          class="chat-button"
-          class:active={active === 'chat'}
-          href="/chat/"
-          aria-current={active === 'chat' ? 'page' : undefined}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M5 5.5h14v10H9l-4 3v-13Z"></path>
-            <path d="M8.5 9h7M8.5 12h4.5"></path>
-          </svg>
-          <span>{$t('chat.nav')}</span>
-          <small aria-hidden="true">// 01</small>
-        </a>
+        <div class="sidebar-navigation">
+          <a
+            class="rail-button"
+            class:active={active === 'assistants'}
+            href="/assistants/"
+            aria-current={active === 'assistants' ? 'page' : undefined}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 5h6v6H5zM13 5h6v6h-6zM5 13h6v6H5zM13 13h6v6h-6z"></path>
+            </svg>
+            <span>{$t('store.nav')}</span>
+            <small aria-hidden="true">// 01</small>
+          </a>
+          <a
+            class="rail-button"
+            class:active={active === 'chat'}
+            href="/chat/"
+            aria-current={active === 'chat' ? 'page' : undefined}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 5.5h14v10H9l-4 3v-13Z"></path>
+              <path d="M8.5 9h7M8.5 12h4.5"></path>
+            </svg>
+            <span>{$t('chat.nav')}</span>
+            <small aria-hidden="true">// 02</small>
+          </a>
+        </div>
       </div>
       <div class="team-sidebar-region">
         <TeamSidebar {active} />
@@ -167,7 +181,15 @@
     padding: 0 1.15rem 1rem;
   }
 
-  .chat-button {
+  .sidebar-navigation {
+    display: grid;
+    min-width: 0;
+    gap: 0.65rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--admin-divider);
+  }
+
+  .rail-button {
     position: relative;
     display: grid;
     min-width: 0;
@@ -191,7 +213,7 @@
     transition: color 0.16s ease, filter 0.16s ease;
   }
 
-  .chat-button::before {
+  .rail-button::before {
     position: absolute;
     inset-block: 0.4rem;
     inset-inline-start: 0;
@@ -201,20 +223,20 @@
     content: '';
   }
 
-  .chat-button:hover,
-  .chat-button.active {
+  .rail-button:hover,
+  .rail-button.active {
     color: var(--accent);
     filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.2));
   }
 
-  .chat-button.active {
+  .rail-button.active {
     background:
       linear-gradient(100deg, rgba(0, 240, 255, 0.17), transparent 68%),
       #050708;
     box-shadow: inset 0 0 0 1px var(--accent);
   }
 
-  .chat-button svg {
+  .rail-button svg {
     width: 1.1rem;
     height: 1.1rem;
     fill: none;
@@ -224,13 +246,13 @@
     stroke-width: 1.6;
   }
 
-  .chat-button span {
+  .rail-button span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .chat-button small {
+  .rail-button small {
     color: var(--text-faint);
     font-size: 0.48rem;
     letter-spacing: 0.08em;

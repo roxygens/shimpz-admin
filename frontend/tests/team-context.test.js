@@ -447,13 +447,12 @@ test('Assistant scope enforces and exposes the exact protocol limit', async () =
   );
 });
 
-test('Team sidebar keeps context authority and exposes only Team files', () => {
+test('Team sidebar keeps context authority without rendering a Files area', () => {
   assert.match(sidebarSource, /loadTeamContext\(fetch, requestedTeamId\)/);
   assert.match(sidebarSource, /loadModelContext\(fetch, teamId\)/);
   assert.match(sidebarSource, /selectTeam\(fetch, preferredId\)/);
   assert.match(sidebarSource, /goto\(next, \{ replaceState: true, keepFocus: true, noScroll: true \}\)/);
-  assert.match(sidebarSource, /aria-labelledby="sidebar-files-title"/);
-  assert.match(sidebarSource, /toggleTeamFile\(file\.id\)/);
+  assert.doesNotMatch(sidebarSource, /sidebar-files-title|files-section|file-list|toggleTeamFile/);
   assert.doesNotMatch(sidebarSource, /<select|<dialog|AssistantIcon|selectTeamBrain|createTeam/);
   assert.doesNotMatch(sidebarSource, /sidebar-team|sidebar-brain|sidebar-assistants/);
 });
@@ -488,8 +487,8 @@ test('Team sidebar follows client-side team deep links without owning another lo
   assert.doesNotMatch(sidebarSource, /preferredTeamFromLocation|window\.history\.replaceState|replaceState\(next, page\.state\)/);
 });
 
-test('Team sidebar keeps file controls scoped to Chat', () => {
-  assert.match(sidebarSource, /\{#if active === 'chat'\}[\s\S]*?<input[\s\S]*?type="checkbox"/);
+test('Team sidebar keeps only bounded context errors visible outside Chat', () => {
+  assert.doesNotMatch(sidebarSource, /type="checkbox"|selectedFileIds/);
   assert.match(sidebarSource, /\{#if \$teamContext\.phase === 'error' && active !== 'chat'\}/);
 });
 
