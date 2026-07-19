@@ -8,7 +8,7 @@
       title: 'Brain BYOK',
       lead: 'Bring your own model API key to start this private Team chat. The key stays sealed inside your local Admin.',
       provider: 'Provider', model: 'Model', key: 'API key', keyPlaceholder: 'Paste your API key',
-      verified: 'Verified key ready', required: 'Validation required', startChatting: 'Start Chatting',
+      verified: 'Verified key ready', startChatting: 'Start Chatting',
       validating: 'Validating securely…', loading: 'Loading model settings…',
       retry: 'Try again', ready: 'Everything is ready',
     },
@@ -17,7 +17,7 @@
       title: 'Brain BYOK',
       lead: 'Use sua própria chave de API de modelo para iniciar este chat privado do Time. A chave permanece protegida no seu Admin local.',
       provider: 'Provider', model: 'Modelo', key: 'Chave da API', keyPlaceholder: 'Cole sua chave da API',
-      verified: 'Chave validada e pronta', required: 'Validação necessária', startChatting: 'Começar a conversar',
+      verified: 'Chave validada e pronta', startChatting: 'Começar a conversar',
       validating: 'Validando com segurança…', loading: 'Carregando configuração do modelo…',
       retry: 'Tentar novamente', ready: 'Está tudo certo',
     },
@@ -26,7 +26,7 @@
       title: 'Brain BYOK',
       lead: 'Usa tu propia clave de API de modelo para iniciar este chat privado del Equipo. La clave permanece protegida en tu Admin local.',
       provider: 'Proveedor', model: 'Modelo', key: 'Clave de API', keyPlaceholder: 'Pega tu clave de API',
-      verified: 'Clave verificada y lista', required: 'Validación necesaria', startChatting: 'Empezar a chatear',
+      verified: 'Clave verificada y lista', startChatting: 'Empezar a chatear',
       validating: 'Validando de forma segura…', loading: 'Cargando ajustes del modelo…',
       retry: 'Reintentar', ready: 'Todo está listo',
     },
@@ -35,7 +35,7 @@
       title: 'Brain BYOK',
       lead: '使用你自己的模型 API 密钥开始此团队的私密聊天。密钥始终密封保存在本地 Admin 中。',
       provider: '提供商', model: '模型', key: 'API 密钥', keyPlaceholder: '粘贴你的 API 密钥',
-      verified: '已验证的密钥已就绪', required: '需要验证', startChatting: '开始聊天',
+      verified: '已验证的密钥已就绪', startChatting: '开始聊天',
       validating: '正在安全验证…', loading: '正在加载模型设置…',
       retry: '重试', ready: '一切准备就绪',
     },
@@ -44,7 +44,7 @@
       title: 'Brain BYOK',
       lead: 'Utilisez votre propre clé d’API de modèle pour démarrer le chat privé de cette Équipe. La clé reste protégée dans votre Admin local.',
       provider: 'Fournisseur', model: 'Modèle', key: 'Clé API', keyPlaceholder: 'Collez votre clé API',
-      verified: 'Clé vérifiée et prête', required: 'Validation requise', startChatting: 'Commencer à discuter',
+      verified: 'Clé vérifiée et prête', startChatting: 'Commencer à discuter',
       validating: 'Validation sécurisée…', loading: 'Chargement des paramètres du modèle…',
       retry: 'Réessayer', ready: 'Tout est prêt',
     },
@@ -53,7 +53,7 @@
       title: 'Brain BYOK',
       lead: 'Verwenden Sie Ihren eigenen Modell-API-Schlüssel, um den privaten Chat dieses Teams zu starten. Der Schlüssel bleibt sicher in Ihrem lokalen Admin.',
       provider: 'Anbieter', model: 'Modell', key: 'API-Schlüssel', keyPlaceholder: 'API-Schlüssel einfügen',
-      verified: 'Verifizierter Schlüssel bereit', required: 'Validierung erforderlich', startChatting: 'Chat starten',
+      verified: 'Verifizierter Schlüssel bereit', startChatting: 'Chat starten',
       validating: 'Wird sicher validiert…', loading: 'Modelleinstellungen werden geladen…',
       retry: 'Erneut versuchen', ready: 'Alles ist bereit',
     },
@@ -62,7 +62,7 @@
       title: 'Brain BYOK',
       lead: '独自のモデル API キーを使って、このチームのプライベートチャットを開始します。キーはローカル Admin 内に安全に保管されます。',
       provider: 'プロバイダー', model: 'モデル', key: 'API キー', keyPlaceholder: 'API キーを貼り付け',
-      verified: '検証済みのキーを使用できます', required: '検証が必要です', startChatting: 'チャットを開始',
+      verified: '検証済みのキーを使用できます', startChatting: 'チャットを開始',
       validating: '安全に検証中…', loading: 'モデル設定を読み込み中…',
       retry: '再試行', ready: '準備が整いました',
     },
@@ -71,7 +71,7 @@
       title: 'Brain BYOK',
       lead: 'استخدم مفتاح API الخاص بنموذجك لبدء الدردشة الخاصة بهذا الفريق. يبقى المفتاح محميًا داخل Admin المحلي.',
       provider: 'المزوّد', model: 'النموذج', key: 'مفتاح API', keyPlaceholder: 'ألصق مفتاح API',
-      verified: 'المفتاح المتحقق منه جاهز', required: 'التحقق مطلوب', startChatting: 'ابدأ الدردشة',
+      verified: 'المفتاح المتحقق منه جاهز', startChatting: 'ابدأ الدردشة',
       validating: 'جارٍ التحقق بأمان…', loading: 'جارٍ تحميل إعدادات النموذج…',
       retry: 'إعادة المحاولة', ready: 'كل شيء جاهز',
     },
@@ -122,10 +122,12 @@
         <div><dt>{copy.model}</dt><dd>{selectedModel.title}</dd></div>
       </dl>
 
-      <p class:verified={selected.configured} class="verification">
-        <span aria-hidden="true">{selected.configured ? '✓' : '◇'}</span>
-        {selected.configured ? copy.verified : copy.required}
-      </p>
+      {#if selected.configured}
+        <p class="verification">
+          <span aria-hidden="true">✓</span>
+          {copy.verified}
+        </p>
+      {/if}
 
       {#if !selected.configured}
         <label>
@@ -178,8 +180,7 @@
   dl div + div { border-inline-start: 1px solid var(--admin-divider); }
   dt, label > span { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.5rem; letter-spacing: 0.09em; text-transform: uppercase; }
   dd { min-width: 0; margin: 0; overflow: hidden; font-family: var(--font-mono); font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
-  .verification { margin: 0; color: var(--danger); font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase; }
-  .verification.verified { color: var(--success); }
+  .verification { margin: 0; color: var(--success); font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase; }
   label { display: grid; gap: 0.35rem; text-align: start; }
   input { width: 100%; min-height: 2.8rem; border: 1px solid var(--border-strong); padding: 0 0.8rem; background: #020304; color: var(--text); font-family: var(--font-mono); }
   input:focus-visible { border-color: var(--accent); outline: 1px solid var(--accent); outline-offset: 1px; }

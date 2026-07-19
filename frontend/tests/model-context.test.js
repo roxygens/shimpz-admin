@@ -244,3 +244,9 @@ test('central provider gate owns key entry without duplicating provider/model se
   assert.doesNotMatch(gateSource, /<select/);
   assert.doesNotMatch(gateSource, /api_key|resolve_api_key/);
 });
+
+test('provider gate omits unconfigured status copy while preserving verified feedback and key validation', () => {
+  assert.doesNotMatch(gateSource, /copy\.required|required: 'Validation required'|Validação necessária/);
+  assert.match(gateSource, /\{#if selected\.configured\}[\s\S]*\{copy\.verified\}[\s\S]*\{\/if\}/);
+  assert.match(gateSource, /type="password"[\s\S]*minlength="16"[\s\S]*required/);
+});
