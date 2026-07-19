@@ -109,6 +109,8 @@ test('keeps the unauthenticated header and authenticated Chat rail usable on nar
   assert.match(shell, /\.sidebar-controls \{[^}]*padding-bottom: 1rem;[^}]*\}/s);
   assert.match(shell, /\.sidebar-locale \{[^}]*padding: 0 1\.15rem 0\.65rem;[^}]*\}/s);
   assert.match(shell, /\.sidebar-navigation \{[^}]*padding: 0\.65rem 1\.15rem 0;[^}]*border-top: 1px solid var\(--admin-divider\);[^}]*\}/s);
+  assert.match(shell, /@media \(max-width: 420px\) \{[\s\S]*\.sidebar-locale,[\s\S]*\.sidebar-navigation \{ padding-inline: 0\.75rem; \}/);
+  assert.doesNotMatch(shell, /@media \(max-width: 420px\) \{[\s\S]*?\.sidebar-controls \{ padding-inline:/);
   assert.match(shell, /\.rail-button \{[\s\S]*clip-path: polygon\(/);
   assert.match(shell, /@media \(max-width: 760px\) and \(max-height: 600px\)/);
   assert.match(shell, /\.chat-mode \.team-sidebar-region \{\s*max-height: 5\.25rem;/);

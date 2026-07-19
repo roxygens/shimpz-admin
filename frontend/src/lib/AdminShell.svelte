@@ -371,6 +371,7 @@
 
   @media (max-width: 420px) {
     .header-actions { gap: 0.3rem; }
-    .sidebar-controls { padding-inline: 0.75rem; }
+    .sidebar-locale,
+    .sidebar-navigation { padding-inline: 0.75rem; }
   }
 </style>
