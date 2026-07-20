@@ -24,9 +24,7 @@ _TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _ERROR_CODE_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _TURN_RESPONSE_FIELDS = frozenset({"team_id", "team_name", "reply", "trace_id"})
 _STOP_RESPONSE_FIELDS = frozenset({"team_id", "requested", "accepted", "confirmed", "forced_restart", "trace_id"})
-_CHALLENGE_RESPONSE_FIELDS = frozenset(
-    {"team_id", "status", "turn_id", "challenge_id", "requirements", "trace_id"}
-)
+_CHALLENGE_RESPONSE_FIELDS = frozenset({"team_id", "status", "turn_id", "challenge_id", "requirements", "trace_id"})
 _INVENTORY_RESPONSE_FIELDS = frozenset({"team_id", "assistants", "trace_id"})
 _CHALLENGE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 MAX_SECRET_REQUIREMENTS = 16
