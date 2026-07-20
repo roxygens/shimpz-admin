@@ -1,5 +1,6 @@
 <script>
   import { assistantSecretsCopy } from '$lib/assistantSecretsCopy.js';
+  import { assistantSecretManagementCopy } from '$lib/assistantSecretManagementCopy.js';
   import { locale } from '$lib/i18n.js';
 
   let {
@@ -7,12 +8,18 @@
     assistants = [],
     synced = false,
     pending = undefined,
+    approvalCount = 0,
+    approvalsSynced = false,
+    approvalsLoading = false,
     onclose = undefined,
     onprovide = undefined,
+    onrotate = undefined,
+    onrevoke = undefined,
   } = $props();
 
   let closeButton = $state();
   let copy = $derived(assistantSecretsCopy($locale));
+  let management = $derived(assistantSecretManagementCopy($locale));
 
   function handleKeydown(event) {
     if (open && event.key === 'Escape') {
@@ -94,11 +101,25 @@
                   </li>
                 {/each}
               </ul>
+              <button class="rotate" type="button" onclick={() => onrotate?.(assistant)}>
+                {management.rotate}
+              </button>
             {/if}
           </section>
         {/each}
       </div>
     {/if}
+
+    <section class="approvals" aria-labelledby="remembered-approvals-title">
+      <h3 id="remembered-approvals-title">{management.approvalsTitle}</h3>
+      <p>{management.approvalsLead}</p>
+      {#if !approvalsSynced}<span>{copy.loading}</span>
+      {:else if approvalCount === 0}<span>{management.noApprovals}</span>
+      {:else}
+        <strong>{approvalCount}</strong>
+        <button type="button" disabled={approvalsLoading} onclick={() => onrevoke?.()}>{management.revoke}</button>
+      {/if}
+    </section>
   </div>
 </aside>
 
@@ -151,6 +172,12 @@
   .secret-meta > code { color: var(--accent); }
   .secret-meta span code { margin-inline-start: 0.2rem; color: var(--success); }
   .no-secrets { margin: 0; padding: 0.75rem; color: var(--text-faint); font-size: 0.66rem; }
+  .rotate { width: 100%; min-height: 2.7rem; border: 0; box-shadow: inset 0 0 0 1px var(--border-strong); background: transparent; color: var(--accent); cursor: pointer; font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; text-transform: uppercase; }
+  .approvals { display: grid; gap: 0.45rem; margin-top: 0.9rem; border: 1px solid var(--border-strong); padding: 0.8rem; background: #020405; }
+  .approvals h3 { margin: 0; font-size: 0.8rem; }
+  .approvals p, .approvals span { margin: 0; color: var(--text-dim); font-size: 0.65rem; line-height: 1.45; }
+  .approvals strong { color: var(--success); font-family: var(--font-mono); font-size: 0.75rem; }
+  .approvals button { min-height: 2.7rem; border: 1px solid var(--danger); background: transparent; color: var(--danger); cursor: pointer; font-family: var(--font-mono); font-size: 0.56rem; font-weight: 700; text-transform: uppercase; }
 
   @media (max-width: 820px) {
     aside { position: fixed; z-index: 110; inset-block: 0; inset-inline-end: 0; width: min(92vw, 27rem); min-width: 0; box-shadow: -1rem 0 2rem rgba(0, 0, 0, 0.65); }

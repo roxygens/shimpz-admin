@@ -4,6 +4,7 @@
   import AssistantHelpDrawer from '$lib/AssistantHelpDrawer.svelte';
   import AssistantSecretsDialog from '$lib/AssistantSecretsDialog.svelte';
   import AssistantSecretsDrawer from '$lib/AssistantSecretsDrawer.svelte';
+  import AssistantSecretRotationDialog from '$lib/AssistantSecretRotationDialog.svelte';
   import { assistantSecretsCopy } from '$lib/assistantSecretsCopy.js';
   import ChatContextControls from '$lib/ChatContextControls.svelte';
   import HelpMarkdown from '$lib/HelpMarkdown.svelte';
@@ -20,7 +21,10 @@
     createSecretSubmitFrame,
     createStopFrame,
     createSyncFrame,
+    listRememberedApprovals,
     parseChatEvent,
+    replaceAssistantSecrets,
+    revokeRememberedApprovals,
   } from '$lib/localChat.js';
 
   const COPY = {
@@ -80,6 +84,11 @@
   let approvalChallenge = $state();
   let secretInventory = $state([]);
   let secretInventoryReady = $state(false);
+  let rotationOpen = $state(false);
+  let rotationAssistant = $state();
+  let rememberedApprovals = $state([]);
+  let approvalsReady = $state(false);
+  let approvalsLoading = $state(false);
   let composerInput = $state();
   let turnsViewport = $state();
   let scrollRequest = 0;
@@ -210,6 +219,9 @@
     approvalChallenge = undefined;
     approvalDialogOpen = false;
     secretInventoryReady = false;
+    rotationOpen = false;
+    rotationAssistant = undefined;
+    approvalsReady = false;
     current?.close(1000, 'Team changed');
   }
 
@@ -387,6 +399,11 @@
     approvalChallenge = undefined;
     secretInventory = [];
     secretInventoryReady = false;
+    rotationOpen = false;
+    rotationAssistant = undefined;
+    rememberedApprovals = [];
+    approvalsReady = false;
+    approvalsLoading = false;
     clearError();
     if (nextTeamId) connectSocket(nextTeamId);
   }
@@ -399,6 +416,63 @@
   function closeSecrets() {
     secretsOpen = false;
     queueMicrotask(() => secretsButton?.focus());
+  }
+
+  async function refreshApprovals(teamId) {
+    approvalsReady = false;
+    try {
+      const inventory = await listRememberedApprovals(fetch, teamId);
+      if (chatTeamId !== teamId) return;
+      rememberedApprovals = inventory.grants;
+      approvalsReady = true;
+    } catch (reason) {
+      if (chatTeamId !== teamId) return;
+      setError(reason instanceof Error ? reason.message : copy.loadFailed);
+    }
+  }
+
+  function toggleSecrets() {
+    const next = !secretsOpen;
+    helpOpen = false;
+    secretsOpen = next;
+    if (next && chatTeamId) void refreshApprovals(chatTeamId);
+  }
+
+  function openRotation(assistant) {
+    secretsOpen = false;
+    rotationAssistant = assistant;
+    rotationOpen = true;
+  }
+
+  function closeRotation() {
+    rotationOpen = false;
+    rotationAssistant = undefined;
+  }
+
+  async function rotateSecrets(assistantId, values) {
+    const teamId = chatTeamId;
+    if (!teamId) throw new Error(copy.loadFailed);
+    const inventory = await replaceAssistantSecrets(fetch, teamId, assistantId, values);
+    if (chatTeamId !== teamId) return;
+    secretInventory = inventory.assistants;
+    secretInventoryReady = true;
+    closeRotation();
+  }
+
+  async function revokeApprovals() {
+    const teamId = chatTeamId;
+    if (!teamId || approvalsLoading) return;
+    approvalsLoading = true;
+    try {
+      await revokeRememberedApprovals(fetch, teamId);
+      if (chatTeamId !== teamId) return;
+      rememberedApprovals = [];
+      approvalsReady = true;
+    } catch (reason) {
+      if (chatTeamId === teamId) setError(reason instanceof Error ? reason.message : copy.loadFailed);
+    } finally {
+      if (chatTeamId === teamId) approvalsLoading = false;
+    }
   }
 
   function closeSecretsDialog() {
@@ -596,9 +670,7 @@
                 class="secrets"
                 type="button"
                 onclick={() => {
-                  const next = !secretsOpen;
-                  helpOpen = false;
-                  secretsOpen = next;
+                  toggleSecrets();
                 }}
                 disabled={secretAssistants.length === 0}
                 aria-label={secretsCopy.trigger}
@@ -647,8 +719,13 @@
           assistants={secretAssistants}
           synced={secretInventoryReady}
           pending={secretChallenge}
+          approvalCount={rememberedApprovals.length}
+          approvalsSynced={approvalsReady}
+          approvalsLoading={approvalsLoading}
           onclose={closeSecrets}
           onprovide={openSecretsDialog}
+          onrotate={openRotation}
+          onrevoke={revokeApprovals}
         />
         <AssistantSecretsDialog
           open={secretsDialogOpen}
@@ -661,6 +738,12 @@
           challenge={approvalChallenge}
           oncancel={cancelApproval}
           onapprove={submitApproval}
+        />
+        <AssistantSecretRotationDialog
+          open={rotationOpen}
+          assistant={rotationAssistant}
+          onclose={closeRotation}
+          onsubmit={rotateSecrets}
         />
       </div>
     {:else}
