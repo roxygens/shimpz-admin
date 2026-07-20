@@ -1183,6 +1183,10 @@ async def serve(
             sync_task.cancel()
             await asyncio.gather(sync_task, return_exceptions=True)
         active = connection.active
+        if active is None and connection.pending_challenge_type == "secret":
+            active = _Turn(future=None, operation="pending-stop")
+            connection.active = active
+            _request_stop(websocket, connection, active, canonical_id, emit=False)
         if active is not None:
             stop_task = active.stop_task
             if active.future is not None and not active.future.done():

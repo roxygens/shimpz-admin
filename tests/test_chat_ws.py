@@ -732,9 +732,8 @@ class ChatWebSocketTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_pending_challenge_survives_disconnect_and_syncs_on_reconnect(self) -> None:
+    def test_pending_secret_challenge_is_cancelled_on_disconnect_and_not_resynced(self) -> None:
         async def scenario() -> None:
-            pending = _challenge(status=200)
             none_pending = self.teams.DriverResponse(200, {"team_id": "team_1", "status": "none"})
             stopped = self.teams.DriverResponse(200, {"team_id": "team_1", "stopped": True})
             with (
@@ -757,7 +756,7 @@ class ChatWebSocketTests(unittest.TestCase):
                     },
                 )
                 await first.disconnect()
-                stop_mock.assert_not_called()
+                stop_mock.assert_called_once_with("team_1")
 
                 with (
                     mock.patch.object(
@@ -770,7 +769,11 @@ class ChatWebSocketTests(unittest.TestCase):
                         "pending_accounts",
                         return_value=none_pending,
                     ),
-                    mock.patch.object(self.chat_ws.localchat, "pending_secrets", return_value=pending) as pending_mock,
+                    mock.patch.object(
+                        self.chat_ws.localchat,
+                        "pending_secrets",
+                        return_value=none_pending,
+                    ) as pending_mock,
                     mock.patch.object(
                         self.chat_ws.localchat,
                         "pending_approval",
@@ -788,33 +791,11 @@ class ChatWebSocketTests(unittest.TestCase):
                             "assistants": _inventory().body["assistants"],
                         },
                     )
-                    self.assertEqual(await second.next_json(), challenge_event)
                     inventory.assert_called_once_with("team_1")
                     pending_mock.assert_called_once_with("team_1")
-                    await second.disconnect()
-                    stop_mock.assert_not_called()
-
-                with (
-                    mock.patch.object(self.chat_ws.localchat, "secret_inventory", return_value=_inventory()),
-                    mock.patch.object(
-                        self.chat_ws.localchat,
-                        "pending_accounts",
-                        return_value=none_pending,
-                    ),
-                    mock.patch.object(self.chat_ws.localchat, "pending_secrets", return_value=none_pending),
-                    mock.patch.object(
-                        self.chat_ws.localchat,
-                        "pending_approval",
-                        return_value=none_pending,
-                    ),
-                ):
-                    third = _Socket(self.admin_app.app, token=self.token)
-                    self.assertTrue(self._accepted(await third.start()))
-                    await third.send_json({"type": "sync"})
-                    self.assertEqual((await third.next_json())["type"], "secret-inventory")
                     with self.assertRaises(TimeoutError):
-                        await third.next_message(wait_seconds=0.05)
-                    await third.disconnect()
+                        await second.next_message(wait_seconds=0.05)
+                    await second.disconnect()
 
         asyncio.run(scenario())
 
@@ -1063,8 +1044,16 @@ class ChatWebSocketTests(unittest.TestCase):
     def test_stop_cancels_a_pending_secret_challenge_through_localchat(self) -> None:
         async def scenario() -> None:
             stopped = self.teams.DriverResponse(200, {"team_id": "team_1", "stopped": True})
+            completed = self.teams.DriverResponse(
+                200,
+                {"team_id": "team_1", "team_name": "Marketing", "reply": "Fresh turn."},
+            )
             with (
-                mock.patch.object(self.chat_ws.localchat, "turn", return_value=_challenge()),
+                mock.patch.object(
+                    self.chat_ws.localchat,
+                    "turn",
+                    side_effect=(_challenge(), completed),
+                ) as turn_mock,
                 mock.patch.object(self.chat_ws.localchat, "stop", return_value=stopped) as stop_mock,
             ):
                 websocket = _Socket(self.admin_app.app, token=self.token)
@@ -1076,6 +1065,19 @@ class ChatWebSocketTests(unittest.TestCase):
                 await websocket.send_json({"type": "stop"})
                 self.assertEqual(await websocket.next_json(), {"type": "stopped"})
                 stop_mock.assert_called_once_with("team_1")
+                await websocket.send_json(
+                    {"type": "chat", "message": "hello again", "files": [], "assistant_ids": ["weather-guide"]}
+                )
+                self.assertEqual(
+                    await websocket.next_json(),
+                    {
+                        "type": "done",
+                        "team_id": "team_1",
+                        "team_name": "Marketing",
+                        "reply": "Fresh turn.",
+                    },
+                )
+                self.assertEqual(turn_mock.call_count, 2)
                 await websocket.disconnect()
 
         asyncio.run(scenario())
