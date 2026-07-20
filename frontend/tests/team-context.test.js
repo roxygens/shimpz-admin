@@ -721,7 +721,7 @@ test('composer context uses separate accessible dialogs instead of selects', () 
   assert.match(contextControlsSource, /window\.location\.assign\(`\/assistants\/\?team=\$\{encodeURIComponent\(created\.id\)\}`\)/);
   assert.match(contextControlsSource, /deleteTeam\(fetch, target\.id, deleteName, adminPassword\)/);
   assert.match(contextControlsSource, /catch \(error\)[\s\S]*error instanceof LocalApiError[\s\S]*error\.status === 403[\s\S]*admin password is incorrect/);
-  assert.match(contextControlsSource, /deleteErrorDetail = known[\s\S]*`HTTP \$\{error\.status\} · `/);
+  assert.match(contextControlsSource, /const wrongPassword = known[\s\S]*deleteErrorDetail = known && !wrongPassword[\s\S]*`HTTP \$\{error\.status\} · `/);
   assert.match(contextControlsSource, /<strong>\{deleteError\}<\/strong>[\s\S]*<code>\{copy\.technicalDetail\}: \{deleteErrorDetail\}<\/code>/);
   assert.doesNotMatch(contextControlsSource, /\{@html/);
   assert.match(contextControlsSource, /adminPassword = '';\s*\} finally \{\s*deleting = false;/);

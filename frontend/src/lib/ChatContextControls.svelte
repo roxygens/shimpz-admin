@@ -248,10 +248,11 @@
       deleted = true;
     } catch (error) {
       const known = error instanceof LocalApiError;
-      deleteError = known && error.status === 403 && error.message === 'admin password is incorrect'
+      const wrongPassword = known && error.status === 403 && error.message === 'admin password is incorrect';
+      deleteError = wrongPassword
         ? copy.wrongPassword
         : copy.deleteFailed;
-      deleteErrorDetail = known
+      deleteErrorDetail = known && !wrongPassword
         ? `${error.status > 0 ? `HTTP ${error.status} · ` : ''}${error.message}`
         : '';
       adminPassword = '';
