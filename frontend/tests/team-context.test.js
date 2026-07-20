@@ -724,6 +724,13 @@ test('composer context provides model buttons and complete Assistant scope contr
   assert.match(contextControlsSource, /selectMaximum/);
   assert.match(contextControlsSource, /selectedLimited/);
   assert.match(contextControlsSource, /selectedCount >= MAX_SELECTED_ASSISTANTS/);
+  assert.match(contextControlsSource, /<legend class="sr-only">\{copy\.assistantTitle\}<\/legend>/);
+  assert.match(contextControlsSource, /class:selected=\{\$teamContext\.selectedAssistantIds\.includes\(assistant\.id\)\}/);
+  assert.match(contextControlsSource, /<input\s+class="sr-only"\s+type="checkbox"/);
+  assert.doesNotMatch(contextControlsSource, /class="checkmark"|\.checkmark/);
+  assert.match(contextControlsSource, /\.assistant-choices \{[\s\S]*border-block: 1px solid var\(--border-strong\);/);
+  assert.match(contextControlsSource, /footer \{[\s\S]*display: flex;[\s\S]*gap: 0;/);
+  assert.match(contextControlsSource, /footer button \{[^}]*flex: 1 1 0;/);
   assert.match(contextControlsSource, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.doesNotMatch(contextControlsSource, /overflow-x: auto|grid-auto-flow: column/);
 });

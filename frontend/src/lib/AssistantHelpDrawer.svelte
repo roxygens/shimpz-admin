@@ -125,7 +125,7 @@
   header { grid-row: 1; }
   header p, label { margin: 0 0 0.25rem; color: var(--accent); font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; }
   button { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border: 1px solid var(--border-strong); padding: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 1.1rem; }
-  button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .picker { grid-row: 2; }
   label { display: block; color: var(--text-faint); }
   select { width: 100%; min-height: 2.55rem; border: 1px solid var(--border-strong); padding: 0 2rem 0 0.7rem; background: #020405; color: var(--text); font-family: var(--font-mono); font-size: 0.68rem; }

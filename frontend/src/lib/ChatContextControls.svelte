@@ -404,17 +404,20 @@
     {/if}
     {#if runningAssistants.length > 0}
       <fieldset class="assistant-choices">
-        <legend class="visually-hidden">{copy.assistantTitle}</legend>
+        <legend class="sr-only">{copy.assistantTitle}</legend>
         {#each runningAssistants as assistant (assistant.id)}
-          <div class="assistant-choice">
+          <div
+            class="assistant-choice"
+            class:selected={$teamContext.selectedAssistantIds.includes(assistant.id)}
+          >
             <label class:blocked={!$teamContext.selectedAssistantIds.includes(assistant.id) && selectedCount >= MAX_SELECTED_ASSISTANTS}>
               <input
+                class="sr-only"
                 type="checkbox"
                 checked={$teamContext.selectedAssistantIds.includes(assistant.id)}
                 disabled={!$teamContext.selectedAssistantIds.includes(assistant.id) && selectedCount >= MAX_SELECTED_ASSISTANTS}
                 onchange={() => toggleTeamAssistant(assistant.id)}
               />
-              <span class="checkmark" aria-hidden="true"></span>
               <AssistantIcon assistant={assistant.id} size={34} />
               <strong>{assistant.name}</strong>
             </label>
@@ -548,8 +551,7 @@
   .context-trigger span { color: var(--accent); font-family: var(--font-mono); font-size: 0.47rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
   .context-trigger strong { overflow: hidden; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 
-  button:focus-visible,
-  input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   dialog {
     width: min(32rem, calc(100dvw - 1rem));
@@ -563,10 +565,11 @@
   dialog::backdrop { background: rgba(0, 0, 0, 0.82); backdrop-filter: blur(8px); }
 
   .dialog-panel {
+    --dialog-pad: clamp(1.25rem, 4vw, 2rem);
     display: grid;
     max-height: calc(100dvh - 2rem);
     gap: 1rem;
-    padding: clamp(1.25rem, 4vw, 2rem);
+    padding: var(--dialog-pad);
     background: var(--surface-1);
     box-shadow: inset 0 0 0 1px var(--border-strong), 0 24px 80px rgba(0, 0, 0, 0.65);
     clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
@@ -629,15 +632,20 @@
 
   .selection-limit { margin: -0.45rem 0 0; color: var(--text-faint); font-size: 0.64rem; line-height: 1.45; }
 
-  .assistant-choices { display: grid; gap: 0.4rem; min-width: 0; margin: 0; border: 0; padding: 0; }
-  .assistant-choice { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; }
-  .assistant-choice label { display: grid; min-width: 0; min-height: 3.2rem; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 0.65rem; padding: 0.5rem 0.7rem; background: #050708; cursor: pointer; }
+  .assistant-choices {
+    display: grid;
+    min-width: 0;
+    gap: 1px;
+    margin: 0 calc(0px - var(--dialog-pad));
+    border: 0;
+    border-block: 1px solid var(--border-strong);
+    padding: 0.45rem var(--dialog-pad);
+  }
+  .assistant-choice { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 0; background: transparent; }
+  .assistant-choice.selected,
+  .assistant-choice:focus-within { background: rgba(0, 240, 255, 0.065); }
+  .assistant-choice label { display: grid; min-width: 0; min-height: 3.2rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.65rem; padding: 0.5rem 0.7rem; background: transparent; cursor: pointer; }
   .assistant-choice label.blocked { cursor: not-allowed; opacity: 0.42; }
-  .assistant-choice input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .checkmark { display: grid; width: 1rem; height: 1rem; place-items: center; border: 1px solid var(--border-strong); color: var(--accent-ink); }
-  input:checked + .checkmark { border-color: var(--accent); background: var(--accent); }
-  input:checked + .checkmark::after { content: '✓'; font-size: 0.65rem; }
-  input:focus-visible + .checkmark { outline: 2px solid var(--accent); outline-offset: 2px; }
   .assistant-choice strong { overflow: hidden; font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
 
   .dialog-status, .dialog-error { margin: 0; color: var(--text-faint); font-size: 0.7rem; line-height: 1.5; }
@@ -646,8 +654,13 @@
   .field > span { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase; }
   .field input { width: 100%; min-height: 2.8rem; border: 1px solid var(--border-strong); padding: 0 0.8rem; background: #020304; color: var(--text); font-family: var(--font-mono); }
 
-  footer { display: flex; justify-content: flex-end; gap: 0.6rem; }
-  footer button { min-height: 2.6rem; border: 0; padding: 0 0.9rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; text-transform: uppercase; }
+  footer {
+    display: flex;
+    gap: 0;
+    margin: 0 calc(0px - var(--dialog-pad)) calc(0px - var(--dialog-pad));
+  }
+  footer button { width: 100%; min-height: 2.9rem; flex: 1 1 0; border: 0; padding: 0 0.9rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; text-transform: uppercase; }
+  footer button + button { box-shadow: inset 1px 0 0 var(--border-strong); }
   footer .secondary { background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--text-dim); }
   footer .primary { background: var(--accent); color: #001013; }
   footer .danger { background: var(--danger); color: #160007; }
@@ -657,6 +670,5 @@
     .context-trigger { min-height: 2.4rem; padding: 0.35rem 0.4rem; }
     .context-trigger span { font-size: 0.4rem; letter-spacing: 0.06em; }
     .context-trigger strong { font-size: 0.52rem; }
-    footer { align-items: stretch; flex-direction: column-reverse; }
   }
 </style>

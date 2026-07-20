@@ -183,7 +183,7 @@
   .verification { margin: 0; color: var(--success); font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase; }
   label { display: grid; gap: 0.35rem; text-align: start; }
   input { width: 100%; min-height: 2.8rem; border: 1px solid var(--border-strong); padding: 0 0.8rem; background: #020304; color: var(--text); font-family: var(--font-mono); }
-  input:focus-visible { border-color: var(--accent); outline: 1px solid var(--accent); outline-offset: 1px; }
+  input:focus-visible { border-color: var(--border-strong); }
   button { min-height: 2.7rem; border: 1px solid var(--border-strong); padding: 0 0.85rem; background: transparent; color: var(--accent); cursor: pointer; font-family: var(--font-mono); font-size: 0.58rem; font-weight: 700; text-transform: uppercase; }
   button.unlock { border: 0; background: linear-gradient(90deg, var(--accent), #8feaf3 55%, var(--accent-alt)); color: #001013; }
   button:disabled { cursor: not-allowed; opacity: 0.42; }

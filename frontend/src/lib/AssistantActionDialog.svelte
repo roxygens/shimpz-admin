@@ -82,7 +82,8 @@
   }
   dialog::backdrop { background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); }
   .dialog-panel {
-    padding: clamp(1.4rem, 4vw, 2.2rem);
+    --dialog-pad: clamp(1.4rem, 4vw, 2.2rem);
+    padding: var(--dialog-pad);
     background: var(--surface-1);
     box-shadow: inset 0 0 0 1px var(--border-strong), 0 24px 80px rgba(0, 0, 0, 0.65);
     clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
@@ -105,10 +106,16 @@
   .dialog-progress { margin: 1rem 0 0; color: var(--accent); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
   .dialog-route-hint { margin: 1rem 0 0; border-inline-start: 2px solid var(--accent); padding: 0.7rem 0.85rem; color: var(--text-dim); font-size: 0.72rem; line-height: 1.5; }
   .dialog-error { margin: 0.8rem 0 0; color: var(--danger); font-size: 0.78rem; line-height: 1.5; }
-  footer { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; }
+  footer {
+    display: flex;
+    gap: 0;
+    margin: 1.5rem calc(0px - var(--dialog-pad)) calc(0px - var(--dialog-pad));
+  }
   .dialog-primary,
   .dialog-secondary {
     min-height: 2.8rem;
+    width: 100%;
+    flex: 1 1 0;
     border: 0;
     padding: 0 1rem;
     background: var(--accent);
@@ -121,9 +128,7 @@
     text-transform: uppercase;
   }
   .dialog-secondary { background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); color: var(--text-dim); }
+  footer button + button { box-shadow: inset 1px 0 0 var(--border-strong); }
   .dialog-danger { background: var(--danger); color: #160007; }
   button:disabled { cursor: not-allowed; opacity: 0.42; }
-  @media (max-width: 520px) {
-    footer { align-items: stretch; flex-direction: column-reverse; }
-  }
 </style>

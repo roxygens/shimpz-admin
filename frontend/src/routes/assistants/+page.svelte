@@ -898,10 +898,11 @@
   }
 
   .destination-dialog-panel {
+    --dialog-pad: clamp(1.25rem, 4vw, 2rem);
     display: grid;
     max-height: calc(100dvh - 2rem);
     gap: 1.1rem;
-    padding: clamp(1.25rem, 4vw, 2rem);
+    padding: var(--dialog-pad);
     background: var(--surface-1);
     box-shadow: inset 0 0 0 1px var(--border-strong), 0 24px 80px rgba(0, 0, 0, 0.65);
     clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
@@ -956,13 +957,14 @@
 
   .destination-dialog-panel footer {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 0.6rem;
+    gap: 0;
+    margin: 0 calc(0px - var(--dialog-pad)) calc(0px - var(--dialog-pad));
   }
 
   .destination-dialog-panel footer button {
     min-height: 2.7rem;
+    width: 100%;
+    flex: 1 1 0;
     border: 1px solid var(--border-strong);
     padding: 0 1rem;
     cursor: pointer;
@@ -972,8 +974,8 @@
     text-transform: uppercase;
   }
 
-  .destination-dialog-panel footer button:focus-visible,
-  .destination-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .destination-dialog-panel footer button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .destination-dialog-panel footer button + button { box-shadow: inset 1px 0 0 var(--border-strong); }
   .destination-dialog-panel footer button:disabled { cursor: wait; opacity: 0.45; }
   .dialog-secondary { background: transparent; color: var(--text-dim); }
   .dialog-primary { border-color: var(--accent) !important; background: var(--accent); color: #001013; }
