@@ -28,7 +28,7 @@ HANDOFF_CAPACITY = 256
 
 _TEAM_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 _CHALLENGE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
-_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")
+_HANDOFF_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class OAuthHandoffError(RuntimeError):
@@ -75,7 +75,7 @@ def _challenge_id(value: object) -> str:
 
 
 def _token(value: object) -> str:
-    if not isinstance(value, str) or _TOKEN_RE.fullmatch(value) is None:
+    if not isinstance(value, str) or _HANDOFF_RE.fullmatch(value) is None:
         raise OAuthHandoffError("OAuth handoff is unavailable")
     return value
 
@@ -121,9 +121,9 @@ class OAuthHandoffStore:
             ):
                 raise OAuthHandoffError("OAuth authorization is already pending")
 
-            token = secrets.token_urlsafe(32)
+            token = secrets.token_hex(32)
             while token in self._pending:
-                token = secrets.token_urlsafe(32)
+                token = secrets.token_hex(32)
             binding = secrets.token_urlsafe(32)
             self._pending[token] = _PendingHandoff(
                 handoff=OAuthHandoff(team, challenge, binding),

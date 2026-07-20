@@ -29,7 +29,7 @@ class OAuthHandoffStoreTest(unittest.TestCase):
             admin_session=self.session,
         )
 
-        self.assertRegex(token, r"^[A-Za-z0-9_-]{43}$")
+        self.assertRegex(token, r"^[0-9a-f]{64}$")
         handoff = self.store.consume(token)
         self.assertEqual(handoff.team_id, "marketing")
         self.assertEqual(handoff.challenge_id, "b" * 32)
