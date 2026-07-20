@@ -21,6 +21,65 @@ from websockets.exceptions import InvalidStatus
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
+TURN_ID = "a" * 32
+CHALLENGE_ID = "b" * 32
+
+
+def _requirements() -> list[dict[str, object]]:
+    return [
+        {
+            "assistant_id": "weather-guide",
+            "assistant_name": "Weather Guide",
+            "power_ids": ["current-weather", "daily-forecast"],
+            "secrets": [
+                {
+                    "id": "weather-api-token",
+                    "name": "Weather API token",
+                    "summary": "Authenticates requests to the configured weather provider.",
+                }
+            ],
+        }
+    ]
+
+
+def _challenge(status: int = 428) -> object:
+    teams_module = importlib.import_module("teams")
+    return teams_module.DriverResponse(
+        status,
+        {
+            "team_id": "team_1",
+            "status": "secrets-required",
+            "turn_id": TURN_ID,
+            "challenge_id": CHALLENGE_ID,
+            "requirements": _requirements(),
+        },
+    )
+
+
+def _inventory() -> object:
+    teams_module = importlib.import_module("teams")
+    return teams_module.DriverResponse(
+        200,
+        {
+            "team_id": "team_1",
+            "assistants": [
+                {
+                    "id": "weather-guide",
+                    "name": "Weather Guide",
+                    "secrets": [
+                        {
+                            "id": "weather-api-token",
+                            "name": "Weather API token",
+                            "summary": "Authenticates requests to the configured weather provider.",
+                            "configured": True,
+                            "mask": "sk…89",
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
 
 class _Socket:
     def __init__(
@@ -32,7 +91,7 @@ class _Socket:
         protocols: list[str] | None = None,
         team_id: str = "team_1",
     ) -> None:
-        offered = ["shimpz.chat.v2"] if protocols is None else protocols
+        offered = ["shimpz.chat.v3"] if protocols is None else protocols
         headers = [(b"host", b"localhost:7777"), (b"origin", origin.encode("ascii"))]
         if offered:
             headers.append((b"sec-websocket-protocol", ", ".join(offered).encode("ascii")))
@@ -132,7 +191,7 @@ class ChatWebSocketTests(unittest.TestCase):
 
     @staticmethod
     def _accepted(message: dict) -> bool:
-        return message == {"type": "websocket.accept", "subprotocol": "shimpz.chat.v2", "headers": []}
+        return message == {"type": "websocket.accept", "subprotocol": "shimpz.chat.v3", "headers": []}
 
     def test_origin_subprotocol_and_session_are_required_before_accept(self) -> None:
         async def scenario() -> None:
@@ -151,7 +210,7 @@ class ChatWebSocketTests(unittest.TestCase):
             extra_protocol = _Socket(
                 self.admin_app.app,
                 token=self.token,
-                protocols=["shimpz.chat.v2", "shimpz.chat.v1"],
+                protocols=["shimpz.chat.v3", "shimpz.chat.v2"],
             )
             self.assertEqual(
                 await extra_protocol.start(),
@@ -208,6 +267,100 @@ class ChatWebSocketTests(unittest.TestCase):
                 turn.assert_not_called()
             await websocket.disconnect()
 
+        asyncio.run(scenario())
+
+    def test_secret_events_are_exact_bounded_and_never_project_values(self) -> None:
+        expected_challenge = {
+            "type": "secrets-required",
+            "turn_id": TURN_ID,
+            "challenge_id": CHALLENGE_ID,
+            "requirements": _requirements(),
+        }
+        self.assertEqual(
+            self.chat_ws.secret_challenge_event(_challenge(), "team_1"),
+            expected_challenge,
+        )
+        expected_inventory = {
+            "type": "secret-inventory",
+            "team_id": "team_1",
+            "assistants": _inventory().body["assistants"],
+        }
+        self.assertEqual(
+            self.chat_ws.secret_inventory_event(_inventory(), "team_1"),
+            expected_inventory,
+        )
+        self.assertNotIn("value", json.dumps(expected_challenge))
+
+        augmented = _challenge()
+        augmented.body["api_key"] = "must-never-cross"
+        self.assertIsNone(self.chat_ws.secret_challenge_event(augmented, "team_1"))
+        cross_team = _inventory()
+        cross_team.body["team_id"] = "other_team"
+        self.assertIsNone(self.chat_ws.secret_inventory_event(cross_team, "team_1"))
+        invalid_mask = _inventory()
+        invalid_mask.body["assistants"][0]["secrets"][0]["mask"] = "secret-value"
+        self.assertIsNone(self.chat_ws.secret_inventory_event(invalid_mask, "team_1"))
+
+    def test_secret_submission_enforces_exact_shape_count_and_utf8_value_cap(self) -> None:
+        async def scenario() -> None:
+            websocket = _Socket(self.admin_app.app, token=self.token)
+            self.assertTrue(self._accepted(await websocket.start()))
+            with (
+                mock.patch.object(self.chat_ws.localchat, "turn", return_value=_challenge()),
+                mock.patch.object(self.chat_ws.localchat, "submit_secrets") as submit,
+            ):
+                await websocket.send_json(
+                    {"type": "chat", "message": "weather", "files": [], "assistant_ids": ["weather-guide"]}
+                )
+                self.assertEqual((await websocket.next_json())["type"], "secrets-required")
+                invalid_values = (
+                    [
+                        {
+                            "assistant_id": "weather-guide",
+                            "secret_id": f"secret-{index}",
+                            "value": f"value-{index}",
+                        }
+                        for index in range(65)
+                    ],
+                    [
+                        {
+                            "assistant_id": "weather-guide",
+                            "secret_id": "weather-api-token",
+                            "value": "x" * (16 * 1024 + 1),
+                        }
+                    ],
+                    [
+                        {
+                            "assistant_id": "weather-guide",
+                            "secret_id": "weather-api-token",
+                            "value": "first",
+                        },
+                        {
+                            "assistant_id": "weather-guide",
+                            "secret_id": "weather-api-token",
+                            "value": "second",
+                        },
+                    ],
+                )
+                for values in invalid_values:
+                    await websocket.send_json({"type": "secret-submit", "challenge_id": CHALLENGE_ID, "values": values})
+                    self.assertEqual(
+                        await websocket.next_json(),
+                        {"type": "error", "status": 400, "detail": "invalid Assistant secret submission"},
+                    )
+                await websocket.send_json(
+                    {
+                        "type": "secret-submit",
+                        "challenge_id": CHALLENGE_ID,
+                        "values": [],
+                        "extra": True,
+                    }
+                )
+                self.assertEqual((await websocket.next_json())["status"], 400)
+                submit.assert_not_called()
+            await websocket.disconnect()
+
+        self.assertEqual(self.chat_ws.MAX_FRAME_BYTES, 512 * 1024)
         asyncio.run(scenario())
 
     def test_session_is_revalidated_before_every_frame(self) -> None:
@@ -271,7 +424,7 @@ class ChatWebSocketTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_real_uvicorn_negotiates_v2_and_delivers_one_public_terminal(self) -> None:
+    def test_real_uvicorn_negotiates_v3_and_delivers_one_public_terminal(self) -> None:
         async def scenario() -> None:
             listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -313,10 +466,10 @@ class ChatWebSocketTests(unittest.TestCase):
                     async with websockets.connect(
                         uri,
                         origin="http://localhost:7777",
-                        subprotocols=["shimpz.chat.v2"],
+                        subprotocols=["shimpz.chat.v3"],
                         additional_headers=headers,
                     ) as websocket:
-                        self.assertEqual(websocket.subprotocol, "shimpz.chat.v2")
+                        self.assertEqual(websocket.subprotocol, "shimpz.chat.v3")
                         await websocket.send('{"type":"chat","message":"hello","files":[],"assistant_ids":[]}')
                         self.assertEqual(
                             json.loads(await asyncio.wait_for(websocket.recv(), timeout=1)),
@@ -414,6 +567,164 @@ class ChatWebSocketTests(unittest.TestCase):
                 await websocket.disconnect()
                 self.assertEqual(stop_mock.call_count, 1)
                 release.set()
+
+        asyncio.run(scenario())
+
+    def test_pending_challenge_survives_disconnect_and_syncs_on_reconnect(self) -> None:
+        async def scenario() -> None:
+            pending = _challenge(status=200)
+            none_pending = self.teams.DriverResponse(200, {"team_id": "team_1", "status": "none"})
+            stopped = self.teams.DriverResponse(200, {"team_id": "team_1", "stopped": True})
+            with (
+                mock.patch.object(self.chat_ws.localchat, "turn", return_value=_challenge()),
+                mock.patch.object(self.chat_ws.localchat, "stop", return_value=stopped) as stop_mock,
+            ):
+                first = _Socket(self.admin_app.app, token=self.token)
+                self.assertTrue(self._accepted(await first.start()))
+                await first.send_json(
+                    {"type": "chat", "message": "weather", "files": [], "assistant_ids": ["weather-guide"]}
+                )
+                challenge_event = await first.next_json()
+                self.assertEqual(
+                    challenge_event,
+                    {
+                        "type": "secrets-required",
+                        "turn_id": TURN_ID,
+                        "challenge_id": CHALLENGE_ID,
+                        "requirements": _requirements(),
+                    },
+                )
+                await first.disconnect()
+                stop_mock.assert_not_called()
+
+                with (
+                    mock.patch.object(
+                        self.chat_ws.localchat,
+                        "secret_inventory",
+                        return_value=_inventory(),
+                    ) as inventory,
+                    mock.patch.object(self.chat_ws.localchat, "pending_secrets", return_value=pending) as pending_mock,
+                ):
+                    second = _Socket(self.admin_app.app, token=self.token)
+                    self.assertTrue(self._accepted(await second.start()))
+                    await second.send_json({"type": "sync"})
+                    self.assertEqual(
+                        await second.next_json(),
+                        {
+                            "type": "secret-inventory",
+                            "team_id": "team_1",
+                            "assistants": _inventory().body["assistants"],
+                        },
+                    )
+                    self.assertEqual(await second.next_json(), challenge_event)
+                    inventory.assert_called_once_with("team_1")
+                    pending_mock.assert_called_once_with("team_1")
+                    await second.disconnect()
+                    stop_mock.assert_not_called()
+
+                with (
+                    mock.patch.object(self.chat_ws.localchat, "secret_inventory", return_value=_inventory()),
+                    mock.patch.object(self.chat_ws.localchat, "pending_secrets", return_value=none_pending),
+                ):
+                    third = _Socket(self.admin_app.app, token=self.token)
+                    self.assertTrue(self._accepted(await third.start()))
+                    await third.send_json({"type": "sync"})
+                    self.assertEqual((await third.next_json())["type"], "secret-inventory")
+                    with self.assertRaises(TimeoutError):
+                        await third.next_message(wait_seconds=0.05)
+                    await third.disconnect()
+
+        asyncio.run(scenario())
+
+    def test_one_secret_submit_resumes_the_turn_without_echoing_its_value(self) -> None:
+        async def scenario() -> None:
+            started = threading.Event()
+            release = threading.Event()
+            submitted_value = "test-private-must-never-cross-the-websocket"
+            completed = self.teams.DriverResponse(
+                200,
+                {"team_id": "team_1", "team_name": "Marketing", "reply": "Lisbon is sunny."},
+            )
+
+            def submit(_team_id, _payload):
+                started.set()
+                release.wait(timeout=2)
+                return completed
+
+            with (
+                mock.patch.object(self.chat_ws.localchat, "turn", return_value=_challenge()),
+                mock.patch.object(self.chat_ws.localchat, "submit_secrets", side_effect=submit) as submit_mock,
+            ):
+                websocket = _Socket(self.admin_app.app, token=self.token)
+                self.assertTrue(self._accepted(await websocket.start()))
+                await websocket.send_json(
+                    {"type": "chat", "message": "weather", "files": [], "assistant_ids": ["weather-guide"]}
+                )
+                self.assertEqual((await websocket.next_json())["type"], "secrets-required")
+                frame = {
+                    "type": "secret-submit",
+                    "challenge_id": CHALLENGE_ID,
+                    "values": [
+                        {
+                            "assistant_id": "weather-guide",
+                            "secret_id": "weather-api-token",
+                            "value": submitted_value,
+                        }
+                    ],
+                }
+                await websocket.send_json(frame)
+                await _wait_for_thread(started)
+                await websocket.send_json(frame)
+                self.assertEqual(
+                    await websocket.next_json(),
+                    {"type": "error", "status": 409, "detail": "a chat operation is already active"},
+                )
+                release.set()
+                terminal = await websocket.next_json()
+                self.assertEqual(
+                    terminal,
+                    {
+                        "type": "done",
+                        "team_id": "team_1",
+                        "team_name": "Marketing",
+                        "reply": "Lisbon is sunny.",
+                    },
+                )
+                self.assertNotIn(submitted_value, json.dumps(terminal))
+                submit_mock.assert_called_once_with(
+                    "team_1",
+                    {
+                        "challenge_id": CHALLENGE_ID,
+                        "values": [
+                            {
+                                "assistant_id": "weather-guide",
+                                "secret_id": "weather-api-token",
+                                "value": submitted_value,
+                            }
+                        ],
+                    },
+                )
+                await websocket.disconnect()
+
+        asyncio.run(scenario())
+
+    def test_stop_cancels_a_pending_secret_challenge_through_localchat(self) -> None:
+        async def scenario() -> None:
+            stopped = self.teams.DriverResponse(200, {"team_id": "team_1", "stopped": True})
+            with (
+                mock.patch.object(self.chat_ws.localchat, "turn", return_value=_challenge()),
+                mock.patch.object(self.chat_ws.localchat, "stop", return_value=stopped) as stop_mock,
+            ):
+                websocket = _Socket(self.admin_app.app, token=self.token)
+                self.assertTrue(self._accepted(await websocket.start()))
+                await websocket.send_json(
+                    {"type": "chat", "message": "weather", "files": [], "assistant_ids": ["weather-guide"]}
+                )
+                self.assertEqual((await websocket.next_json())["type"], "secrets-required")
+                await websocket.send_json({"type": "stop"})
+                self.assertEqual(await websocket.next_json(), {"type": "stopped"})
+                stop_mock.assert_called_once_with("team_1")
+                await websocket.disconnect()
 
         asyncio.run(scenario())
 

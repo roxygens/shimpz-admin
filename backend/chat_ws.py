@@ -1,8 +1,8 @@
 """Bounded, session-authenticated WebSocket transport for local Team chat.
 
-The browser speaks only ``shimpz.chat.v2``. Provider credentials and the controller contract stay
-behind :mod:`localchat`; this module admits one turn per socket, keeps Stop responsive on its own
-bounded worker lane, and projects every completed operation onto a small public terminal schema.
+The browser speaks only ``shimpz.chat.v3``. Provider and Assistant secrets stay behind
+:mod:`localchat`; this module admits one mutating operation per socket, keeps Stop responsive on its
+own bounded worker lane, and projects controller state onto small, exact public schemas.
 """
 
 from __future__ import annotations
@@ -22,14 +22,22 @@ import localchat
 import teams
 from fastapi import WebSocket, WebSocketDisconnect
 
-CHAT_SUBPROTOCOL = "shimpz.chat.v2"
-MAX_FRAME_BYTES = 128 * 1024
+CHAT_SUBPROTOCOL = "shimpz.chat.v3"
+MAX_FRAME_BYTES = 512 * 1024
 MAX_PUBLIC_REPLY_CHARS = 60_000
 MAX_PUBLIC_TEAM_NAME_CHARS = 80
 MAX_PUBLIC_ERROR_CHARS = 800
+MAX_PUBLIC_LABEL_CHARS = 80
+MAX_PUBLIC_SUMMARY_CHARS = 160
+MAX_SECRET_REQUIREMENTS = 16
+MAX_SECRET_VALUES = 64
+MAX_SECRETS_PER_ASSISTANT = 32
+MAX_POWERS_PER_ASSISTANT = 128
+MAX_INSTALLED_ASSISTANTS = 128
 _DEFAULT_ORIGINS = "http://127.0.0.1:7777,http://localhost:7777"
 _REPLY_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+_OPAQUE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _CHAT_ERROR_DETAILS = {
     "assistant-power-blocked": "Assistant Power execution is blocked until it is reinstalled",
     "assistant-registry-drift": "an installed Assistant is no longer available",
@@ -38,6 +46,7 @@ _CHAT_ERROR_DETAILS = {
     "chat-active": "this Team already has an active chat turn",
     "chat-request-failed": "the local chat request failed",
     "chat-response-invalid": "the local chat returned an invalid response",
+    "chat-stop-response-invalid": "the local chat stop response was invalid",
     "chat-stopped": "the chat turn was stopped",
     "file-not-found": "a selected file was not found",
     "inference-not-configured": "the Team model provider is not configured",
@@ -51,6 +60,8 @@ _CHAT_ERROR_DETAILS = {
     "power-approval-required": "an Assistant Power requires approval",
     "power-state-unavailable": "the Team Power execution state is unavailable",
     "runtime-unavailable": "the local chat runtime is unavailable; update this Shimpz Space",
+    "secret-challenge-response-invalid": "the Assistant secret challenge was invalid",
+    "secret-inventory-response-invalid": "the Assistant secret inventory was invalid",
     "team-context-changed": "the Team capabilities changed; retry",
     "team-has-no-active-assistants": "install and start at least one Assistant before chatting",
 }
@@ -96,6 +107,7 @@ class BoundedExecutor:
 # needed to revoke it. The local controller remains the authoritative per-Team admission boundary.
 _TURN_EXECUTOR = BoundedExecutor(workers=2, outstanding=2, name="shimpz-chat-turn")
 _STOP_EXECUTOR = BoundedExecutor(workers=2, outstanding=4, name="shimpz-chat-stop")
+_SYNC_EXECUTOR = BoundedExecutor(workers=2, outstanding=4, name="shimpz-chat-sync")
 
 
 def canonical_origin(value: str | None) -> str | None:
@@ -201,7 +213,7 @@ def _error_terminal(status: object, detail: str = "local chat request failed") -
 
 
 def turn_terminal(response: object, team_id: str) -> dict[str, object]:
-    """Project a secret-safe localchat response onto the public v2 terminal contract."""
+    """Project a secret-safe localchat response onto the public v3 terminal contract."""
     if not isinstance(response, teams.DriverResponse):
         return _error_terminal(502)
     if isinstance(response.status, int) and not isinstance(response.status, bool) and 200 <= response.status < 300:
@@ -240,6 +252,171 @@ def turn_terminal(response: object, team_id: str) -> dict[str, object]:
     return _error_terminal(status, f"{code}: {_CHAT_ERROR_DETAILS[code]}")
 
 
+def _canonical_assistant_id(value: object) -> str | None:
+    try:
+        return teams.canonical_assistant_id(value)
+    except teams.TeamRequestError:
+        return None
+
+
+def _valid_public_text(value: object, maximum: int) -> bool:
+    return isinstance(value, str) and value == value.strip() and 0 < len(value) <= maximum and value.isprintable()
+
+
+def _canonical_secret_metadata(value: object) -> dict[str, str] | None:
+    if not isinstance(value, dict) or set(value) != {"id", "name", "summary"}:
+        return None
+    secret_id = _canonical_assistant_id(value.get("id"))
+    if (
+        secret_id is None
+        or not _valid_public_text(value.get("name"), MAX_PUBLIC_LABEL_CHARS)
+        or not _valid_public_text(value.get("summary"), MAX_PUBLIC_SUMMARY_CHARS)
+    ):
+        return None
+    return {"id": secret_id, "name": value["name"], "summary": value["summary"]}
+
+
+def secret_challenge_event(response: object, team_id: str) -> dict[str, object] | None:
+    """Return one exact public challenge without ever copying submitted secret values."""
+    if (
+        not isinstance(response, teams.DriverResponse)
+        or not isinstance(response.status, int)
+        or isinstance(response.status, bool)
+        or (response.status != 428 and not 200 <= response.status < 300)
+        or not isinstance(response.body, dict)
+        or set(response.body) != {"team_id", "status", "turn_id", "challenge_id", "requirements"}
+        or response.body.get("team_id") != team_id
+        or response.body.get("status") != "secrets-required"
+    ):
+        return None
+    turn_id = response.body.get("turn_id")
+    challenge_id = response.body.get("challenge_id")
+    raw_requirements = response.body.get("requirements")
+    if (
+        not isinstance(turn_id, str)
+        or _OPAQUE_ID_RE.fullmatch(turn_id) is None
+        or not isinstance(challenge_id, str)
+        or _OPAQUE_ID_RE.fullmatch(challenge_id) is None
+        or not isinstance(raw_requirements, list)
+        or not 1 <= len(raw_requirements) <= MAX_SECRET_REQUIREMENTS
+    ):
+        return None
+
+    requirements: list[dict[str, object]] = []
+    seen_assistants: set[str] = set()
+    total_secrets = 0
+    for raw in raw_requirements:
+        if not isinstance(raw, dict) or set(raw) != {"assistant_id", "assistant_name", "power_ids", "secrets"}:
+            return None
+        assistant_id = _canonical_assistant_id(raw.get("assistant_id"))
+        power_ids = raw.get("power_ids")
+        raw_secrets = raw.get("secrets")
+        if (
+            assistant_id is None
+            or assistant_id in seen_assistants
+            or not _valid_public_text(raw.get("assistant_name"), MAX_PUBLIC_LABEL_CHARS)
+            or not isinstance(power_ids, list)
+            or not 1 <= len(power_ids) <= MAX_POWERS_PER_ASSISTANT
+            or not isinstance(raw_secrets, list)
+            or not 1 <= len(raw_secrets) <= MAX_SECRETS_PER_ASSISTANT
+        ):
+            return None
+        canonical_powers = [_canonical_assistant_id(power_id) for power_id in power_ids]
+        if any(power_id is None for power_id in canonical_powers) or len(set(canonical_powers)) != len(
+            canonical_powers
+        ):
+            return None
+        secrets = [_canonical_secret_metadata(secret) for secret in raw_secrets]
+        if any(secret is None for secret in secrets):
+            return None
+        secret_ids = [secret["id"] for secret in secrets if secret is not None]
+        if len(set(secret_ids)) != len(secret_ids):
+            return None
+        total_secrets += len(secrets)
+        if total_secrets > MAX_SECRET_VALUES:
+            return None
+        seen_assistants.add(assistant_id)
+        requirements.append(
+            {
+                "assistant_id": assistant_id,
+                "assistant_name": raw["assistant_name"],
+                "power_ids": canonical_powers,
+                "secrets": secrets,
+            }
+        )
+    return {
+        "type": "secrets-required",
+        "turn_id": turn_id,
+        "challenge_id": challenge_id,
+        "requirements": requirements,
+    }
+
+
+def _valid_secret_mask(value: object) -> bool:
+    if value == "••••":
+        return True
+    if not isinstance(value, str) or not value.isprintable():
+        return False
+    characters = list(value)
+    if len(characters) not in {3, 5, 7, 9}:
+        return False
+    middle = len(characters) // 2
+    return 1 <= middle <= 4 and characters[middle] == "…"
+
+
+def secret_inventory_event(response: object, team_id: str) -> dict[str, object] | None:
+    """Return one exact Team-bound inventory containing metadata and masks only."""
+    if (
+        not isinstance(response, teams.DriverResponse)
+        or not isinstance(response.status, int)
+        or isinstance(response.status, bool)
+        or not 200 <= response.status < 300
+        or not isinstance(response.body, dict)
+        or set(response.body) != {"team_id", "assistants"}
+        or response.body.get("team_id") != team_id
+    ):
+        return None
+    raw_assistants = response.body.get("assistants")
+    if not isinstance(raw_assistants, list) or len(raw_assistants) > MAX_INSTALLED_ASSISTANTS:
+        return None
+    assistants: list[dict[str, object]] = []
+    seen_assistants: set[str] = set()
+    for raw in raw_assistants:
+        if not isinstance(raw, dict) or set(raw) != {"id", "name", "secrets"}:
+            return None
+        assistant_id = _canonical_assistant_id(raw.get("id"))
+        raw_secrets = raw.get("secrets")
+        if (
+            assistant_id is None
+            or assistant_id in seen_assistants
+            or not _valid_public_text(raw.get("name"), MAX_PUBLIC_LABEL_CHARS)
+            or not isinstance(raw_secrets, list)
+            or len(raw_secrets) > MAX_SECRETS_PER_ASSISTANT
+        ):
+            return None
+        secrets: list[dict[str, object]] = []
+        seen_secrets: set[str] = set()
+        for raw_secret in raw_secrets:
+            if not isinstance(raw_secret, dict) or set(raw_secret) != {"id", "name", "summary", "configured", "mask"}:
+                return None
+            metadata = _canonical_secret_metadata({key: raw_secret[key] for key in ("id", "name", "summary")})
+            configured = raw_secret.get("configured")
+            mask = raw_secret.get("mask")
+            if (
+                metadata is None
+                or metadata["id"] in seen_secrets
+                or not isinstance(configured, bool)
+                or (configured and not _valid_secret_mask(mask))
+                or (not configured and mask is not None)
+            ):
+                return None
+            seen_secrets.add(metadata["id"])
+            secrets.append({**metadata, "configured": configured, "mask": mask})
+        seen_assistants.add(assistant_id)
+        assistants.append({"id": assistant_id, "name": raw["name"], "secrets": secrets})
+    return {"type": "secret-inventory", "team_id": team_id, "assistants": assistants}
+
+
 def _stop_accepted(response: object, team_id: str) -> bool | None:
     if (
         not isinstance(response, teams.DriverResponse)
@@ -257,7 +434,8 @@ def _stop_accepted(response: object, team_id: str) -> bool | None:
 
 @dataclass(slots=True)
 class _Turn:
-    future: concurrent.futures.Future
+    future: concurrent.futures.Future | None
+    operation: str
     delivery: asyncio.Task | None = None
     stop_task: asyncio.Task | None = None
     stop_requested: bool = False
@@ -267,6 +445,8 @@ class _Turn:
 @dataclass(slots=True)
 class _Connection:
     active: _Turn | None = None
+    pending_challenge_id: str | None = None
+    sync_task: asyncio.Task | None = None
     closed: bool = False
 
 
@@ -300,15 +480,120 @@ async def _deliver_turn(websocket: WebSocket, connection: _Connection, turn: _Tu
         # closed while cancellation and process-control BaseExceptions continue to propagate.
         with contextlib.suppress(Exception):
             try:
-                response = await asyncio.wrap_future(turn.future)
+                if turn.future is not None:
+                    response = await asyncio.wrap_future(turn.future)
             except asyncio.CancelledError:
                 raise
             except teams.TeamRequestError:
                 response = teams.DriverResponse(400, {})
-        await _send_terminal_once(websocket, connection, turn, turn_terminal(response, team_id))
+        if connection.closed or turn.stop_requested or turn.terminal_sent:
+            return
+        challenge = secret_challenge_event(response, team_id)
+        if challenge is not None:
+            connection.pending_challenge_id = challenge["challenge_id"]
+            if not await _send_event(websocket, challenge):
+                connection.closed = True
+            return
+        if isinstance(response, teams.DriverResponse) and (
+            response.status == 428
+            or (isinstance(response.body, dict) and response.body.get("status") == "secrets-required")
+        ):
+            event = _error_terminal(502, "the Assistant secret challenge was invalid")
+        else:
+            event = turn_terminal(response, team_id)
+        if event.get("type") == "done":
+            connection.pending_challenge_id = None
+        await _send_terminal_once(websocket, connection, turn, event)
     finally:
         if connection.active is turn:
             connection.active = None
+
+
+def _sync_snapshot(team_id: str) -> tuple[object, object]:
+    return localchat.secret_inventory(team_id), localchat.pending_secrets(team_id)
+
+
+def _pending_secret_event(response: object, team_id: str) -> dict[str, object] | None:
+    if (
+        isinstance(response, teams.DriverResponse)
+        and isinstance(response.status, int)
+        and not isinstance(response.status, bool)
+        and 200 <= response.status < 300
+        and isinstance(response.body, dict)
+        and set(response.body) == {"team_id", "status"}
+        and response.body.get("team_id") == team_id
+        and response.body.get("status") == "none"
+    ):
+        return None
+    return secret_challenge_event(response, team_id)
+
+
+async def _deliver_sync(websocket: WebSocket, connection: _Connection, team_id: str) -> None:
+    task = asyncio.current_task()
+    try:
+        snapshot: tuple[object, object] | None = None
+        try:
+            future = _SYNC_EXECUTOR.submit(_sync_snapshot, team_id)
+        except ExecutorSaturatedError:
+            await _send_event(websocket, _error_terminal(429, "local chat capacity reached"))
+            return
+        with contextlib.suppress(Exception):
+            snapshot = await asyncio.wrap_future(future)
+        if snapshot is None:
+            await _send_event(websocket, _error_terminal(502))
+            return
+        inventory_response, pending_response = snapshot
+        if connection.closed:
+            return
+
+        inventory = secret_inventory_event(inventory_response, team_id)
+        if inventory is None:
+            if (
+                isinstance(inventory_response, teams.DriverResponse)
+                and isinstance(inventory_response.status, int)
+                and not isinstance(inventory_response.status, bool)
+                and not 200 <= inventory_response.status < 300
+            ):
+                event = turn_terminal(inventory_response, team_id)
+            else:
+                event = _error_terminal(502, "the Assistant secret inventory was invalid")
+            await _send_event(websocket, event)
+            return
+        if not await _send_event(websocket, inventory):
+            connection.closed = True
+            return
+
+        pending = _pending_secret_event(pending_response, team_id)
+        if pending is None:
+            if (
+                isinstance(pending_response, teams.DriverResponse)
+                and isinstance(pending_response.status, int)
+                and not isinstance(pending_response.status, bool)
+                and 200 <= pending_response.status < 300
+                and isinstance(pending_response.body, dict)
+                and set(pending_response.body) == {"team_id", "status"}
+                and pending_response.body.get("team_id") == team_id
+                and pending_response.body.get("status") == "none"
+            ):
+                connection.pending_challenge_id = None
+                return
+            if (
+                isinstance(pending_response, teams.DriverResponse)
+                and isinstance(pending_response.status, int)
+                and not isinstance(pending_response.status, bool)
+                and not 200 <= pending_response.status < 300
+            ):
+                event = turn_terminal(pending_response, team_id)
+            else:
+                event = _error_terminal(502, "the Assistant secret challenge was invalid")
+            await _send_event(websocket, event)
+            return
+        connection.pending_challenge_id = pending["challenge_id"]
+        if not await _send_event(websocket, pending):
+            connection.closed = True
+    finally:
+        if connection.sync_task is task:
+            connection.sync_task = None
 
 
 async def _run_stop(
@@ -331,6 +616,7 @@ async def _run_stop(
         if not emit or connection.closed or turn.terminal_sent:
             return
         if accepted is True:
+            connection.pending_challenge_id = None
             await _send_terminal_once(websocket, connection, turn, {"type": "stopped"})
         elif accepted is None:
             status = response.status if isinstance(response, teams.DriverResponse) else 502
@@ -340,9 +626,26 @@ async def _run_stop(
                 turn,
                 _error_terminal(status, "chat turn could not be stopped"),
             )
+        elif turn.operation == "pending-stop":
+            await _send_terminal_once(
+                websocket,
+                connection,
+                turn,
+                _error_terminal(409, "no active chat turn"),
+            )
         # ``False`` races safely with a turn that has already finished; its normal terminal wins.
     finally:
         turn.stop_task = None
+        if turn.operation == "pending-stop" and turn.terminal_sent and connection.active is turn:
+            connection.active = None
+
+
+async def _finish_cancelled_turn(websocket: WebSocket, connection: _Connection, turn: _Turn) -> None:
+    try:
+        await _send_terminal_once(websocket, connection, turn, {"type": "stopped"})
+    finally:
+        if connection.active is turn:
+            connection.active = None
 
 
 def _request_stop(
@@ -356,48 +659,112 @@ def _request_stop(
     if turn.stop_requested:
         return turn.stop_task
     turn.stop_requested = True
-    if turn.future.cancel():
+    cancelled = turn.future is not None and turn.future.cancel()
+    if cancelled and connection.pending_challenge_id is None:
         if emit and not connection.closed:
-            turn.stop_task = asyncio.create_task(_send_terminal_once(websocket, connection, turn, {"type": "stopped"}))
+            turn.stop_task = asyncio.create_task(_finish_cancelled_turn(websocket, connection, turn))
         return turn.stop_task
     turn.stop_task = asyncio.create_task(_run_stop(websocket, connection, turn, team_id, emit=emit))
     return turn.stop_task
 
 
+async def _dispatch_sync(websocket: WebSocket, connection: _Connection, team_id: str) -> None:
+    if connection.sync_task is not None or connection.active is not None:
+        await _send_event(websocket, _error_terminal(409, "a chat operation is already active"))
+        return
+    connection.sync_task = asyncio.create_task(_deliver_sync(websocket, connection, team_id))
+
+
+async def _dispatch_chat(
+    websocket: WebSocket,
+    connection: _Connection,
+    team_id: str,
+    frame: dict[str, object],
+) -> None:
+    if set(frame) != {"type", "message", "files", "assistant_ids"}:
+        await _send_event(
+            websocket,
+            _error_terminal(400, "chat frame requires message, files, and assistant_ids"),
+        )
+        return
+    try:
+        payload = teams.canonical_chat_payload({key: value for key, value in frame.items() if key != "type"})
+    except teams.TeamRequestError:
+        await _send_event(websocket, _error_terminal(400, "invalid chat request"))
+        return
+    if connection.active is not None or connection.sync_task is not None:
+        await _send_event(websocket, _error_terminal(409, "a chat turn is already active"))
+        return
+    if connection.pending_challenge_id is not None:
+        await _send_event(websocket, _error_terminal(409, "Assistant secrets are required before another turn"))
+        return
+    try:
+        future = _TURN_EXECUTOR.submit(localchat.turn, team_id, payload)
+    except ExecutorSaturatedError:
+        await _send_event(websocket, _error_terminal(429, "local chat capacity reached"))
+        return
+    turn = _Turn(future=future, operation="chat")
+    connection.active = turn
+    turn.delivery = asyncio.create_task(_deliver_turn(websocket, connection, turn, team_id))
+
+
+async def _dispatch_secret_submit(
+    websocket: WebSocket,
+    connection: _Connection,
+    team_id: str,
+    frame: dict[str, object],
+) -> None:
+    if set(frame) != {"type", "challenge_id", "values"}:
+        await _send_event(
+            websocket,
+            _error_terminal(400, "secret-submit frame requires challenge_id and values"),
+        )
+        return
+    try:
+        payload = teams.canonical_secret_submission({key: value for key, value in frame.items() if key != "type"})
+    except teams.TeamRequestError:
+        await _send_event(websocket, _error_terminal(400, "invalid Assistant secret submission"))
+        return
+    if connection.active is not None or connection.sync_task is not None:
+        await _send_event(websocket, _error_terminal(409, "a chat operation is already active"))
+        return
+    if connection.pending_challenge_id is None:
+        await _send_event(websocket, _error_terminal(409, "no Assistant secret challenge is pending"))
+        return
+    if payload["challenge_id"] != connection.pending_challenge_id:
+        await _send_event(websocket, _error_terminal(409, "the Assistant secret challenge is stale"))
+        return
+    try:
+        future = _TURN_EXECUTOR.submit(localchat.submit_secrets, team_id, payload)
+    except ExecutorSaturatedError:
+        await _send_event(websocket, _error_terminal(429, "local chat capacity reached"))
+        return
+    turn = _Turn(future=future, operation="secret-submit")
+    connection.active = turn
+    turn.delivery = asyncio.create_task(_deliver_turn(websocket, connection, turn, team_id))
+
+
+async def _dispatch_stop(websocket: WebSocket, connection: _Connection, team_id: str) -> None:
+    if connection.active is None and connection.pending_challenge_id is None:
+        await _send_event(websocket, _error_terminal(409, "no active chat turn"))
+        return
+    if connection.active is None:
+        connection.active = _Turn(future=None, operation="pending-stop")
+    _request_stop(websocket, connection, connection.active, team_id, emit=True)
+
+
 async def _dispatch(websocket: WebSocket, connection: _Connection, team_id: str, frame: dict[str, object]) -> None:
-    if frame.get("type") == "chat":
-        if set(frame) != {"type", "message", "files", "assistant_ids"}:
-            await _send_event(
-                websocket,
-                _error_terminal(400, "chat frame requires message, files, and assistant_ids"),
-            )
-            return
-        try:
-            payload = teams.canonical_chat_payload({key: value for key, value in frame.items() if key != "type"})
-        except teams.TeamRequestError:
-            await _send_event(websocket, _error_terminal(400, "invalid chat request"))
-            return
-        if connection.active is not None:
-            await _send_event(websocket, _error_terminal(409, "a chat turn is already active"))
-            return
-        try:
-            future = _TURN_EXECUTOR.submit(localchat.turn, team_id, payload)
-        except ExecutorSaturatedError:
-            await _send_event(websocket, _error_terminal(429, "local chat capacity reached"))
-            return
-        turn = _Turn(future=future)
-        connection.active = turn
-        turn.delivery = asyncio.create_task(_deliver_turn(websocket, connection, turn, team_id))
-        return
-
-    if frame.get("type") == "stop" and set(frame) == {"type"}:
-        if connection.active is None:
-            await _send_event(websocket, _error_terminal(409, "no active chat turn"))
-            return
-        _request_stop(websocket, connection, connection.active, team_id, emit=True)
-        return
-
-    await _send_event(websocket, _error_terminal(400, "unsupported chat frame"))
+    frame_type = frame.get("type")
+    if frame_type == "sync" and set(frame) == {"type"}:
+        await _dispatch_sync(websocket, connection, team_id)
+    elif frame_type == "chat":
+        await _dispatch_chat(websocket, connection, team_id, frame)
+    elif frame_type == "secret-submit":
+        await _dispatch_secret_submit(websocket, connection, team_id, frame)
+    elif frame_type == "stop" and set(frame) == {"type"}:
+        await _dispatch_stop(websocket, connection, team_id)
+    else:
+        await _send_event(websocket, _error_terminal(400, "unsupported chat frame"))
 
 
 def _has_subprotocol(websocket: WebSocket) -> bool:
@@ -457,9 +824,15 @@ async def serve(
         connection.closed = True
     finally:
         connection.closed = True
+        sync_task = connection.sync_task
+        if sync_task is not None:
+            sync_task.cancel()
+            await asyncio.gather(sync_task, return_exceptions=True)
         active = connection.active
         if active is not None:
-            stop_task = _request_stop(websocket, connection, active, canonical_id, emit=False)
+            stop_task = active.stop_task
+            if active.future is not None and not active.future.done():
+                stop_task = _request_stop(websocket, connection, active, canonical_id, emit=False)
             if stop_task is not None:
                 with contextlib.suppress(asyncio.CancelledError, TimeoutError):
                     await asyncio.wait_for(asyncio.shield(stop_task), timeout=15)
