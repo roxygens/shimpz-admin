@@ -401,6 +401,23 @@ test('Team deletion fails closed on an inexact name or malformed success envelop
   assert.equal(get(teamContext).selectedTeamId, 'marketing');
 });
 
+test('Team deletion preserves the bounded API reason and status for safe diagnostics', async () => {
+  await loadTeamContext(fixtureFetcher(), 'marketing');
+
+  await assert.rejects(
+    deleteTeam(fixtureFetcher({
+      '/api/teams/marketing': async () => response(403, { detail: 'admin password is incorrect' }),
+    }), 'marketing', 'Marketing', 'wrong password'),
+    (error) => (
+      error instanceof LocalApiError &&
+      error.status === 403 &&
+      error.message === 'admin password is incorrect'
+    ),
+  );
+  assert.equal(get(teamContext).phase, 'ready');
+  assert.equal(get(teamContext).selectedTeamId, 'marketing');
+});
+
 test('deleting the last Team rehydrates an authoritative empty context', async () => {
   let deleted = false;
   const fetcher = fixtureFetcher({
@@ -703,10 +720,15 @@ test('composer context uses separate accessible dialogs instead of selects', () 
   assert.match(contextControlsSource, /goto\(next, \{ replaceState: true, keepFocus: true, noScroll: true \}\)/);
   assert.match(contextControlsSource, /window\.location\.assign\(`\/assistants\/\?team=\$\{encodeURIComponent\(created\.id\)\}`\)/);
   assert.match(contextControlsSource, /deleteTeam\(fetch, target\.id, deleteName, adminPassword\)/);
+  assert.match(contextControlsSource, /catch \(error\)[\s\S]*error instanceof LocalApiError[\s\S]*error\.status === 403[\s\S]*admin password is incorrect/);
+  assert.match(contextControlsSource, /deleteErrorDetail = known[\s\S]*`HTTP \$\{error\.status\} · `/);
+  assert.match(contextControlsSource, /<strong>\{deleteError\}<\/strong>[\s\S]*<code>\{copy\.technicalDetail\}: \{deleteErrorDetail\}<\/code>/);
+  assert.doesNotMatch(contextControlsSource, /\{@html/);
+  assert.match(contextControlsSource, /adminPassword = '';\s*\} finally \{\s*deleting = false;/);
   assert.match(contextControlsSource, /deleteName !== deletingTeam\.name \|\| !adminPassword/);
   assert.match(contextControlsSource, /autocomplete="current-password"/);
   assert.match(contextControlsSource, /next\.searchParams\.delete\('team'\)/);
-  assert.match(contextControlsSource, /finally \{\s*deleting = false;\s*resetDeleteForm\(\);/);
+  assert.match(contextControlsSource, /if \(!deleted\) return;\s*resetDeleteForm\(\);/);
   assert.doesNotMatch(contextControlsSource, /\bconfirm\s*\(/);
 });
 
