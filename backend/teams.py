@@ -114,6 +114,12 @@ def canonical_oauth_binding(value: object) -> str:
     return value
 
 
+def canonical_challenge_id(value: object) -> str:
+    if not isinstance(value, str) or _CHALLENGE_ID_RE.fullmatch(value) is None:
+        raise TeamRequestError("OAuth challenge is invalid")
+    return value
+
+
 def canonical_oauth_code(value: object) -> str:
     if not isinstance(value, str) or _OAUTH_CODE_RE.fullmatch(value) is None:
         raise TeamRequestError("OAuth authorization response is invalid")
@@ -780,8 +786,7 @@ def start_assistant_connection_authorization(
     session_binding: object,
 ) -> DriverResponse:
     canonical_id = canonical_team_id(team_id)
-    if not isinstance(challenge_id, str) or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None:
-        raise TeamRequestError("OAuth challenge is invalid")
+    challenge_id = canonical_challenge_id(challenge_id)
     binding = canonical_oauth_binding(session_binding)
     response = _call(
         "POST",

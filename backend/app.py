@@ -19,10 +19,12 @@ import json
 import logging
 import os
 import sys
+from contextlib import suppress
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException, MultiPartParser
@@ -39,6 +41,7 @@ import keyset
 import localchat
 import modelproviders
 import notifications
+import oauth_handoff
 import teams
 import validate_live
 
@@ -52,6 +55,10 @@ ENV_PATH = REPO / ".env"
 EXAMPLE_PATH = REPO / ".env.example"  # the scaffolding baseline (mounted :ro); see `_configured`
 UI_DIR = Path(__file__).resolve().parent.parent / "frontend" / "build"
 COOKIE = "shimpz_admin"
+OAUTH_COOKIE = "shimpz_oauth_binding"
+OAUTH_COOKIE_PATH = "/api/oauth/x"
+OAUTH_COOKIE_TTL = 300
+LOCAL_OAUTH_START = "http://127.0.0.1:7777/api/oauth/x/start"
 MIN_PASSWORD_LEN = 12
 MAX_TEAM_DELETE_BODY_BYTES = 8 * 1024
 MAX_ADMIN_PASSWORD_CHARS = 4 * 1024
@@ -62,9 +69,19 @@ envfile.read(ENV_PATH)
 
 # Open surface: the SPA shell (served for any non-/api path) + these auth endpoints. Everything
 # else under /api/ needs a session.
-OPEN_API = frozenset({"/api/session", "/api/login", "/api/logout", "/api/admin/setup"})
+OPEN_API = frozenset(
+    {
+        "/api/session",
+        "/api/login",
+        "/api/logout",
+        "/api/admin/setup",
+        "/api/oauth/x/start",
+        "/api/oauth/x/callback",
+    }
+)
 
 app = FastAPI(title="shimpz-admin", docs_url=None, redoc_url=None, openapi_url=None)
+OAUTH_HANDOFFS = oauth_handoff.OAuthHandoffStore()
 
 
 def _is_https(request):
@@ -80,6 +97,15 @@ def _set_session(resp, request, token):
 
 def _session_ok(cookies):
     return auth.verify_session(adminstore.get().get("session_secret", ""), cookies.get(COOKIE, ""))
+
+
+def _oauth_chat_redirect() -> RedirectResponse:
+    """Leave provider query data behind and return to the token-free SPA URL."""
+    response = RedirectResponse("/chat", status_code=303)
+    response.delete_cookie(OAUTH_COOKIE, path=OAUTH_COOKIE_PATH)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 @app.middleware("http")
@@ -121,7 +147,11 @@ async def login(request: Request, payload: dict):
 
 
 @app.post("/api/logout")
-async def logout():
+async def logout(request: Request):
+    session_token = request.cookies.get(COOKIE, "")
+    if session_token:
+        with suppress(oauth_handoff.OAuthHandoffError):
+            OAUTH_HANDOFFS.cancel_session(session_token)
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(COOKIE, path="/")
     return resp
@@ -546,6 +576,115 @@ async def team_assistant_approvals_revoke(team_id: str):
         _team_driver_response,
         lambda: localchat.revoke_approvals(team_id),
     )
+
+
+@app.get("/api/teams/{team_id}/assistant-connections")
+def team_assistant_connections(team_id: str):
+    response = _team_driver_response(lambda: teams.list_assistant_connections(team_id))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.post("/api/teams/{team_id}/assistant-connections/challenges/{challenge_id}/authorize")
+async def team_assistant_connection_authorize(team_id: str, challenge_id: str, request: Request):
+    payload = await _bounded_json_object(request)
+    if payload:
+        raise HTTPException(status_code=400, detail="request body must be an empty JSON object")
+    session_token = request.cookies.get(COOKIE, "")
+    if not _session_ok(request.cookies):
+        raise HTTPException(status_code=401, detail="unauthenticated")
+    try:
+        canonical_team = teams.canonical_team_id(team_id)
+        canonical_challenge = teams.canonical_challenge_id(challenge_id)
+        handoff = OAUTH_HANDOFFS.issue(
+            team_id=canonical_team,
+            challenge_id=canonical_challenge,
+            admin_session=session_token,
+        )
+    except teams.TeamRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except oauth_handoff.OAuthHandoffError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    authorization_url = LOCAL_OAUTH_START + "?" + urlencode({"handoff": handoff})
+    return JSONResponse(
+        {"authorization_url": authorization_url},
+        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+    )
+
+
+@app.delete("/api/teams/{team_id}/assistant-connections/{assistant_id}/{connection_id}")
+async def team_assistant_connection_disconnect(team_id: str, assistant_id: str, connection_id: str):
+    try:
+        response = await asyncio.to_thread(
+            teams.disconnect_assistant_connection,
+            team_id,
+            assistant_id,
+            connection_id,
+        )
+    except teams.TeamRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    if response.status == 204 and not response.body:
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
+    return JSONResponse(response.body, status_code=response.status, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/oauth/x/start")
+async def oauth_x_start(request: Request, handoff: str = ""):
+    if request.url.hostname != "127.0.0.1" or request.url.port != 7777:
+        return _oauth_chat_redirect()
+    try:
+        pending = OAUTH_HANDOFFS.consume(handoff)
+        result = await asyncio.to_thread(
+            teams.start_assistant_connection_authorization,
+            pending.team_id,
+            pending.challenge_id,
+            pending.session_binding,
+        )
+    except oauth_handoff.OAuthHandoffError, teams.TeamRequestError:
+        return _oauth_chat_redirect()
+    if result.status != 200:
+        log.info("OAuth authorization start rejected (HTTP %s)", result.status)
+        return _oauth_chat_redirect()
+    authorization_url = result.body.get("authorization_url")
+    if not isinstance(authorization_url, str):
+        return _oauth_chat_redirect()
+    response = RedirectResponse(authorization_url, status_code=303)
+    response.set_cookie(
+        OAUTH_COOKIE,
+        pending.session_binding,
+        max_age=OAUTH_COOKIE_TTL,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        path=OAUTH_COOKIE_PATH,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+@app.get("/api/oauth/x/callback")
+async def oauth_x_callback(request: Request):
+    response = _oauth_chat_redirect()
+    if request.url.hostname != "127.0.0.1" or request.url.port != 7777:
+        return response
+    pairs = list(request.query_params.multi_items())
+    if len(pairs) != 2 or {key for key, _value in pairs} != {"state", "code"}:
+        return response
+    query = dict(pairs)
+    binding = request.cookies.get(OAUTH_COOKIE, "")
+    try:
+        result = await asyncio.to_thread(
+            teams.complete_x_oauth_callback,
+            state=query["state"],
+            code=query["code"],
+            session_binding=binding,
+        )
+    except teams.TeamRequestError:
+        return response
+    if result.status != 200:
+        log.info("OAuth callback rejected (HTTP %s)", result.status)
+    return response
 
 
 @app.get("/api/assistants")
