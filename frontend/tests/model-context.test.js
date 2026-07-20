@@ -249,4 +249,8 @@ test('provider gate omits unconfigured status copy while preserving verified fee
   assert.doesNotMatch(gateSource, /copy\.required|required: 'Validation required'|Validação necessária/);
   assert.match(gateSource, /\{#if selected\.configured\}[\s\S]*\{copy\.verified\}[\s\S]*\{\/if\}/);
   assert.match(gateSource, /type="password"[\s\S]*minlength="16"[\s\S]*required/);
+  assert.match(
+    gateSource,
+    /autocomplete="off"[\s\S]*data-1p-ignore[\s\S]*data-lpignore="true"[\s\S]*data-bwignore="true"/,
+  );
 });

@@ -35,7 +35,10 @@ test('keeps replacement drafts write-only and clears every terminal path', () =>
   assert.match(dialogSource, /let values = \$state\(\{\}\);/);
   assert.match(dialogSource, /function clearValues\(\) \{ values = \{\}; submitError = ''; \}/);
   assert.match(dialogSource, /type="password"/);
-  assert.match(dialogSource, /autocomplete="off"[\s\S]*autocapitalize="none"[\s\S]*spellcheck="false"/);
+  assert.match(
+    dialogSource,
+    /autocomplete="off"[\s\S]*data-1p-ignore[\s\S]*data-lpignore="true"[\s\S]*data-bwignore="true"[\s\S]*autocapitalize="none"[\s\S]*spellcheck="false"/,
+  );
   assert.match(dialogSource, /await onsubmit\?\.\(assistant\.id, outgoing\);\s*clearValues\(\);/);
   assert.match(dialogSource, /catch \{\s*clearValues\(\);\s*submitError = management\.failed;/);
   assert.match(dialogSource, /if \(!open\) clearValues\(\)/);

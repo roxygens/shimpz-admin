@@ -56,7 +56,10 @@ test('shows every missing secret with public Assistant, Power, and field details
   assert.match(dialogSource, /\{#each requirement\.secrets as secret/);
   assert.match(dialogSource, /\{requirement\.assistant_name\}[\s\S]*\{secret\.name\}[\s\S]*\{secret\.summary\}/);
   assert.match(dialogSource, /type="password"/);
-  assert.match(dialogSource, /autocomplete="off"[\s\S]*autocapitalize="none"[\s\S]*spellcheck="false"/);
+  assert.match(
+    dialogSource,
+    /autocomplete="off"[\s\S]*data-1p-ignore[\s\S]*data-lpignore="true"[\s\S]*data-bwignore="true"[\s\S]*autocapitalize="none"[\s\S]*spellcheck="false"/,
+  );
   assert.match(dialogSource, /assistant_id: field\.assistantId,[\s\S]*secret_id: field\.secretId,[\s\S]*value: values\[field\.key\]/);
   assert.doesNotMatch(dialogSource, /\{@html|type="text"|name="/i);
 });

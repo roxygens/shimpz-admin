@@ -344,7 +344,10 @@
                   minlength={field.min_length}
                   maxlength={field.max_length}
                   required={field.required}
-                  autocomplete={field.type === "secret" ? "new-password" : "off"}
+                  autocomplete="off"
+                  data-1p-ignore={field.type === "secret" ? true : undefined}
+                  data-lpignore={field.type === "secret" ? "true" : undefined}
+                  data-bwignore={field.type === "secret" ? "true" : undefined}
                   autocapitalize="none"
                   spellcheck={false}
                   disabled={busy}

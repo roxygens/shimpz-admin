@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -14,6 +15,10 @@ import {
 } from "../src/lib/driverCredentials.js";
 
 const UUID = "2e386e84-1f04-4c24-9f6d-e28f632a40de";
+const panelSource = readFileSync(
+  new URL("../src/lib/DriverCredentialPanel.svelte", import.meta.url),
+  "utf8",
+);
 
 function documentFixture({ cardinality = "many" } = {}) {
   return {
@@ -115,6 +120,17 @@ test("normalizes a many-cardinality form and projects credential metadata only",
     created_at: "2026-07-15T10:00:00Z",
   });
   assert.doesNotMatch(JSON.stringify(normalized.credentials), /must-never-enter-state/);
+});
+
+test("suppresses password-manager suggestions only for declared secret fields", () => {
+  assert.match(panelSource, /autocomplete="off"/);
+  for (const attribute of ["data-1p-ignore", "data-lpignore", "data-bwignore"]) {
+    assert.match(
+      panelSource,
+      new RegExp(`${attribute}=\\{field\\.type === "secret" \\? (?:true|"true") : undefined\\}`),
+    );
+  }
+  assert.doesNotMatch(panelSource, /autocomplete=\{field\.type === "secret" \? "new-password"/);
 });
 
 test("rejects unknown executable form fields and confused Driver identities", () => {

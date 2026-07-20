@@ -75,6 +75,9 @@
             maxlength="16384"
             placeholder={copy.placeholder}
             autocomplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore="true"
             autocapitalize="none"
             spellcheck="false"
           />

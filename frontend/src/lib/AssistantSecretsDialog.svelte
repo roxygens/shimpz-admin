@@ -127,6 +127,9 @@
                   placeholder={copy.placeholder}
                   maxlength="16384"
                   autocomplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-bwignore="true"
                   autocapitalize="none"
                   spellcheck="false"
                   required
