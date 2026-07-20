@@ -27,6 +27,7 @@ TOKEN_FILE = os.environ.get("SHIMPZ_TEAMDRIVER_TOKEN_FILE", "/run/shimpz-teamdri
 
 MAX_JSON_BODY_BYTES = 16 * 1024
 MAX_CHAT_JSON_BODY_BYTES = 24 * 1024
+MAX_SECRET_JSON_BODY_BYTES = 512 * 1024
 MAX_JSON_RESPONSE_BYTES = 256 * 1024
 MAX_FILE_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_FILE_JSON_BODY_BYTES = 4 * ((MAX_FILE_UPLOAD_BYTES + 2) // 3) + 8192
@@ -37,11 +38,14 @@ _ASSISTANT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 ASSISTANT_HELP_LOCALES = frozenset({"en", "pt", "es", "zh", "fr", "de", "ja", "ar"})
 _FILE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+_CHALLENGE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _MEDIA_TYPE_RE = re.compile(r"^[a-z0-9][a-z0-9!#$&^_.+\-]*/[a-z0-9][a-z0-9!#$&^_.+\-]*$")
 MAX_CHAT_MESSAGE_CHARS = 16_000
 MAX_CHAT_FILES = 8
 MAX_CHAT_ASSISTANTS = 16
+MAX_SECRET_SUBMISSIONS = 64
+MAX_ASSISTANT_SECRET_BYTES = 16 * 1024
 MAX_TEAMS = 128
 MAX_TEAM_NAME_CHARS = 80
 
@@ -395,6 +399,40 @@ def canonical_chat_payload(payload: object) -> dict[str, object]:
     }
 
 
+def canonical_secret_submission(payload: object) -> dict[str, object]:
+    """Validate a one-use JIT submission without retaining or logging its values."""
+    if not isinstance(payload, dict) or set(payload) != {"challenge_id", "values"}:
+        raise TeamRequestError("secret submission requires challenge_id and values")
+    challenge_id = payload["challenge_id"]
+    values = payload["values"]
+    if not isinstance(challenge_id, str) or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None:
+        raise TeamRequestError("secret challenge is invalid")
+    if not isinstance(values, list) or not 1 <= len(values) <= MAX_SECRET_SUBMISSIONS:
+        raise TeamRequestError("secret values exceed their fixed limit")
+    canonical: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in values:
+        if not isinstance(item, dict) or set(item) != {"assistant_id", "secret_id", "value"}:
+            raise TeamRequestError("secret value has an invalid shape")
+        assistant_id = canonical_assistant_id(item["assistant_id"])
+        secret_id = canonical_assistant_id(item["secret_id"])
+        value = item["value"]
+        if not isinstance(value, str) or not value or value != value.strip() or not value.isprintable():
+            raise TeamRequestError("secret value is invalid")
+        try:
+            encoded = value.encode("utf-8")
+        except UnicodeError as exc:
+            raise TeamRequestError("secret value is invalid") from exc
+        if len(encoded) > MAX_ASSISTANT_SECRET_BYTES:
+            raise TeamRequestError("secret value exceeds its fixed limit")
+        identity = (assistant_id, secret_id)
+        if identity in seen:
+            raise TeamRequestError("secret values must not contain duplicates")
+        seen.add(identity)
+        canonical.append({"assistant_id": assistant_id, "secret_id": secret_id, "value": value})
+    return {"challenge_id": challenge_id, "values": canonical}
+
+
 def chat(
     team_id: object,
     payload: object,
@@ -418,6 +456,35 @@ def chat(
 def stop_chat(team_id: object) -> DriverResponse:
     canonical_id = canonical_team_id(team_id)
     return _call("POST", f"/v1/teams/{canonical_id}/chat/stop", {})
+
+
+def pending_chat_secrets(team_id: object) -> DriverResponse:
+    canonical_id = canonical_team_id(team_id)
+    return _call("GET", f"/v1/teams/{canonical_id}/chat/secrets")
+
+
+def submit_chat_secrets(
+    team_id: object,
+    payload: object,
+    *,
+    provider: str,
+    api_key: str,
+) -> DriverResponse:
+    canonical_id = canonical_team_id(team_id)
+    body = canonical_secret_submission(payload)
+    return _call(
+        "POST",
+        f"/v1/teams/{canonical_id}/chat/secrets",
+        body,
+        timeout=CONTROL_TIMEOUT_SECONDS,
+        max_body_bytes=MAX_SECRET_JSON_BODY_BYTES,
+        model_credential=(provider, api_key),
+    )
+
+
+def list_assistant_secrets(team_id: object) -> DriverResponse:
+    canonical_id = canonical_team_id(team_id)
+    return _call("GET", f"/v1/teams/{canonical_id}/assistant-secrets")
 
 
 def list_assistants() -> DriverResponse:

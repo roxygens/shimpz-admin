@@ -20,6 +20,19 @@ import modelproviders
 import teams
 
 TRACE_ID = "a" * 32
+CHALLENGE_ID = "b" * 32
+
+
+def secret_requirement() -> dict[str, object]:
+    return {
+        "assistant_id": "shimpz-assistant",
+        "assistant_name": "Shimpz Assistant",
+        "power_ids": ["identity-me", "create-post"],
+        "secrets": [
+            {"id": "x-api-key", "name": "X API Key", "summary": "Identifies the X application."},
+            {"id": "x-api-secret", "name": "X API Secret", "summary": "Authenticates the X application."},
+        ],
+    }
 
 
 class _ControllerHandler(BaseHTTPRequestHandler):
@@ -83,8 +96,220 @@ class PrivateChatTransportTests(unittest.TestCase):
         self.assertEqual(request["headers"]["x-shimpz-model-api-key"], api_key)
         self.assertNotIn(api_key.encode(), request["body"])
 
+    def test_secret_submission_uses_bounded_json_and_private_model_header(self) -> None:
+        model_key = "sk-test-0123456789"
+        secret_value = "assistant-secret-123456789"  # noqa: S105 - synthetic transport fixture
+        teams.submit_chat_secrets(
+            "team_1",
+            {
+                "challenge_id": CHALLENGE_ID,
+                "values": [
+                    {
+                        "assistant_id": "shimpz-assistant",
+                        "secret_id": "x-api-secret",
+                        "value": secret_value,
+                    }
+                ],
+            },
+            provider="openai",
+            api_key=model_key,
+        )
+
+        request = _ControllerHandler.request
+        self.assertEqual(request["path"], "/v1/teams/team_1/chat/secrets")
+        self.assertEqual(request["headers"]["x-shimpz-model-api-key"], model_key)
+        self.assertEqual(
+            json.loads(request["body"]),
+            {
+                "challenge_id": CHALLENGE_ID,
+                "values": [
+                    {
+                        "assistant_id": "shimpz-assistant",
+                        "secret_id": "x-api-secret",
+                        "value": secret_value,
+                    }
+                ],
+            },
+        )
+        self.assertNotIn(model_key.encode(), request["body"])
+
 
 class LocalChatOrchestrationTests(unittest.TestCase):
+    def test_secret_submission_contract_rejects_ambiguity_before_transport(self) -> None:
+        valid = {
+            "challenge_id": CHALLENGE_ID,
+            "values": [
+                {
+                    "assistant_id": "shimpz-assistant",
+                    "secret_id": "x-api-key",
+                    "value": "secret-value-123",
+                }
+            ],
+        }
+        invalid = (
+            {**valid, "extra": True},
+            {"challenge_id": "short", "values": valid["values"]},
+            {"challenge_id": CHALLENGE_ID, "values": []},
+            {
+                "challenge_id": CHALLENGE_ID,
+                "values": [valid["values"][0], valid["values"][0]],
+            },
+            {
+                "challenge_id": CHALLENGE_ID,
+                "values": [{**valid["values"][0], "value": " line\nbreak"}],
+            },
+        )
+        with mock.patch.object(teams, "_call") as transport:
+            for payload in invalid:
+                with self.subTest(payload=payload), self.assertRaises(teams.TeamRequestError):
+                    teams.submit_chat_secrets(
+                        "team_1",
+                        payload,
+                        provider="openai",
+                        api_key="sk-test-0123456789",
+                    )
+        transport.assert_not_called()
+
+    def test_missing_secrets_are_projected_as_one_closed_batch(self) -> None:
+        inference = teams.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})
+        controller = teams.DriverResponse(
+            428,
+            {
+                "team_id": "team_1",
+                "status": "secrets-required",
+                "turn_id": CHALLENGE_ID,
+                "challenge_id": CHALLENGE_ID,
+                "requirements": [secret_requirement()],
+                "trace_id": TRACE_ID,
+            },
+        )
+        with (
+            mock.patch.object(teams, "get_inference", return_value=inference),
+            mock.patch.object(modelproviders, "resolve_api_key", return_value="sk-test-0123456789"),
+            mock.patch.object(teams, "chat", return_value=controller),
+        ):
+            response = localchat.turn(
+                "team_1",
+                {"message": "Post an update", "files": [], "assistant_ids": ["shimpz-assistant"]},
+            )
+
+        self.assertEqual(response.status, 428)
+        self.assertEqual(
+            response.body,
+            {
+                "team_id": "team_1",
+                "status": "secrets-required",
+                "turn_id": CHALLENGE_ID,
+                "challenge_id": CHALLENGE_ID,
+                "requirements": [secret_requirement()],
+            },
+        )
+        self.assertNotIn("value", json.dumps(response.body))
+
+    def test_secret_challenge_and_inventory_fail_closed_on_extra_or_cross_team_data(self) -> None:
+        valid_challenge = {
+            "team_id": "team_1",
+            "status": "secrets-required",
+            "turn_id": CHALLENGE_ID,
+            "challenge_id": CHALLENGE_ID,
+            "requirements": [secret_requirement()],
+            "trace_id": TRACE_ID,
+        }
+        invalid_challenges = (
+            {**valid_challenge, "team_id": "team_2"},
+            {**valid_challenge, "secret": "must-not-cross"},
+            {**valid_challenge, "requirements": [secret_requirement(), secret_requirement()]},
+            {
+                **valid_challenge,
+                "requirements": [
+                    {
+                        **secret_requirement(),
+                        "secrets": [{"id": "x-api-key", "name": "X", "summary": "x", "value": "leak"}],
+                    }
+                ],
+            },
+        )
+        for body in invalid_challenges:
+            with self.subTest(body=body):
+                response = localchat._project_challenge(teams.DriverResponse(428, body), "team_1")
+            self.assertEqual(response, teams.DriverResponse(502, {"code": "secret-challenge-response-invalid"}))
+
+        valid_inventory = {
+            "team_id": "team_1",
+            "assistants": [
+                {
+                    "id": "shimpz-assistant",
+                    "name": "Shimpz Assistant",
+                    "secrets": [
+                        {
+                            "id": "x-api-key",
+                            "name": "X API Key",
+                            "summary": "Identifies the application.",
+                            "configured": True,
+                            "mask": "abcd…wxyz",
+                        }
+                    ],
+                }
+            ],
+            "trace_id": TRACE_ID,
+        }
+        projected = localchat._project_inventory(teams.DriverResponse(200, valid_inventory), "team_1")
+        self.assertEqual(projected.status, 200)
+        self.assertNotIn("value", json.dumps(projected.body))
+        for invalid in (
+            {**valid_inventory, "team_id": "team_2"},
+            {**valid_inventory, "assistants": [{**valid_inventory["assistants"][0], "value": "leak"}]},
+            {
+                **valid_inventory,
+                "assistants": [
+                    {
+                        **valid_inventory["assistants"][0],
+                        "secrets": [
+                            {
+                                **valid_inventory["assistants"][0]["secrets"][0],
+                                "mask": "too-much-visible",
+                            }
+                        ],
+                    }
+                ],
+            },
+        ):
+            with self.subTest(invalid=invalid):
+                response = localchat._project_inventory(teams.DriverResponse(200, invalid), "team_1")
+            self.assertEqual(response, teams.DriverResponse(502, {"code": "secret-inventory-response-invalid"}))
+
+    def test_submitted_secret_cannot_be_reflected_by_the_controller(self) -> None:
+        assistant_secret = "assistant-secret-123456789"  # noqa: S105 - synthetic leak fixture
+        inference = teams.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})
+        controller = teams.DriverResponse(
+            200,
+            {
+                "team_id": "team_1",
+                "team_name": "Marketing",
+                "reply": f"unsafe {assistant_secret}",
+                "trace_id": TRACE_ID,
+            },
+        )
+        payload = {
+            "challenge_id": CHALLENGE_ID,
+            "values": [
+                {
+                    "assistant_id": "shimpz-assistant",
+                    "secret_id": "x-api-key",
+                    "value": assistant_secret,
+                }
+            ],
+        }
+        with (
+            mock.patch.object(teams, "get_inference", return_value=inference),
+            mock.patch.object(modelproviders, "resolve_api_key", return_value="sk-test-0123456789"),
+            mock.patch.object(teams, "submit_chat_secrets", return_value=controller),
+        ):
+            response = localchat.submit_secrets("team_1", payload)
+
+        self.assertEqual(response, teams.DriverResponse(502, {"code": "chat-response-invalid"}))
+        self.assertNotIn(assistant_secret, json.dumps(response.body))
+
     def test_browser_payload_rejects_ambient_authority_and_invalid_scopes(self) -> None:
         payloads = (
             {"message": "Hi", "files": [], "assistant_ids": [], "assistant": "hello-pulse"},
