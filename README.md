@@ -10,4 +10,4 @@ The operator control panel: a setup wizard that walks every credential with live
 - A controller without the inference/chat contract returns a clear `503`; the Admin never simulates a successful turn.
 
 ---
-Part of the **[Shimpz](https://github.com/roxygens/shimpz)** stack — a self-hosted, voice-driven autonomous agent.
+Part of the **[Shimpz](https://github.com/TheShimpz/shimpz)** stack — a self-hosted, voice-driven autonomous agent.
