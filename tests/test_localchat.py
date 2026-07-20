@@ -96,7 +96,11 @@ class _ControllerHandler(BaseHTTPRequestHandler):
 class PrivateChatTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _ControllerHandler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread = threading.Thread(
+            target=self.server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
         self.thread.start()
         self.temporary = tempfile.TemporaryDirectory()
         self.token_file = Path(self.temporary.name) / "token"
