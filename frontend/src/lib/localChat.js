@@ -14,6 +14,11 @@ const MAX_POWERS_PER_ASSISTANT = 128;
 const MAX_SECRETS_PER_ASSISTANT = 32;
 const MAX_SECRET_VALUES = 64;
 const MAX_SECRET_BYTES = 16 * 1024;
+const MAX_APPROVAL_REQUIREMENTS = 64;
+const MAX_APPROVAL_INPUT_BYTES = 32 * 1024;
+const MAX_APPROVAL_INPUT_TOTAL_BYTES = 128 * 1024;
+const MAX_APPROVAL_JSON_DEPTH = 16;
+const MAX_APPROVAL_JSON_NODES = 1024;
 const MAX_TEAM_NAME_CHARS = 80;
 const MAX_REPLY_CHARS = 60_000;
 const MAX_ERROR_DETAIL_CHARS = 800;
@@ -172,6 +177,62 @@ function canonicalInventoryAssistant(value) {
   };
 }
 
+function canonicalApprovalInput(value) {
+  const budget = { nodes: MAX_APPROVAL_JSON_NODES };
+  function clone(node, depth) {
+    budget.nodes -= 1;
+    if (budget.nodes < 0 || depth > MAX_APPROVAL_JSON_DEPTH) {
+      throw new LocalApiError('The local chat response is invalid.');
+    }
+    if (node === null || typeof node === 'boolean' || typeof node === 'string') return node;
+    if (typeof node === 'number' && Number.isFinite(node)) return node;
+    if (Array.isArray(node)) return node.map((entry) => clone(entry, depth + 1));
+    if (!node || typeof node !== 'object') {
+      throw new LocalApiError('The local chat response is invalid.');
+    }
+    const entries = Object.entries(node);
+    if (entries.some(([key]) => key.length > 128)) {
+      throw new LocalApiError('The local chat response is invalid.');
+    }
+    return Object.fromEntries(entries.map(([key, entry]) => [key, clone(entry, depth + 1)]));
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new LocalApiError('The local chat response is invalid.');
+  }
+  const result = clone(value, 0);
+  if (new TextEncoder().encode(JSON.stringify(result)).length > MAX_APPROVAL_INPUT_BYTES) {
+    throw new LocalApiError('The local chat response is invalid.');
+  }
+  return result;
+}
+
+function canonicalApprovalRequirement(value) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    !exactKeys(value, [
+      'assistant_id',
+      'assistant_name',
+      'power_id',
+      'power_summary',
+      'input',
+      'approval',
+    ]) ||
+    !['always', 'once'].includes(value.approval)
+  ) {
+    throw new LocalApiError('The local chat response is invalid.');
+  }
+  return {
+    assistant_id: canonicalId(value.assistant_id),
+    assistant_name: canonicalPublicText(value.assistant_name, 80),
+    power_id: canonicalId(value.power_id),
+    power_summary: canonicalPublicText(value.power_summary, 160),
+    input: canonicalApprovalInput(value.input),
+    approval: value.approval,
+  };
+}
+
 export async function listTeamFiles(fetcher, teamId) {
   if (typeof fetcher !== 'function') throw new LocalApiError('Invalid local file request.');
   requireTeam(teamId);
@@ -288,6 +349,14 @@ export function createSecretSubmitFrame(teamId, challengeId, values) {
   return { type: 'secret-submit', challenge_id: challengeId, values: canonical };
 }
 
+export function createApprovalSubmitFrame(teamId, challengeId) {
+  requireTeam(teamId);
+  if (typeof challengeId !== 'string' || !OPAQUE_ID_RE.test(challengeId)) {
+    throw new LocalApiError('Invalid local approval submission.');
+  }
+  return { type: 'approval-submit', challenge_id: challengeId, approved: true };
+}
+
 export function chatSocketUrl(locationValue, teamId) {
   requireTeam(teamId);
   if (!locationValue || typeof locationValue.host !== 'string') {
@@ -361,6 +430,34 @@ export function parseChatEvent(value, expectedTeamId, expectedTeamName) {
     }
     return {
       type: 'secrets-required',
+      turn_id: value.turn_id,
+      challenge_id: value.challenge_id,
+      requirements,
+    };
+  }
+  if (value.type === 'approval-required') {
+    if (
+      !exactKeys(value, ['type', 'turn_id', 'challenge_id', 'requirements']) ||
+      typeof value.turn_id !== 'string' ||
+      !OPAQUE_ID_RE.test(value.turn_id) ||
+      typeof value.challenge_id !== 'string' ||
+      !OPAQUE_ID_RE.test(value.challenge_id) ||
+      !Array.isArray(value.requirements) ||
+      !value.requirements.length ||
+      value.requirements.length > MAX_APPROVAL_REQUIREMENTS
+    ) {
+      throw new LocalApiError('The local chat response is invalid.');
+    }
+    const requirements = value.requirements.map(canonicalApprovalRequirement);
+    const aggregateBytes = requirements.reduce(
+      (total, requirement) => total + new TextEncoder().encode(JSON.stringify(requirement.input)).length,
+      0,
+    );
+    if (aggregateBytes > MAX_APPROVAL_INPUT_TOTAL_BYTES) {
+      throw new LocalApiError('The local chat response is invalid.');
+    }
+    return {
+      type: 'approval-required',
       turn_id: value.turn_id,
       challenge_id: value.challenge_id,
       requirements,
