@@ -1,6 +1,9 @@
 <script>
   import { onMount, tick } from 'svelte';
   import AssistantHelpDrawer from '$lib/AssistantHelpDrawer.svelte';
+  import AssistantSecretsDialog from '$lib/AssistantSecretsDialog.svelte';
+  import AssistantSecretsDrawer from '$lib/AssistantSecretsDrawer.svelte';
+  import { assistantSecretsCopy } from '$lib/assistantSecretsCopy.js';
   import ChatContextControls from '$lib/ChatContextControls.svelte';
   import HelpMarkdown from '$lib/HelpMarkdown.svelte';
   import { locale } from '$lib/i18n.js';
@@ -12,7 +15,9 @@
     CHAT_WS_PROTOCOL,
     chatSocketUrl,
     createChatFrame,
+    createSecretSubmitFrame,
     createStopFrame,
+    createSyncFrame,
     parseChatEvent,
   } from '$lib/localChat.js';
 
@@ -65,11 +70,18 @@
   let reconnectAttempt = 0;
   let helpOpen = $state(false);
   let helpButton = $state();
+  let secretsOpen = $state(false);
+  let secretsButton = $state();
+  let secretsDialogOpen = $state(false);
+  let secretChallenge = $state();
+  let secretInventory = $state([]);
+  let secretInventoryReady = $state(false);
   let composerInput = $state();
   let turnsViewport = $state();
   let scrollRequest = 0;
 
   let copy = $derived({ ...COPY.en, ...(COPY[$locale] ?? {}) });
+  let secretsCopy = $derived(assistantSecretsCopy($locale));
   let selectedTeamId = $derived($teamContext.selectedTeamId);
   let activeTeam = $derived(
     $teamContext.teams.find((entry) => entry.id === selectedTeamId) ?? null,
@@ -90,6 +102,38 @@
         name: catalog.get(runtime.assistant)?.name ?? runtime.assistant,
       }));
   });
+  let secretAssistants = $derived.by(() => {
+    const catalog = new Map($teamContext.catalog.map((assistant) => [assistant.id, assistant]));
+    const inventory = new Map(secretInventory.map((assistant) => [assistant.id, assistant]));
+    const pending = new Map((secretChallenge?.requirements ?? []).map((requirement) => (
+      [requirement.assistant_id, requirement]
+    )));
+    return $teamContext.installedAssistants.map((runtime) => {
+      const known = inventory.get(runtime.assistant);
+      const required = pending.get(runtime.assistant);
+      const missing = new Map((required?.secrets ?? []).map((secret) => [secret.id, secret]));
+      const secrets = (known?.secrets ?? []).map((secret) => {
+        const requirement = missing.get(secret.id);
+        if (!requirement) return secret;
+        missing.delete(secret.id);
+        return { ...requirement, configured: false, mask: null };
+      });
+      for (const secret of missing.values()) {
+        secrets.push({ ...secret, configured: false, mask: null });
+      }
+      return {
+        id: runtime.assistant,
+        name: known?.name ?? required?.assistant_name ?? catalog.get(runtime.assistant)?.name ?? runtime.assistant,
+        secrets,
+      };
+    });
+  });
+  let missingSecretCount = $derived(
+    secretAssistants.reduce(
+      (total, assistant) => total + assistant.secrets.filter((secret) => !secret.configured).length,
+      0,
+    ),
+  );
   let contextLoading = $derived(
     $teamContext.phase === 'idle' || $teamContext.phase === 'loading',
   );
@@ -118,7 +162,14 @@
 
   async function focusComposer() {
     await tick();
-    if (!mounted || !chatTeamId || busy || helpOpen || document.querySelector('dialog[open]')) return;
+    if (
+      !mounted ||
+      !chatTeamId ||
+      busy ||
+      helpOpen ||
+      secretsOpen ||
+      document.querySelector('dialog[open]')
+    ) return;
     composerInput?.focus({ preventScroll: true });
   }
 
@@ -150,7 +201,34 @@
     const current = socket;
     socket = null;
     socketReady = false;
+    secretChallenge = undefined;
+    secretsDialogOpen = false;
+    secretInventoryReady = false;
     current?.close(1000, 'Team changed');
+  }
+
+  function acceptSecretChallenge(incoming) {
+    const selected = new Set($teamContext.selectedAssistantIds);
+    if (incoming.requirements.some((requirement) => !selected.has(requirement.assistant_id))) {
+      throw new Error('unexpected Assistant secret requirement');
+    }
+    secretChallenge = incoming;
+    secretsDialogOpen = true;
+    helpOpen = false;
+    busy = true;
+    stopping = false;
+  }
+
+  function acceptSecretInventory(incoming) {
+    const installed = new Set($teamContext.installedAssistants.map((assistant) => assistant.assistant));
+    if (
+      incoming.assistants.length !== installed.size ||
+      incoming.assistants.some((assistant) => !installed.has(assistant.id))
+    ) {
+      throw new Error('unexpected Assistant secret inventory');
+    }
+    secretInventory = incoming.assistants;
+    secretInventoryReady = true;
   }
 
   function scheduleReconnect(expectedTeamId) {
@@ -189,40 +267,63 @@
       }
       reconnectAttempt = 0;
       socketReady = true;
+      try {
+        active.send(JSON.stringify(createSyncFrame(expectedTeamId)));
+      } catch {
+        socket = null;
+        socketReady = false;
+        setError(copy.disconnected);
+        active.close();
+        return;
+      }
       if (error === copy.disconnected) clearError();
     };
     active.onmessage = (event) => {
       if (socket !== active || chatTeamId !== expectedTeamId) return;
-      let terminal;
+      let incoming;
       try {
-        if (typeof event.data !== 'string' || (!busy && !stopping)) throw new Error('unexpected frame');
-        terminal = parseChatEvent(
+        if (typeof event.data !== 'string') throw new Error('unexpected frame');
+        incoming = parseChatEvent(
           JSON.parse(event.data),
           expectedTeam.id,
           expectedTeam.name,
         );
+        if (incoming.type === 'secrets-required') {
+          acceptSecretChallenge(incoming);
+          return;
+        }
+        if (incoming.type === 'secret-inventory') {
+          acceptSecretInventory(incoming);
+          return;
+        }
+        if (!busy && !stopping) throw new Error('unexpected terminal frame');
       } catch {
         socket = null;
         socketReady = false;
         busy = false;
         stopping = false;
+        secretChallenge = undefined;
+        secretsDialogOpen = false;
+        secretInventoryReady = false;
         setError(copy.protocolError);
-        active.close(1002, 'Invalid terminal event');
+        active.close(1002, 'Invalid chat event');
         return;
       }
 
       busy = false;
       stopping = false;
-      if (terminal.type === 'done') {
-        turns = [...turns, { role: 'assistant', text: terminal.reply, author: terminal.team_name }];
+      secretChallenge = undefined;
+      secretsDialogOpen = false;
+      if (incoming.type === 'done') {
+        turns = [...turns, { role: 'assistant', text: incoming.reply, author: incoming.team_name }];
         void revealLatestTurn();
         clearError();
-      } else if (terminal.type === 'stopped') {
+      } else if (incoming.type === 'stopped') {
         setError(copy.stopped);
       } else {
         setError(
-          friendlyChatError(terminal.status),
-          `HTTP ${terminal.status} · ${terminal.detail}`,
+          friendlyChatError(incoming.status),
+          `HTTP ${incoming.status} · ${incoming.detail}`,
         );
       }
     };
@@ -232,6 +333,9 @@
       socketReady = false;
       stopping = false;
       if (busy) busy = false;
+      secretChallenge = undefined;
+      secretsDialogOpen = false;
+      secretInventoryReady = false;
       setError(copy.disconnected);
       scheduleReconnect(expectedTeamId);
     };
@@ -247,6 +351,11 @@
     turns = [];
     scrollRequest += 1;
     helpOpen = false;
+    secretsOpen = false;
+    secretsDialogOpen = false;
+    secretChallenge = undefined;
+    secretInventory = [];
+    secretInventoryReady = false;
     clearError();
     if (nextTeamId) connectSocket(nextTeamId);
   }
@@ -254,6 +363,48 @@
   function closeHelp() {
     helpOpen = false;
     queueMicrotask(() => helpButton?.focus());
+  }
+
+  function closeSecrets() {
+    secretsOpen = false;
+    queueMicrotask(() => secretsButton?.focus());
+  }
+
+  function closeSecretsDialog() {
+    secretsDialogOpen = false;
+  }
+
+  function openSecretsDialog() {
+    if (!secretChallenge) return;
+    secretsOpen = false;
+    secretsDialogOpen = true;
+  }
+
+  function submitSecrets(challengeId, values) {
+    const teamId = $teamContext.selectedTeamId;
+    if (
+      !busy ||
+      !teamId ||
+      chatTeamId !== teamId ||
+      !socketReady ||
+      !socket ||
+      !secretChallenge ||
+      secretChallenge.challenge_id !== challengeId
+    ) {
+      throw new Error('Assistant secret challenge is unavailable');
+    }
+    const frame = createSecretSubmitFrame(teamId, challengeId, values);
+    try {
+      socket.send(JSON.stringify(frame));
+    } catch (reason) {
+      secretChallenge = undefined;
+      secretsDialogOpen = false;
+      setError(reason instanceof Error ? reason.message : copy.loadFailed);
+      socket.close();
+      throw reason;
+    }
+    secretChallenge = undefined;
+    secretsDialogOpen = false;
   }
 
   function send(event) {
@@ -321,10 +472,11 @@
 
   $effect(() => {
     if (helpOpen && helpAssistants.length === 0) helpOpen = false;
+    if (secretsOpen && secretAssistants.length === 0) secretsOpen = false;
   });
 
   $effect(() => {
-    if (mounted && chatTeamId && !busy && !helpOpen) void focusComposer();
+    if (mounted && chatTeamId && !busy && !helpOpen && !secretsOpen) void focusComposer();
   });
 
   onMount(() => {
@@ -343,7 +495,7 @@
 <div class="chat-route">
   {#if activeTeam}
     {#if chatTeamId}
-      <div class="chat-workspace" class:help-open={helpOpen}>
+      <div class="chat-workspace" class:drawer-open={helpOpen || secretsOpen}>
         <section class="conversation" class:empty-conversation={turns.length === 0} aria-label={teamName}>
         <div class="turns" bind:this={turnsViewport} aria-live="polite">
           {#each turns as turn}
@@ -383,10 +535,37 @@
               <div class="composer-actions">
               {#if busy}<button class="stop" type="button" onclick={stop} disabled={stopping}>{copy.stop}</button>{/if}
               <button
+                bind:this={secretsButton}
+                class="secrets"
+                type="button"
+                onclick={() => {
+                  const next = !secretsOpen;
+                  helpOpen = false;
+                  secretsOpen = next;
+                }}
+                disabled={secretAssistants.length === 0}
+                aria-label={secretsCopy.trigger}
+                title={secretsCopy.trigger}
+                aria-expanded={secretsOpen}
+                aria-controls="assistant-secrets-drawer"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="8" cy="12" r="3.25"></circle>
+                  <path d="M11.25 12H21M17 12v3M14 12v2"></path>
+                </svg>
+                {#if missingSecretCount > 0}
+                  <span class="secret-badge" aria-hidden="true">{missingSecretCount}</span>
+                {/if}
+              </button>
+              <button
                 bind:this={helpButton}
                 class="help"
                 type="button"
-                onclick={() => { helpOpen = !helpOpen; }}
+                onclick={() => {
+                  const next = !helpOpen;
+                  secretsOpen = false;
+                  helpOpen = next;
+                }}
                 disabled={helpAssistants.length === 0}
                 aria-label={copy.help}
                 title={copy.help}
@@ -405,6 +584,20 @@
           teamId={chatTeamId}
           assistants={helpAssistants}
           onclose={closeHelp}
+        />
+        <AssistantSecretsDrawer
+          open={secretsOpen}
+          assistants={secretAssistants}
+          synced={secretInventoryReady}
+          pending={secretChallenge}
+          onclose={closeSecrets}
+          onprovide={openSecretsDialog}
+        />
+        <AssistantSecretsDialog
+          open={secretsDialogOpen}
+          challenge={secretChallenge}
+          onclose={closeSecretsDialog}
+          onsubmit={submitSecrets}
         />
       </div>
     {:else}
@@ -453,7 +646,7 @@
     overflow: hidden;
   }
 
-  .chat-workspace.help-open {
+  .chat-workspace.drawer-open {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
@@ -660,10 +853,40 @@
     color: #001013;
   }
 
-  button.help {
+  button.help,
+  button.secrets {
     width: 3.2rem;
     padding: 0;
     font-size: 0.9rem;
+  }
+
+  button.secrets {
+    position: relative;
+    display: grid;
+    place-items: center;
+  }
+
+  button.secrets svg {
+    width: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: square;
+    stroke-width: 1.6;
+  }
+
+  .secret-badge {
+    position: absolute;
+    inset-block-start: 0.25rem;
+    inset-inline-end: 0.25rem;
+    display: grid;
+    min-width: 0.9rem;
+    height: 0.9rem;
+    place-items: center;
+    padding: 0 0.15rem;
+    background: var(--danger);
+    color: #170008;
+    font-size: 0.46rem;
+    line-height: 1;
   }
 
   button.stop {

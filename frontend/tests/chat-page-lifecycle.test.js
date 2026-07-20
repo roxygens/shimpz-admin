@@ -45,7 +45,7 @@ test('changes Team by closing stale transport and clearing route-scoped conversa
   );
   assert.match(
     source,
-    /function activateTeam\(nextTeamId\) \{\s+closeSocket\(\);\s+socketTeamId = nextTeamId;[\s\S]*?busy = false;\s+stopping = false;\s+draft = '';\s+turns = \[\];\s+scrollRequest \+= 1;\s+helpOpen = false;\s+clearError\(\);\s+if \(nextTeamId\) connectSocket\(nextTeamId\);/,
+    /function activateTeam\(nextTeamId\) \{\s+closeSocket\(\);\s+socketTeamId = nextTeamId;[\s\S]*?busy = false;\s+stopping = false;\s+draft = '';\s+turns = \[\];\s+scrollRequest \+= 1;\s+helpOpen = false;\s+secretsOpen = false;\s+secretsDialogOpen = false;\s+secretChallenge = undefined;\s+secretInventory = \[\];\s+secretInventoryReady = false;\s+clearError\(\);\s+if \(nextTeamId\) connectSocket\(nextTeamId\);/,
   );
   assert.match(source, /if \(socket !== active \|\| chatTeamId !== expectedTeamId\) return;/);
   assert.match(source, /current\?\.close\(1000, 'Team changed'\)/);
@@ -75,7 +75,7 @@ test('keeps versioned WebSocket send, stop, reconnect and selected file contract
     source,
     /parseChatEvent\(\s*JSON\.parse\(event\.data\),\s*expectedTeam\.id,\s*expectedTeam\.name,\s*\)/,
   );
-  assert.match(source, /author: terminal\.team_name/);
+  assert.match(source, /author: incoming\.team_name/);
 });
 
 test('submits plain Enter while preserving modified newlines and IME composition', () => {
@@ -91,7 +91,7 @@ test('focuses the ready chat composer without drawing field outlines', () => {
   assert.match(source, /let mounted = \$state\(false\);/);
   assert.match(source, /let composerInput = \$state\(\);/);
   assert.match(source, /async function focusComposer\(\)[\s\S]*await tick\(\);[\s\S]*composerInput\?\.focus\(\{ preventScroll: true \}\);/);
-  assert.match(source, /mounted && chatTeamId && !busy && !helpOpen[\s\S]*void focusComposer\(\);/);
+  assert.match(source, /mounted && chatTeamId && !busy && !helpOpen && !secretsOpen[\s\S]*void focusComposer\(\);/);
   assert.match(source, /<textarea[\s\S]*bind:this=\{composerInput\}[\s\S]*bind:value=\{draft\}/);
   assert.match(appStyles, /input:focus-visible,\s*select:focus-visible,\s*textarea:focus-visible \{\s*outline: 0;/);
 });
@@ -109,7 +109,7 @@ test('reveals each sent and received turn without forcing motion-sensitive users
   );
   assert.match(
     source,
-    /turns = \[\.\.\.turns, \{ role: 'assistant', text: terminal\.reply, author: terminal\.team_name \}\];\s+void revealLatestTurn\(\);/,
+    /turns = \[\.\.\.turns, \{ role: 'assistant', text: incoming\.reply, author: incoming\.team_name \}\];\s+void revealLatestTurn\(\);/,
   );
 });
 
@@ -183,9 +183,9 @@ test('renders only Assistant replies through the closed Markdown component', () 
 });
 
 test('keeps friendly i18n and sanitized technical diagnostics separate', () => {
-  assert.doesNotMatch(source, /error\s*=\s*terminal\.detail/);
-  assert.match(source, /friendlyChatError\(terminal\.status\)/);
-  assert.match(source, /`HTTP \$\{terminal\.status\} · \$\{terminal\.detail\}`/);
+  assert.doesNotMatch(source, /error\s*=\s*incoming\.detail/);
+  assert.match(source, /friendlyChatError\(incoming\.status\)/);
+  assert.match(source, /`HTTP \$\{incoming\.status\} · \$\{incoming\.detail\}`/);
   assert.match(source, /<div class="error" role="alert">/);
   assert.match(source, /\{copy\.technicalDetail\}: \{visibleErrorDetail\}/);
   assert.doesNotMatch(source, /\{@html[^}]*?(?:error|detail)/i);
@@ -203,7 +203,7 @@ test('opens installed Assistant Help immediately before Send and clears it on Te
   assert.match(source, /runtime\.status === 'running' && selected\.has\(runtime\.assistant\)/);
   assert.match(source, /function activateTeam\(nextTeamId\)[\s\S]*helpOpen = false;/);
   assert.match(source, /<AssistantHelpDrawer[\s\S]*teamId=\{chatTeamId\}[\s\S]*assistants=\{helpAssistants\}/);
-  assert.match(source, /\.chat-workspace\.help-open \{\s*grid-template-columns: minmax\(0, 1fr\) auto;/);
+  assert.match(source, /\.chat-workspace\.drawer-open \{\s*grid-template-columns: minmax\(0, 1fr\) auto;/);
 });
 
 test('keeps Team, Brain, and Assistant context attached to every composer state', () => {

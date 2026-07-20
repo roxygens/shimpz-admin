@@ -12,13 +12,13 @@ const MAX_ASSISTANTS = 16;
 const MAX_INSTALLED_ASSISTANTS = 128;
 const MAX_POWERS_PER_ASSISTANT = 128;
 const MAX_SECRETS_PER_ASSISTANT = 32;
-const MAX_SECRET_VALUES = MAX_ASSISTANTS * MAX_SECRETS_PER_ASSISTANT;
+const MAX_SECRET_VALUES = 64;
 const MAX_SECRET_BYTES = 16 * 1024;
 const MAX_TEAM_NAME_CHARS = 80;
 const MAX_REPLY_CHARS = 60_000;
 const MAX_ERROR_DETAIL_CHARS = 800;
 
-export const CHAT_WS_PROTOCOL = 'shimpz.chat.v2';
+export const CHAT_WS_PROTOCOL = 'shimpz.chat.v3';
 
 async function jsonObject(response) {
   const body = await response.json().catch(() => ({}));
@@ -26,7 +26,9 @@ async function jsonObject(response) {
 }
 
 function requireTeam(teamId) {
-  if (!TEAM_ID_RE.test(teamId)) throw new LocalApiError('Invalid local chat request.');
+  if (typeof teamId !== 'string' || !TEAM_ID_RE.test(teamId)) {
+    throw new LocalApiError('Invalid local chat request.');
+  }
 }
 
 function exactKeys(value, keys) {
@@ -199,7 +201,7 @@ export async function listTeamFiles(fetcher, teamId) {
   });
 }
 
-/** Build the only chat frame accepted by shimpz.chat.v2. Provider/model/keys remain server-owned. */
+/** Build the only chat frame accepted by shimpz.chat.v3. Provider/model/keys remain server-owned. */
 export function createChatFrame(teamId, turn) {
   requireTeam(teamId);
   if (
@@ -340,7 +342,9 @@ export function parseChatEvent(value, expectedTeamId, expectedTeamName) {
   if (value.type === 'secrets-required') {
     if (
       !exactKeys(value, ['type', 'turn_id', 'challenge_id', 'requirements']) ||
+      typeof value.turn_id !== 'string' ||
       !OPAQUE_ID_RE.test(value.turn_id) ||
+      typeof value.challenge_id !== 'string' ||
       !OPAQUE_ID_RE.test(value.challenge_id) ||
       !Array.isArray(value.requirements) ||
       !value.requirements.length ||
@@ -349,7 +353,10 @@ export function parseChatEvent(value, expectedTeamId, expectedTeamName) {
       throw new LocalApiError('The local chat response is invalid.');
     }
     const requirements = value.requirements.map(canonicalRequirement);
-    if (new Set(requirements.map((entry) => entry.assistant_id)).size !== requirements.length) {
+    if (
+      new Set(requirements.map((entry) => entry.assistant_id)).size !== requirements.length ||
+      requirements.reduce((total, entry) => total + entry.secrets.length, 0) > MAX_SECRET_VALUES
+    ) {
       throw new LocalApiError('The local chat response is invalid.');
     }
     return {

@@ -78,7 +78,7 @@ test('chat builds only the versioned WebSocket contract', () => {
   assert.doesNotMatch(JSON.stringify(frame), /power|provider|model|api_key|credential/);
   assert.deepEqual(createStopFrame('team_1'), { type: 'stop' });
   assert.deepEqual(createSyncFrame('team_1'), { type: 'sync' });
-  assert.equal(CHAT_WS_PROTOCOL, 'shimpz.chat.v2');
+  assert.equal(CHAT_WS_PROTOCOL, 'shimpz.chat.v3');
   assert.equal(
     chatSocketUrl({ protocol: 'http:', host: '127.0.0.1:7777' }, 'team_1'),
     'ws://127.0.0.1:7777/api/teams/team_1/chat/ws',
@@ -113,6 +113,11 @@ test('chat builds one exact bounded secret submission without retaining caller o
       { assistant_id: 'weather-guide', secret_id: 'weather-api-token', value: 'first-value' },
       { assistant_id: 'weather-guide', secret_id: 'weather-api-token', value: 'second-value' },
     ],
+    Array.from({ length: 65 }, (_value, index) => ({
+      assistant_id: 'weather-guide',
+      secret_id: `secret-${index}`,
+      value: `secret-value-${index}`,
+    })),
     [{ assistant_id: 'weather-guide', secret_id: 'weather-api-token', value: 'secret', extra: true }],
   ]) {
     assert.throws(
@@ -243,6 +248,19 @@ test('chat rejects augmented, duplicate, malformed, or cross-Team secret events'
     {
       type: 'secrets-required', turn_id: TURN_ID, challenge_id: CHALLENGE_ID,
       requirements: [{ ...requirement, secrets: [...requirement.secrets, ...requirement.secrets] }],
+    },
+    {
+      type: 'secrets-required', turn_id: TURN_ID, challenge_id: CHALLENGE_ID,
+      requirements: Array.from({ length: 3 }, (_value, assistantIndex) => ({
+        assistant_id: `assistant-${assistantIndex}`,
+        assistant_name: `Assistant ${assistantIndex}`,
+        power_ids: ['use-secrets'],
+        secrets: Array.from({ length: assistantIndex === 2 ? 1 : 32 }, (_secret, secretIndex) => ({
+          id: `secret-${secretIndex}`,
+          name: `Secret ${secretIndex}`,
+          summary: 'Used by one bounded Power.',
+        })),
+      })),
     },
     { ...inventory, team_id: 'other_team' },
     { ...inventory, extra: true },
