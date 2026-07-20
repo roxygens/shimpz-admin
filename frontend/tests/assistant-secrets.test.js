@@ -96,7 +96,7 @@ test('places one minimal secrets trigger beside Help and mounts both closed surf
     pageSource,
     /class="secrets"[\s\S]*aria-controls="assistant-secrets-drawer"[\s\S]*<svg[\s\S]*class="help"[\s\S]*<button class="send"/,
   );
-  assert.match(pageSource, /class:drawer-open=\{helpOpen \|\| secretsOpen\}/);
+  assert.match(pageSource, /class:drawer-open=\{helpOpen \|\| secretsOpen \|\| connectionsOpen\}/);
   assert.match(pageSource, /<AssistantSecretsDrawer[\s\S]*assistants=\{secretAssistants\}[\s\S]*pending=\{secretChallenge\}/);
   assert.match(pageSource, /<AssistantSecretsDialog[\s\S]*challenge=\{secretChallenge\}[\s\S]*onsubmit=\{submitSecrets\}/);
   assert.match(pageSource, /missing\.get\(secret\.id\)[\s\S]*configured: false, mask: null/);

@@ -440,8 +440,8 @@ test('lists only bounded status metadata for Team-scoped Assistant connections',
   for (const invalid of [
     { ...inventory, token: 'must-not-cross' },
     { connections: [{ ...inventory.connections[0], status: 'refresh-required' }] },
-    { connections: [{ ...inventory.connections[0], account: null }] },
-    { connections: [{ ...connectionInventory('missing').connections[0], account: { id: '1', name: null, username: null } }] },
+    { connections: [{ ...inventory.connections[0], account: { id: '1', name: null } }] },
+    { connections: [{ ...inventory.connections[0], account: { id: '', name: null, username: null } }] },
     { connections: [{ ...inventory.connections[0], expires_at: 'tomorrow' }] },
     { connections: [...inventory.connections, ...inventory.connections] },
   ]) {

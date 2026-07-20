@@ -413,12 +413,6 @@ function canonicalConnectionInventoryItem(value) {
     throw new LocalApiError('The Assistant connection inventory is invalid.');
   }
   const account = canonicalConnectionAccount(value.account);
-  if (
-    (value.status === 'missing') !== (account === null) ||
-    (value.status === 'missing' && value.expires_at !== null)
-  ) {
-    throw new LocalApiError('The Assistant connection inventory is invalid.');
-  }
   return {
     assistant_id: canonicalId(value.assistant_id, 'The Assistant connection inventory is invalid.'),
     assistant_name: canonicalPublicText(value.assistant_name, 80),

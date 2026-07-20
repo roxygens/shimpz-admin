@@ -43,10 +43,14 @@ test('changes Team by closing stale transport and clearing route-scoped conversa
     source,
     /\$effect\(\(\) => \{\s+const nextTeamId = chatTeamId;\s+if \(!mounted \|\| nextTeamId === socketTeamId\) return;\s+activateTeam\(nextTeamId\);/,
   );
-  assert.match(
-    source,
-    /function activateTeam\(nextTeamId\) \{\s+closeSocket\(\);\s+socketTeamId = nextTeamId;[\s\S]*?busy = false;\s+stopping = false;\s+draft = '';\s+turns = \[\];\s+scrollRequest \+= 1;\s+helpOpen = false;\s+secretsOpen = false;\s+secretsDialogOpen = false;\s+secretChallenge = undefined;\s+approvalDialogOpen = false;\s+approvalChallenge = undefined;\s+secretInventory = \[\];\s+secretInventoryReady = false;\s+rotationOpen = false;\s+rotationAssistant = undefined;\s+rememberedApprovals = \[\];\s+approvalsReady = false;\s+approvalsLoading = false;\s+clearError\(\);\s+if \(nextTeamId\) connectSocket\(nextTeamId\);/,
-  );
+  const activation = source.match(/function activateTeam\(nextTeamId\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
+  for (const statement of [
+    'closeSocket();', 'socketTeamId = nextTeamId;', 'busy = false;', "draft = '';", 'turns = [];',
+    'helpOpen = false;', 'secretsOpen = false;', 'connectionsOpen = false;',
+    'secretChallenge = undefined;', 'approvalChallenge = undefined;', 'connectionChallenge = undefined;',
+    'connections = [];', 'secretInventory = [];', 'rememberedApprovals = [];', 'clearError();',
+    'if (nextTeamId) connectSocket(nextTeamId);',
+  ]) assert.ok(activation.includes(statement), `missing Team reset: ${statement}`);
   assert.match(source, /if \(socket !== active \|\| chatTeamId !== expectedTeamId\) return;/);
   assert.match(source, /current\?\.close\(1000, 'Team changed'\)/);
   assert.match(
