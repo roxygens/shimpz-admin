@@ -91,12 +91,12 @@ def _approval_challenge(status: int = 428) -> object:
     )
 
 
-def _connection_requirements() -> list[dict[str, object]]:
+def _account_requirements() -> list[dict[str, object]]:
     return [
         {
             "assistant_id": "social-publisher",
             "assistant_name": "Social Publisher",
-            "connection_id": "x-account",
+            "account_id": "x-account",
             "provider": "x",
             "name": "X account",
             "summary": "Lets approved Powers access the connected X account.",
@@ -109,17 +109,17 @@ def _connection_requirements() -> list[dict[str, object]]:
     ]
 
 
-def _connection_challenge(status: int = 428) -> object:
+def _account_challenge(status: int = 428) -> object:
     teams_module = importlib.import_module("teams")
     return teams_module.DriverResponse(
         status,
         {
             "team_id": "team_1",
-            "status": "connections-required",
+            "status": "accounts-required",
             "turn_id": TURN_ID,
             "challenge_id": CHALLENGE_ID,
             "expires_in": 300,
-            "requirements": _connection_requirements(),
+            "requirements": _account_requirements(),
         },
     )
 
@@ -393,14 +393,14 @@ class ChatWebSocketTests(unittest.TestCase):
         invalid_policy.body["requirements"][0]["approval"] = "each-run"
         self.assertIsNone(self.chat_ws.approval_challenge_event(invalid_policy, "team_1"))
 
-    def test_connection_events_are_exact_and_never_project_oauth_material(self) -> None:
+    def test_account_events_are_exact_and_never_project_oauth_material(self) -> None:
         expected = {
-            "type": "connections-required",
+            "type": "accounts-required",
             "challenge_id": CHALLENGE_ID,
             "expires_in": 300,
-            "requirements": _connection_requirements(),
+            "requirements": _account_requirements(),
         }
-        self.assertEqual(self.chat_ws.connection_challenge_event(_connection_challenge(), "team_1"), expected)
+        self.assertEqual(self.chat_ws.account_challenge_event(_account_challenge(), "team_1"), expected)
 
         for mutation in (
             {"access_token": "must-not-cross"},
@@ -408,19 +408,19 @@ class ChatWebSocketTests(unittest.TestCase):
             {"code_verifier": "must-not-cross"},
             {"team_id": "other_team"},
         ):
-            invalid = _connection_challenge()
+            invalid = _account_challenge()
             invalid.body.update(mutation)
             with self.subTest(mutation=mutation):
-                self.assertIsNone(self.chat_ws.connection_challenge_event(invalid, "team_1"))
+                self.assertIsNone(self.chat_ws.account_challenge_event(invalid, "team_1"))
 
-        duplicate = _connection_challenge()
-        duplicate.body["requirements"] = [*_connection_requirements(), *_connection_requirements()]
-        self.assertIsNone(self.chat_ws.connection_challenge_event(duplicate, "team_1"))
+        duplicate = _account_challenge()
+        duplicate.body["requirements"] = [*_account_requirements(), *_account_requirements()]
+        self.assertIsNone(self.chat_ws.account_challenge_event(duplicate, "team_1"))
 
-    def test_chat_pauses_on_connection_before_secret_or_approval_submission(self) -> None:
+    def test_chat_pauses_on_account_before_secret_or_approval_submission(self) -> None:
         async def scenario() -> None:
             with (
-                mock.patch.object(self.chat_ws.localchat, "turn", return_value=_connection_challenge()),
+                mock.patch.object(self.chat_ws.localchat, "turn", return_value=_account_challenge()),
                 mock.patch.object(self.chat_ws.localchat, "submit_secrets") as submit_secret,
                 mock.patch.object(self.chat_ws.localchat, "submit_approval") as submit_approval,
             ):
@@ -437,10 +437,10 @@ class ChatWebSocketTests(unittest.TestCase):
                 self.assertEqual(
                     await websocket.next_json(),
                     {
-                        "type": "connections-required",
+                        "type": "accounts-required",
                         "challenge_id": CHALLENGE_ID,
                         "expires_in": 300,
-                        "requirements": _connection_requirements(),
+                        "requirements": _account_requirements(),
                     },
                 )
                 await websocket.send_json(
@@ -767,7 +767,7 @@ class ChatWebSocketTests(unittest.TestCase):
                     ) as inventory,
                     mock.patch.object(
                         self.chat_ws.localchat,
-                        "pending_connections",
+                        "pending_accounts",
                         return_value=none_pending,
                     ),
                     mock.patch.object(self.chat_ws.localchat, "pending_secrets", return_value=pending) as pending_mock,
@@ -798,7 +798,7 @@ class ChatWebSocketTests(unittest.TestCase):
                     mock.patch.object(self.chat_ws.localchat, "secret_inventory", return_value=_inventory()),
                     mock.patch.object(
                         self.chat_ws.localchat,
-                        "pending_connections",
+                        "pending_accounts",
                         return_value=none_pending,
                     ),
                     mock.patch.object(self.chat_ws.localchat, "pending_secrets", return_value=none_pending),
@@ -818,20 +818,20 @@ class ChatWebSocketTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_connection_sync_resumes_exact_challenge_before_secret_or_approval(self) -> None:
+    def test_account_sync_resumes_exact_challenge_before_secret_or_approval(self) -> None:
         async def scenario() -> None:
-            pending_connection = _connection_challenge(status=200)
+            pending_account = _account_challenge(status=200)
             next_secret = _challenge()
             with (
                 mock.patch.object(self.chat_ws.localchat, "secret_inventory", return_value=_inventory()),
                 mock.patch.object(
                     self.chat_ws.localchat,
-                    "pending_connections",
-                    return_value=pending_connection,
+                    "pending_accounts",
+                    return_value=pending_account,
                 ),
                 mock.patch.object(
                     self.chat_ws.localchat,
-                    "resume_connections",
+                    "resume_accounts",
                     return_value=next_secret,
                 ) as resume,
                 mock.patch.object(self.chat_ws.localchat, "pending_secrets") as pending_secret,
@@ -849,15 +849,15 @@ class ChatWebSocketTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_connection_sync_rejects_augmented_pending_state_without_resuming(self) -> None:
+    def test_account_sync_rejects_augmented_pending_state_without_resuming(self) -> None:
         async def scenario() -> None:
-            augmented = _connection_challenge(status=200)
+            augmented = _account_challenge(status=200)
             sensitive_marker = "must-not-cross"
             augmented.body["access_token"] = sensitive_marker
             with (
                 mock.patch.object(self.chat_ws.localchat, "secret_inventory", return_value=_inventory()),
-                mock.patch.object(self.chat_ws.localchat, "pending_connections", return_value=augmented),
-                mock.patch.object(self.chat_ws.localchat, "resume_connections") as resume,
+                mock.patch.object(self.chat_ws.localchat, "pending_accounts", return_value=augmented),
+                mock.patch.object(self.chat_ws.localchat, "resume_accounts") as resume,
             ):
                 websocket = _Socket(self.admin_app.app, token=self.token)
                 self.assertTrue(self._accepted(await websocket.start()))
@@ -872,7 +872,7 @@ class ChatWebSocketTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_connection_sync_delivers_done_only_after_explicit_resume(self) -> None:
+    def test_account_sync_delivers_done_only_after_explicit_resume(self) -> None:
         async def scenario() -> None:
             completed = self.teams.DriverResponse(
                 200,
@@ -883,12 +883,12 @@ class ChatWebSocketTests(unittest.TestCase):
                 mock.patch.object(self.chat_ws.localchat, "secret_inventory", return_value=_inventory()),
                 mock.patch.object(
                     self.chat_ws.localchat,
-                    "pending_connections",
-                    return_value=_connection_challenge(status=200),
+                    "pending_accounts",
+                    return_value=_account_challenge(status=200),
                 ),
                 mock.patch.object(
                     self.chat_ws.localchat,
-                    "resume_connections",
+                    "resume_accounts",
                     return_value=completed,
                 ) as resume,
                 mock.patch.object(self.chat_ws.localchat, "pending_secrets", return_value=none_pending),
@@ -912,7 +912,7 @@ class ChatWebSocketTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_connection_sync_rejects_a_next_gate_from_another_turn(self) -> None:
+    def test_account_sync_rejects_a_next_gate_from_another_turn(self) -> None:
         async def scenario() -> None:
             next_secret = _challenge()
             next_secret.body["turn_id"] = "c" * 32
@@ -920,10 +920,10 @@ class ChatWebSocketTests(unittest.TestCase):
                 mock.patch.object(self.chat_ws.localchat, "secret_inventory", return_value=_inventory()),
                 mock.patch.object(
                     self.chat_ws.localchat,
-                    "pending_connections",
-                    return_value=_connection_challenge(status=200),
+                    "pending_accounts",
+                    return_value=_account_challenge(status=200),
                 ),
-                mock.patch.object(self.chat_ws.localchat, "resume_connections", return_value=next_secret),
+                mock.patch.object(self.chat_ws.localchat, "resume_accounts", return_value=next_secret),
             ):
                 websocket = _Socket(self.admin_app.app, token=self.token)
                 self.assertTrue(self._accepted(await websocket.start()))

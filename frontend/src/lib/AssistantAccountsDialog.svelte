@@ -1,5 +1,5 @@
 <script>
-  import { assistantConnectionsCopy } from '$lib/assistantConnectionsCopy.js';
+  import { assistantAccountsCopy } from '$lib/assistantAccountsCopy.js';
   import { locale } from '$lib/i18n.js';
 
   let { open = false, challenge = undefined, onclose = undefined, onauthorize = undefined } = $props();
@@ -7,7 +7,7 @@
   let submitting = $state(false);
   let submitError = $state('');
   let activeChallengeId = $state('');
-  let copy = $derived(assistantConnectionsCopy($locale));
+  let copy = $derived(assistantAccountsCopy($locale));
 
   function close(event) {
     event?.preventDefault();
@@ -43,16 +43,16 @@
   });
 </script>
 
-<dialog bind:this={dialog} aria-labelledby="assistant-connections-dialog-title" oncancel={close}>
+<dialog bind:this={dialog} aria-labelledby="assistant-accounts-dialog-title" oncancel={close}>
   <section class="dialog-panel">
     <header>
       <p>{copy.dialogKicker}</p>
-      <h2 id="assistant-connections-dialog-title">{copy.dialogTitle}</h2>
+      <h2 id="assistant-accounts-dialog-title">{copy.dialogTitle}</h2>
       <span>{copy.dialogLead}</span>
     </header>
 
     <div class="requirements">
-      {#each challenge?.requirements ?? [] as requirement (`${requirement.assistant_id}:${requirement.connection_id}`)}
+      {#each challenge?.requirements ?? [] as requirement (`${requirement.assistant_id}:${requirement.account_id}`)}
         <article>
           <header>
             <div>

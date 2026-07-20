@@ -49,8 +49,8 @@ MAX_SECRET_SUBMISSIONS = 64
 MAX_ASSISTANT_SECRET_BYTES = 16 * 1024
 MAX_TEAMS = 128
 MAX_TEAM_NAME_CHARS = 80
-MAX_ASSISTANT_CONNECTIONS = 512
-MAX_CONNECTION_SCOPES = 32
+MAX_ASSISTANT_ACCOUNTS = 512
+MAX_ACCOUNT_SCOPES = 32
 
 _OAUTH_BINDING_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 _OAUTH_CODE_RE = re.compile(r"^[A-Za-z0-9._~-]{16,4096}$")
@@ -509,10 +509,10 @@ def canonical_approval_submission(payload: object) -> dict[str, object]:
     return {"challenge_id": challenge_id, "approved": True}
 
 
-def canonical_connection_resume(payload: object) -> dict[str, str]:
-    """Bind continuation to the one exact controller-owned connection challenge."""
+def canonical_account_resume(payload: object) -> dict[str, str]:
+    """Bind continuation to the one exact controller-owned account challenge."""
     if not isinstance(payload, dict) or set(payload) != {"challenge_id"}:
-        raise TeamRequestError("connection continuation requires only challenge_id")
+        raise TeamRequestError("account continuation requires only challenge_id")
     return {"challenge_id": canonical_challenge_id(payload["challenge_id"])}
 
 
@@ -551,12 +551,12 @@ def pending_chat_approval(team_id: object) -> DriverResponse:
     return _call("GET", f"/v1/teams/{canonical_id}/chat/approval")
 
 
-def pending_chat_connections(team_id: object) -> DriverResponse:
+def pending_chat_accounts(team_id: object) -> DriverResponse:
     canonical_id = canonical_team_id(team_id)
-    return _call("GET", f"/v1/teams/{canonical_id}/chat/connections")
+    return _call("GET", f"/v1/teams/{canonical_id}/chat/accounts")
 
 
-def resume_chat_connections(
+def resume_chat_accounts(
     team_id: object,
     payload: object,
     *,
@@ -564,10 +564,10 @@ def resume_chat_connections(
     api_key: str,
 ) -> DriverResponse:
     canonical_id = canonical_team_id(team_id)
-    body = canonical_connection_resume(payload)
+    body = canonical_account_resume(payload)
     return _call(
         "POST",
-        f"/v1/teams/{canonical_id}/chat/connections",
+        f"/v1/teams/{canonical_id}/chat/accounts",
         body,
         timeout=CONTROL_TIMEOUT_SECONDS,
         model_credential=(provider, api_key),
@@ -650,8 +650,8 @@ def _public_text(value: object, *, field: str, maximum: int) -> str:
     return value
 
 
-def _connection_scopes(value: object) -> list[str]:
-    if not isinstance(value, list) or not 1 <= len(value) <= MAX_CONNECTION_SCOPES:
+def _account_scopes(value: object) -> list[str]:
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_ACCOUNT_SCOPES:
         raise ValueError("invalid OAuth scopes")
     scopes: list[str] = []
     for item in value:
@@ -663,7 +663,7 @@ def _connection_scopes(value: object) -> list[str]:
     return scopes
 
 
-def _connection_account(value: object) -> dict[str, str | None] | None:
+def _account_identity(value: object) -> dict[str, str | None] | None:
     if value is None:
         return None
     if not isinstance(value, dict) or set(value) != {"id", "name", "username"}:
@@ -677,7 +677,7 @@ def _connection_account(value: object) -> dict[str, str | None] | None:
     return result
 
 
-def _connection_expiry(value: object) -> str | None:
+def _account_expiry(value: object) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or len(value) > 40 or _RFC3339_RE.fullmatch(value) is None:
@@ -691,19 +691,19 @@ def _connection_expiry(value: object) -> str | None:
     return value
 
 
-def _project_connection_inventory(response: DriverResponse, team_id: str) -> DriverResponse:
+def _project_account_inventory(response: DriverResponse, team_id: str) -> DriverResponse:
     """Expose status metadata only; provider tokens and controller generations stay private."""
     if not 200 <= response.status < 300:
         return response
     try:
-        if set(response.body) != {"team_id", "connections"} or response.body["team_id"] != team_id:
-            raise ValueError("invalid Team connection envelope")
-        raw_connections = response.body["connections"]
-        if not isinstance(raw_connections, list) or len(raw_connections) > MAX_ASSISTANT_CONNECTIONS:
-            raise ValueError("invalid Team connection inventory")
-        connections: list[dict[str, object]] = []
+        if set(response.body) != {"team_id", "accounts"} or response.body["team_id"] != team_id:
+            raise ValueError("invalid Team account envelope")
+        raw_accounts = response.body["accounts"]
+        if not isinstance(raw_accounts, list) or len(raw_accounts) > MAX_ASSISTANT_ACCOUNTS:
+            raise ValueError("invalid Team account inventory")
+        accounts: list[dict[str, object]] = []
         identities: set[tuple[str, str]] = set()
-        for item in raw_connections:
+        for item in raw_accounts:
             if not isinstance(item, dict) or set(item) != {
                 "assistant_id",
                 "assistant_name",
@@ -716,40 +716,40 @@ def _project_connection_inventory(response: DriverResponse, team_id: str) -> Dri
                 "account",
                 "expires_at",
             }:
-                raise ValueError("invalid Team connection fields")
+                raise ValueError("invalid Team account fields")
             assistant_id = canonical_assistant_id(item["assistant_id"])
-            connection_id = canonical_assistant_id(item["id"])
-            identity = (assistant_id, connection_id)
+            account_id = canonical_assistant_id(item["id"])
+            identity = (assistant_id, account_id)
             if identity in identities:
-                raise ValueError("duplicate Team connection")
+                raise ValueError("duplicate Team account")
             identities.add(identity)
             status = item["status"]
             if status not in {"missing", "connected", "expired", "reauthorization-required"}:
-                raise ValueError("invalid Team connection status")
-            connections.append(
+                raise ValueError("invalid Team account status")
+            accounts.append(
                 {
                     "assistant_id": assistant_id,
                     "assistant_name": _public_text(item["assistant_name"], field="Assistant name", maximum=80),
-                    "id": connection_id,
+                    "id": account_id,
                     "provider": canonical_assistant_id(item["provider"]),
-                    "name": _public_text(item["name"], field="connection name", maximum=80),
-                    "summary": _public_text(item["summary"], field="connection summary", maximum=160),
-                    "scopes": _connection_scopes(item["scopes"]),
+                    "name": _public_text(item["name"], field="account name", maximum=80),
+                    "summary": _public_text(item["summary"], field="account summary", maximum=160),
+                    "scopes": _account_scopes(item["scopes"]),
                     "status": status,
-                    "account": _connection_account(item["account"]),
-                    "expires_at": _connection_expiry(item["expires_at"]),
+                    "account": _account_identity(item["account"]),
+                    "expires_at": _account_expiry(item["expires_at"]),
                 }
             )
     except KeyError, TypeError, ValueError, TeamRequestError:
-        log.warning("team-driver returned an invalid Assistant connection inventory")
-        return DriverResponse(502, {"detail": "Assistant connection inventory is invalid."})
-    return DriverResponse(200, {"connections": connections})
+        log.warning("team-driver returned an invalid Assistant account inventory")
+        return DriverResponse(502, {"detail": "Assistant account inventory is invalid."})
+    return DriverResponse(200, {"accounts": accounts})
 
 
-def list_assistant_connections(team_id: object) -> DriverResponse:
+def list_assistant_accounts(team_id: object) -> DriverResponse:
     canonical_id = canonical_team_id(team_id)
-    return _project_connection_inventory(
-        _call("GET", f"/v1/teams/{canonical_id}/assistant-connections"),
+    return _project_account_inventory(
+        _call("GET", f"/v1/teams/{canonical_id}/assistant-accounts"),
         canonical_id,
     )
 
@@ -802,11 +802,11 @@ def _trusted_x_authorization_url(value: object) -> str:
     ):
         raise ValueError("invalid OAuth authorization URL")
     scopes = fields["scope"].split(" ")
-    _connection_scopes(scopes)
+    _account_scopes(scopes)
     return value
 
 
-def start_assistant_connection_authorization(
+def start_assistant_account_authorization(
     team_id: object,
     challenge_id: object,
     session_binding: object,
@@ -816,7 +816,7 @@ def start_assistant_connection_authorization(
     binding = canonical_oauth_binding(session_binding)
     response = _call(
         "POST",
-        f"/v1/teams/{canonical_id}/assistant-connections/challenges/{challenge_id}/authorize",
+        f"/v1/teams/{canonical_id}/assistant-accounts/challenges/{challenge_id}/authorize",
         {"session_binding": binding},
     )
     if not 200 <= response.status < 300:
@@ -831,17 +831,17 @@ def start_assistant_connection_authorization(
     return DriverResponse(200, {"authorization_url": authorization_url})
 
 
-def disconnect_assistant_connection(
+def disconnect_assistant_account(
     team_id: object,
     assistant_id: object,
-    connection_id: object,
+    account_id: object,
 ) -> DriverResponse:
     canonical_id = canonical_team_id(team_id)
     assistant = canonical_assistant_id(assistant_id)
-    connection = canonical_assistant_id(connection_id)
+    account = canonical_assistant_id(account_id)
     response = _call(
         "DELETE",
-        f"/v1/teams/{canonical_id}/assistant-connections/{assistant}/{connection}",
+        f"/v1/teams/{canonical_id}/assistant-accounts/{assistant}/{account}",
     )
     if 200 <= response.status < 300 and (response.status != 204 or response.body):
         log.warning("team-driver returned an invalid OAuth disconnect response")
@@ -861,7 +861,7 @@ def complete_x_oauth_callback(*, state: object, code: object, session_binding: o
     if not 200 <= response.status < 300:
         return response
     try:
-        if set(response.body) != {"connected", "team_id", "assistant_id", "connection_id"}:
+        if set(response.body) != {"connected", "team_id", "assistant_id", "account_id"}:
             raise ValueError("invalid OAuth callback response")
         if response.body["connected"] is not True:
             raise ValueError("invalid OAuth callback response")
@@ -869,7 +869,7 @@ def complete_x_oauth_callback(*, state: object, code: object, session_binding: o
             "connected": True,
             "team_id": canonical_team_id(response.body["team_id"]),
             "assistant_id": canonical_assistant_id(response.body["assistant_id"]),
-            "connection_id": canonical_assistant_id(response.body["connection_id"]),
+            "account_id": canonical_assistant_id(response.body["account_id"]),
         }
     except KeyError, TypeError, ValueError, TeamRequestError:
         log.warning("team-driver returned an invalid OAuth callback response")

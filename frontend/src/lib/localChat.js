@@ -20,10 +20,10 @@ const MAX_APPROVAL_INPUT_TOTAL_BYTES = 128 * 1024;
 const MAX_APPROVAL_JSON_DEPTH = 16;
 const MAX_APPROVAL_JSON_NODES = 1024;
 const MAX_REMEMBERED_APPROVALS = 8192;
-const MAX_CONNECTIONS = 512;
-const MAX_CONNECTIONS_PER_CHALLENGE = 64;
-const MAX_CONNECTION_SCOPES = 32;
-const MAX_CONNECTION_POWERS = 128;
+const MAX_ACCOUNTS = 512;
+const MAX_ACCOUNTS_PER_CHALLENGE = 64;
+const MAX_ACCOUNT_SCOPES = 32;
+const MAX_ACCOUNT_POWERS = 128;
 const MAX_TEAM_NAME_CHARS = 80;
 const MAX_REPLY_CHARS = 60_000;
 const MAX_ERROR_DETAIL_CHARS = 800;
@@ -271,8 +271,8 @@ function canonicalOptionalPublicText(value, maximum) {
   return value === null ? null : canonicalPublicText(value, maximum);
 }
 
-function canonicalConnectionScopes(values) {
-  if (!Array.isArray(values) || !values.length || values.length > MAX_CONNECTION_SCOPES) {
+function canonicalAccountScopes(values) {
+  if (!Array.isArray(values) || !values.length || values.length > MAX_ACCOUNT_SCOPES) {
     throw new LocalApiError('The local chat response is invalid.');
   }
   const scopes = values.map((value) => canonicalPublicText(value, 128));
@@ -282,7 +282,7 @@ function canonicalConnectionScopes(values) {
   return scopes;
 }
 
-function canonicalConnectionPower(value) {
+function canonicalAccountPower(value) {
   if (
     !value ||
     typeof value !== 'object' ||
@@ -298,18 +298,18 @@ function canonicalConnectionPower(value) {
   };
 }
 
-function canonicalConnectionPowers(values) {
-  if (!Array.isArray(values) || !values.length || values.length > MAX_CONNECTION_POWERS) {
+function canonicalAccountPowers(values) {
+  if (!Array.isArray(values) || !values.length || values.length > MAX_ACCOUNT_POWERS) {
     throw new LocalApiError('The local chat response is invalid.');
   }
-  const powers = values.map(canonicalConnectionPower);
+  const powers = values.map(canonicalAccountPower);
   if (new Set(powers.map((power) => power.id)).size !== powers.length) {
     throw new LocalApiError('The local chat response is invalid.');
   }
   return powers;
 }
 
-function canonicalConnectionRequirement(value) {
+function canonicalAccountRequirement(value) {
   if (
     !value ||
     typeof value !== 'object' ||
@@ -317,7 +317,7 @@ function canonicalConnectionRequirement(value) {
     !exactKeys(value, [
       'assistant_id',
       'assistant_name',
-      'connection_id',
+      'account_id',
       'provider',
       'name',
       'summary',
@@ -330,16 +330,16 @@ function canonicalConnectionRequirement(value) {
   return {
     assistant_id: canonicalId(value.assistant_id),
     assistant_name: canonicalPublicText(value.assistant_name, 80),
-    connection_id: canonicalId(value.connection_id),
+    account_id: canonicalId(value.account_id),
     provider: canonicalId(value.provider),
     name: canonicalPublicText(value.name, 80),
     summary: canonicalPublicText(value.summary, 160),
-    scopes: canonicalConnectionScopes(value.scopes),
-    powers: canonicalConnectionPowers(value.powers),
+    scopes: canonicalAccountScopes(value.scopes),
+    powers: canonicalAccountPowers(value.powers),
   };
 }
 
-function canonicalConnectionAccount(value) {
+function canonicalAccountAccount(value) {
   if (value === null) return null;
   if (
     !value ||
@@ -347,7 +347,7 @@ function canonicalConnectionAccount(value) {
     Array.isArray(value) ||
     !exactKeys(value, ['id', 'name', 'username'])
   ) {
-    throw new LocalApiError('The Assistant connection inventory is invalid.');
+    throw new LocalApiError('The Assistant account inventory is invalid.');
   }
   return {
     id: canonicalPublicText(value.id, 160),
@@ -356,7 +356,7 @@ function canonicalConnectionAccount(value) {
   };
 }
 
-function canonicalConnectionExpiry(value) {
+function canonicalAccountExpiry(value) {
   if (value === null) return null;
   const match = typeof value === 'string'
     ? value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|([+-])(\d{2}):(\d{2}))$/)
@@ -367,7 +367,7 @@ function canonicalConnectionExpiry(value) {
     value !== value.trim() ||
     CONTROL_RE.test(value)
   ) {
-    throw new LocalApiError('The Assistant connection inventory is invalid.');
+    throw new LocalApiError('The Assistant account inventory is invalid.');
   }
   const [, year, month, day, hour, minute, second, , offsetHour = '00', offsetMinute = '00'] = match;
   const maximumDay = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
@@ -382,16 +382,16 @@ function canonicalConnectionExpiry(value) {
     Number(offsetHour) > 23 ||
     Number(offsetMinute) > 59
   ) {
-    throw new LocalApiError('The Assistant connection inventory is invalid.');
+    throw new LocalApiError('The Assistant account inventory is invalid.');
   }
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime())) {
-    throw new LocalApiError('The Assistant connection inventory is invalid.');
+    throw new LocalApiError('The Assistant account inventory is invalid.');
   }
   return value;
 }
 
-function canonicalConnectionInventoryItem(value) {
+function canonicalAccountInventoryItem(value) {
   if (
     !value ||
     typeof value !== 'object' ||
@@ -410,20 +410,20 @@ function canonicalConnectionInventoryItem(value) {
     ]) ||
     !['missing', 'connected', 'expired', 'reauthorization-required'].includes(value.status)
   ) {
-    throw new LocalApiError('The Assistant connection inventory is invalid.');
+    throw new LocalApiError('The Assistant account inventory is invalid.');
   }
-  const account = canonicalConnectionAccount(value.account);
+  const account = canonicalAccountAccount(value.account);
   return {
-    assistant_id: canonicalId(value.assistant_id, 'The Assistant connection inventory is invalid.'),
+    assistant_id: canonicalId(value.assistant_id, 'The Assistant account inventory is invalid.'),
     assistant_name: canonicalPublicText(value.assistant_name, 80),
-    id: canonicalId(value.id, 'The Assistant connection inventory is invalid.'),
-    provider: canonicalId(value.provider, 'The Assistant connection inventory is invalid.'),
+    id: canonicalId(value.id, 'The Assistant account inventory is invalid.'),
+    provider: canonicalId(value.provider, 'The Assistant account inventory is invalid.'),
     name: canonicalPublicText(value.name, 80),
     summary: canonicalPublicText(value.summary, 160),
-    scopes: canonicalConnectionScopes(value.scopes),
+    scopes: canonicalAccountScopes(value.scopes),
     status: value.status,
     account,
-    expires_at: canonicalConnectionExpiry(value.expires_at),
+    expires_at: canonicalAccountExpiry(value.expires_at),
   };
 }
 
@@ -664,41 +664,41 @@ export async function revokeRememberedApprovals(fetcher, teamId) {
   return { team_id: teamId, revoked: body.revoked };
 }
 
-export async function listAssistantConnections(fetcher, teamId) {
-  if (typeof fetcher !== 'function') throw new LocalApiError('Invalid Assistant connection request.');
+export async function listAssistantAccounts(fetcher, teamId) {
+  if (typeof fetcher !== 'function') throw new LocalApiError('Invalid Assistant account request.');
   requireTeam(teamId);
-  const response = await fetcher(`/api/teams/${encodeURIComponent(teamId)}/assistant-connections`, {
+  const response = await fetcher(`/api/teams/${encodeURIComponent(teamId)}/assistant-accounts`, {
     cache: 'no-store',
     headers: { Accept: 'application/json' },
   });
   const body = await jsonObject(response);
   if (!response.ok) {
-    throw new LocalApiError(safeApiError(body, 'Assistant connections are unavailable.'), response.status);
+    throw new LocalApiError(safeApiError(body, 'Assistant accounts are unavailable.'), response.status);
   }
-  if (!exactKeys(body, ['connections']) || !Array.isArray(body.connections) || body.connections.length > MAX_CONNECTIONS) {
-    throw new LocalApiError('The Assistant connection inventory is invalid.', response.status);
+  if (!exactKeys(body, ['accounts']) || !Array.isArray(body.accounts) || body.accounts.length > MAX_ACCOUNTS) {
+    throw new LocalApiError('The Assistant account inventory is invalid.', response.status);
   }
-  let connections;
+  let accounts;
   try {
-    connections = body.connections.map(canonicalConnectionInventoryItem);
+    accounts = body.accounts.map(canonicalAccountInventoryItem);
   } catch {
-    throw new LocalApiError('The Assistant connection inventory is invalid.', response.status);
+    throw new LocalApiError('The Assistant account inventory is invalid.', response.status);
   }
-  const identities = connections.map((connection) => `${connection.assistant_id}\u0000${connection.id}`);
+  const identities = accounts.map((account) => `${account.assistant_id}\u0000${account.id}`);
   if (new Set(identities).size !== identities.length) {
-    throw new LocalApiError('The Assistant connection inventory is invalid.', response.status);
+    throw new LocalApiError('The Assistant account inventory is invalid.', response.status);
   }
-  return { connections };
+  return { accounts };
 }
 
-export async function authorizeAssistantConnection(fetcher, teamId, challengeId) {
+export async function authorizeAssistantAccount(fetcher, teamId, challengeId) {
   if (typeof fetcher !== 'function') throw new LocalApiError('Invalid Assistant authorization request.');
   requireTeam(teamId);
   if (typeof challengeId !== 'string' || !OPAQUE_ID_RE.test(challengeId)) {
     throw new LocalApiError('Invalid Assistant authorization request.');
   }
   const response = await fetcher(
-    `/api/teams/${encodeURIComponent(teamId)}/assistant-connections/challenges/${challengeId}/authorize`,
+    `/api/teams/${encodeURIComponent(teamId)}/assistant-accounts/challenges/${challengeId}/authorize`,
     {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -715,21 +715,21 @@ export async function authorizeAssistantConnection(fetcher, teamId, challengeId)
   return { authorization_url: trustedAuthorizationUrl(body.authorization_url) };
 }
 
-export async function disconnectAssistantConnection(fetcher, teamId, assistantId, connectionId) {
-  if (typeof fetcher !== 'function') throw new LocalApiError('Invalid Assistant connection request.');
+export async function disconnectAssistantAccount(fetcher, teamId, assistantId, accountId) {
+  if (typeof fetcher !== 'function') throw new LocalApiError('Invalid Assistant account request.');
   requireTeam(teamId);
-  const canonicalAssistant = canonicalId(assistantId, 'Invalid Assistant connection request.');
-  const canonicalConnection = canonicalId(connectionId, 'Invalid Assistant connection request.');
+  const canonicalAssistant = canonicalId(assistantId, 'Invalid Assistant account request.');
+  const canonicalAccount = canonicalId(accountId, 'Invalid Assistant account request.');
   const response = await fetcher(
-    `/api/teams/${encodeURIComponent(teamId)}/assistant-connections/${canonicalAssistant}/${canonicalConnection}`,
+    `/api/teams/${encodeURIComponent(teamId)}/assistant-accounts/${canonicalAssistant}/${canonicalAccount}`,
     { method: 'DELETE', headers: { Accept: 'application/json' } },
   );
   if (!response.ok) {
     const body = await jsonObject(response);
-    throw new LocalApiError(safeApiError(body, 'Assistant connection could not be disconnected.'), response.status);
+    throw new LocalApiError(safeApiError(body, 'Assistant account could not be disconnected.'), response.status);
   }
   if (response.status !== 204) {
-    throw new LocalApiError('The Assistant disconnection response is invalid.', response.status);
+    throw new LocalApiError('The Assistant disaccount response is invalid.', response.status);
   }
 }
 
@@ -839,7 +839,7 @@ export function parseChatEvent(value, expectedTeamId, expectedTeamName) {
       requirements,
     };
   }
-  if (value.type === 'connections-required') {
+  if (value.type === 'accounts-required') {
     if (
       !exactKeys(value, ['type', 'challenge_id', 'expires_in', 'requirements']) ||
       typeof value.challenge_id !== 'string' ||
@@ -849,19 +849,19 @@ export function parseChatEvent(value, expectedTeamId, expectedTeamName) {
       value.expires_in > 900 ||
       !Array.isArray(value.requirements) ||
       !value.requirements.length ||
-      value.requirements.length > MAX_CONNECTIONS_PER_CHALLENGE
+      value.requirements.length > MAX_ACCOUNTS_PER_CHALLENGE
     ) {
       throw new LocalApiError('The local chat response is invalid.');
     }
-    const requirements = value.requirements.map(canonicalConnectionRequirement);
+    const requirements = value.requirements.map(canonicalAccountRequirement);
     const identities = requirements.map((requirement) => (
-      `${requirement.assistant_id}\u0000${requirement.connection_id}`
+      `${requirement.assistant_id}\u0000${requirement.account_id}`
     ));
     if (new Set(identities).size !== identities.length) {
       throw new LocalApiError('The local chat response is invalid.');
     }
     return {
-      type: 'connections-required',
+      type: 'accounts-required',
       challenge_id: value.challenge_id,
       expires_in: value.expires_in,
       requirements,

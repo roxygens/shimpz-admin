@@ -56,11 +56,11 @@ def approval_requirements() -> list[dict[str, object]]:
     ]
 
 
-def connection_requirement() -> dict[str, object]:
+def account_requirement() -> dict[str, object]:
     return {
         "assistant_id": "shimpz-assistant",
         "assistant_name": "Shimpz Assistant",
-        "connection_id": "x-account",
+        "account_id": "x-account",
         "provider": "x",
         "name": "X account",
         "summary": "Lets approved Powers access the connected X account.",
@@ -185,9 +185,9 @@ class PrivateChatTransportTests(unittest.TestCase):
         self.assertEqual(json.loads(request["body"]), {"challenge_id": CHALLENGE_ID, "approved": True})
         self.assertNotIn(model_key.encode(), request["body"])
 
-    def test_connection_resume_uses_private_model_header_and_exact_challenge(self) -> None:
+    def test_account_resume_uses_private_model_header_and_exact_challenge(self) -> None:
         model_key = "sk-test-0123456789"
-        teams.resume_chat_connections(
+        teams.resume_chat_accounts(
             "team_1",
             {"challenge_id": CHALLENGE_ID},
             provider="openai",
@@ -195,25 +195,25 @@ class PrivateChatTransportTests(unittest.TestCase):
         )
 
         request = _ControllerHandler.request
-        self.assertEqual(request["path"], "/v1/teams/team_1/chat/connections")
+        self.assertEqual(request["path"], "/v1/teams/team_1/chat/accounts")
         self.assertEqual(request["headers"]["x-shimpz-model-api-key"], model_key)
         self.assertEqual(json.loads(request["body"]), {"challenge_id": CHALLENGE_ID})
         self.assertNotIn(model_key.encode(), request["body"])
 
 
 class LocalChatOrchestrationTests(unittest.TestCase):
-    def test_connection_challenge_projects_only_public_consent_metadata(self) -> None:
+    def test_account_challenge_projects_only_public_consent_metadata(self) -> None:
         body = {
             "team_id": "team_1",
-            "status": "connections-required",
+            "status": "accounts-required",
             "turn_id": CHALLENGE_ID,
             "challenge_id": CHALLENGE_ID,
             "expires_in": 300,
-            "requirements": [connection_requirement()],
+            "requirements": [account_requirement()],
             "trace_id": TRACE_ID,
         }
 
-        response = localchat._project_connection_challenge(teams.DriverResponse(428, body), "team_1")
+        response = localchat._project_account_challenge(teams.DriverResponse(428, body), "team_1")
 
         self.assertEqual(
             response,
@@ -225,17 +225,17 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         self.assertNotIn("token", json.dumps(response.body).lower())
         self.assertNotIn("client_secret", json.dumps(response.body).lower())
 
-    def test_connection_challenge_fails_closed_on_ambiguous_or_private_data(self) -> None:
+    def test_account_challenge_fails_closed_on_ambiguous_or_private_data(self) -> None:
         valid = {
             "team_id": "team_1",
-            "status": "connections-required",
+            "status": "accounts-required",
             "turn_id": CHALLENGE_ID,
             "challenge_id": CHALLENGE_ID,
             "expires_in": 300,
-            "requirements": [connection_requirement()],
+            "requirements": [account_requirement()],
             "trace_id": TRACE_ID,
         }
-        requirement = connection_requirement()
+        requirement = account_requirement()
         invalid = (
             {**valid, "team_id": "team_2"},
             {**valid, "access_token": "must-not-cross"},
@@ -253,23 +253,23 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         )
         for body in invalid:
             with self.subTest(body=body):
-                response = localchat._project_connection_challenge(teams.DriverResponse(428, body), "team_1")
+                response = localchat._project_account_challenge(teams.DriverResponse(428, body), "team_1")
             self.assertEqual(
                 response,
-                teams.DriverResponse(502, {"code": "connection-challenge-response-invalid"}),
+                teams.DriverResponse(502, {"code": "account-challenge-response-invalid"}),
             )
 
-    def test_turn_preserves_connection_before_later_gates(self) -> None:
+    def test_turn_preserves_account_before_later_gates(self) -> None:
         inference = teams.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})
         controller = teams.DriverResponse(
             428,
             {
                 "team_id": "team_1",
-                "status": "connections-required",
+                "status": "accounts-required",
                 "turn_id": CHALLENGE_ID,
                 "challenge_id": CHALLENGE_ID,
                 "expires_in": 300,
-                "requirements": [connection_requirement()],
+                "requirements": [account_requirement()],
                 "trace_id": TRACE_ID,
             },
         )
@@ -284,42 +284,42 @@ class LocalChatOrchestrationTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status, 428)
-        self.assertEqual(response.body["status"], "connections-required")
-        self.assertEqual(response.body["requirements"], [connection_requirement()])
+        self.assertEqual(response.body["status"], "accounts-required")
+        self.assertEqual(response.body["requirements"], [account_requirement()])
 
-    def test_pending_connection_is_team_bound_and_none_is_closed(self) -> None:
+    def test_pending_account_is_team_bound_and_none_is_closed(self) -> None:
         pending = teams.DriverResponse(
             200,
             {
                 "team_id": "team_1",
-                "status": "connections-required",
+                "status": "accounts-required",
                 "turn_id": CHALLENGE_ID,
                 "challenge_id": CHALLENGE_ID,
                 "expires_in": 300,
-                "requirements": [connection_requirement()],
+                "requirements": [account_requirement()],
                 "trace_id": TRACE_ID,
             },
         )
-        with mock.patch.object(teams, "pending_chat_connections", return_value=pending):
-            projected = localchat.pending_connections("team_1")
-        self.assertEqual(projected.body["status"], "connections-required")
+        with mock.patch.object(teams, "pending_chat_accounts", return_value=pending):
+            projected = localchat.pending_accounts("team_1")
+        self.assertEqual(projected.body["status"], "accounts-required")
         self.assertNotIn("trace_id", projected.body)
 
         none = teams.DriverResponse(200, {"team_id": "team_1", "status": "none", "trace_id": TRACE_ID})
-        with mock.patch.object(teams, "pending_chat_connections", return_value=none):
+        with mock.patch.object(teams, "pending_chat_accounts", return_value=none):
             self.assertEqual(
-                localchat.pending_connections("team_1"),
+                localchat.pending_accounts("team_1"),
                 teams.DriverResponse(200, {"team_id": "team_1", "status": "none"}),
             )
 
         cross_team = teams.DriverResponse(200, {**none.body, "team_id": "team_2"})
-        with mock.patch.object(teams, "pending_chat_connections", return_value=cross_team):
+        with mock.patch.object(teams, "pending_chat_accounts", return_value=cross_team):
             self.assertEqual(
-                localchat.pending_connections("team_1"),
-                teams.DriverResponse(502, {"code": "connection-challenge-response-invalid"}),
+                localchat.pending_accounts("team_1"),
+                teams.DriverResponse(502, {"code": "account-challenge-response-invalid"}),
             )
 
-    def test_connection_resume_can_advance_to_secret_gate_or_done(self) -> None:
+    def test_account_resume_can_advance_to_secret_gate_or_done(self) -> None:
         inference = teams.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})
         secret_gate = teams.DriverResponse(
             428,
@@ -341,9 +341,9 @@ class LocalChatOrchestrationTests(unittest.TestCase):
                 self.subTest(controller=controller),
                 mock.patch.object(teams, "get_inference", return_value=inference),
                 mock.patch.object(modelproviders, "resolve_api_key", return_value="sk-test-0123456789"),
-                mock.patch.object(teams, "resume_chat_connections", return_value=controller) as resume,
+                mock.patch.object(teams, "resume_chat_accounts", return_value=controller) as resume,
             ):
-                response = localchat.resume_connections("team_1", CHALLENGE_ID)
+                response = localchat.resume_accounts("team_1", CHALLENGE_ID)
             resume.assert_called_once_with(
                 "team_1",
                 {"challenge_id": CHALLENGE_ID},
@@ -355,7 +355,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
             else:
                 self.assertEqual(response.body["status"], expected_status)
 
-    def test_connection_resume_rejects_augmented_or_invalid_payload_before_transport(self) -> None:
+    def test_account_resume_rejects_augmented_or_invalid_payload_before_transport(self) -> None:
         invalid = (
             {},
             {"challenge_id": "short"},
@@ -365,7 +365,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         with mock.patch.object(teams, "_call") as transport:
             for payload in invalid:
                 with self.subTest(payload=payload), self.assertRaises(teams.TeamRequestError):
-                    teams.resume_chat_connections(
+                    teams.resume_chat_accounts(
                         "team_1",
                         payload,
                         provider="openai",

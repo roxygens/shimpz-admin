@@ -35,9 +35,9 @@ MAX_SECRETS_PER_ASSISTANT = 32
 MAX_POWERS_PER_ASSISTANT = 128
 MAX_INSTALLED_ASSISTANTS = 128
 MAX_APPROVAL_REQUIREMENTS = 64
-MAX_CONNECTION_REQUIREMENTS = 64
-MAX_CONNECTION_SCOPES = 32
-MAX_CONNECTION_POWERS = 128
+MAX_ACCOUNT_REQUIREMENTS = 64
+MAX_ACCOUNT_SCOPES = 32
+MAX_ACCOUNT_POWERS = 128
 _DEFAULT_ORIGINS = "http://127.0.0.1:7777,http://localhost:7777"
 _REPLY_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
@@ -46,9 +46,9 @@ _CHAT_ERROR_DETAILS = {
     "assistant-power-blocked": "Assistant Power execution is blocked until it is reinstalled",
     "assistant-approval-challenge-expired": "the Assistant approval expired; retry the message",
     "assistant-approval-state-unavailable": "remembered Assistant approvals are unavailable",
-    "assistant-connection-challenge-expired": "the Assistant connection expired; retry the message",
-    "assistant-connection-contract-invalid": "the Assistant connection contract changed; retry the message",
-    "assistant-connection-state-unavailable": "Assistant connection state is unavailable",
+    "assistant-account-challenge-expired": "the Assistant account expired; retry the message",
+    "assistant-account-contract-invalid": "the Assistant account contract changed; retry the message",
+    "assistant-account-state-unavailable": "Assistant account state is unavailable",
     "assistant-registry-drift": "an installed Assistant is no longer available",
     "assistant-unavailable": "the Brain requested an unavailable Assistant",
     "brain-runtime-failed": "the Brain runtime could not complete the Team turn",
@@ -73,7 +73,7 @@ _CHAT_ERROR_DETAILS = {
     "secret-inventory-response-invalid": "the Assistant secret inventory was invalid",
     "approval-challenge-response-invalid": "the Assistant approval challenge was invalid",
     "approval-inventory-response-invalid": "the remembered Assistant approvals were invalid",
-    "connection-challenge-response-invalid": "the Assistant connection challenge was invalid",
+    "account-challenge-response-invalid": "the Assistant account challenge was invalid",
     "team-context-changed": "the Team capabilities changed; retry",
     "team-has-no-active-assistants": "install and start at least one Assistant before chatting",
 }
@@ -432,7 +432,7 @@ def approval_challenge_event(response: object, team_id: str) -> dict[str, object
     }
 
 
-def connection_challenge_event(response: object, team_id: str) -> dict[str, object] | None:
+def account_challenge_event(response: object, team_id: str) -> dict[str, object] | None:
     """Return exact public OAuth consent metadata without copying authorization material."""
     if (
         not isinstance(response, teams.DriverResponse)
@@ -442,7 +442,7 @@ def connection_challenge_event(response: object, team_id: str) -> dict[str, obje
         or not isinstance(response.body, dict)
         or set(response.body) != {"team_id", "status", "turn_id", "challenge_id", "expires_in", "requirements"}
         or response.body.get("team_id") != team_id
-        or response.body.get("status") != "connections-required"
+        or response.body.get("status") != "accounts-required"
     ):
         return None
     turn_id = response.body.get("turn_id")
@@ -458,17 +458,17 @@ def connection_challenge_event(response: object, team_id: str) -> dict[str, obje
         or isinstance(expires_in, bool)
         or not 1 <= expires_in <= 900
         or not isinstance(raw_requirements, list)
-        or not 1 <= len(raw_requirements) <= MAX_CONNECTION_REQUIREMENTS
+        or not 1 <= len(raw_requirements) <= MAX_ACCOUNT_REQUIREMENTS
     ):
         return None
 
     requirements: list[dict[str, object]] = []
-    seen_connections: set[tuple[str, str]] = set()
+    seen_accounts: set[tuple[str, str]] = set()
     for raw in raw_requirements:
         if not isinstance(raw, dict) or set(raw) != {
             "assistant_id",
             "assistant_name",
-            "connection_id",
+            "account_id",
             "provider",
             "name",
             "summary",
@@ -477,22 +477,22 @@ def connection_challenge_event(response: object, team_id: str) -> dict[str, obje
         }:
             return None
         assistant_id = _canonical_assistant_id(raw.get("assistant_id"))
-        connection_id = _canonical_assistant_id(raw.get("connection_id"))
+        account_id = _canonical_assistant_id(raw.get("account_id"))
         provider = _canonical_assistant_id(raw.get("provider"))
         raw_scopes = raw.get("scopes")
         raw_powers = raw.get("powers")
         if (
             assistant_id is None
-            or connection_id is None
+            or account_id is None
             or provider is None
-            or (assistant_id, connection_id) in seen_connections
+            or (assistant_id, account_id) in seen_accounts
             or not _valid_public_text(raw.get("assistant_name"), MAX_PUBLIC_LABEL_CHARS)
             or not _valid_public_text(raw.get("name"), MAX_PUBLIC_LABEL_CHARS)
             or not _valid_public_text(raw.get("summary"), MAX_PUBLIC_SUMMARY_CHARS)
             or not isinstance(raw_scopes, list)
-            or not 1 <= len(raw_scopes) <= MAX_CONNECTION_SCOPES
+            or not 1 <= len(raw_scopes) <= MAX_ACCOUNT_SCOPES
             or not isinstance(raw_powers, list)
-            or not 1 <= len(raw_powers) <= MAX_CONNECTION_POWERS
+            or not 1 <= len(raw_powers) <= MAX_ACCOUNT_POWERS
         ):
             return None
         if any(not _valid_public_text(scope, 128) for scope in raw_scopes) or len(set(raw_scopes)) != len(raw_scopes):
@@ -512,12 +512,12 @@ def connection_challenge_event(response: object, team_id: str) -> dict[str, obje
                 return None
             seen_powers.add(power_id)
             powers.append({"id": power_id, "name": raw_power["name"], "summary": raw_power["summary"]})
-        seen_connections.add((assistant_id, connection_id))
+        seen_accounts.add((assistant_id, account_id))
         requirements.append(
             {
                 "assistant_id": assistant_id,
                 "assistant_name": raw["assistant_name"],
-                "connection_id": connection_id,
+                "account_id": account_id,
                 "provider": provider,
                 "name": raw["name"],
                 "summary": raw["summary"],
@@ -526,7 +526,7 @@ def connection_challenge_event(response: object, team_id: str) -> dict[str, obje
             }
         )
     return {
-        "type": "connections-required",
+        "type": "accounts-required",
         "challenge_id": challenge_id,
         "expires_in": expires_in,
         "requirements": requirements,
@@ -670,8 +670,8 @@ async def _deliver_turn(websocket: WebSocket, connection: _Connection, turn: _Tu
                 response = teams.DriverResponse(400, {})
         if connection.closed or turn.stop_requested or turn.terminal_sent:
             return
-        challenge = connection_challenge_event(response, team_id)
-        challenge_type = "connection"
+        challenge = account_challenge_event(response, team_id)
+        challenge_type = "account"
         if challenge is None:
             challenge = secret_challenge_event(response, team_id)
             challenge_type = "secret"
@@ -688,7 +688,7 @@ async def _deliver_turn(websocket: WebSocket, connection: _Connection, turn: _Tu
             response.status == 428
             or (
                 isinstance(response.body, dict)
-                and response.body.get("status") in {"connections-required", "secrets-required", "approval-required"}
+                and response.body.get("status") in {"accounts-required", "secrets-required", "approval-required"}
             )
         ):
             event = _error_terminal(502, "the Assistant challenge was invalid")
@@ -705,18 +705,18 @@ async def _deliver_turn(websocket: WebSocket, connection: _Connection, turn: _Tu
 
 def _sync_snapshot(team_id: str) -> tuple[object, object, object | None, object | None, object | None]:
     inventory = localchat.secret_inventory(team_id)
-    pending_connection = localchat.pending_connections(team_id)
-    connection = connection_challenge_event(pending_connection, team_id)
-    if connection is not None:
+    pending_account = localchat.pending_accounts(team_id)
+    account_challenge = account_challenge_event(pending_account, team_id)
+    if account_challenge is not None:
         # Continuation is explicit and one-use. The OAuth callback only stores the grant; this
         # exact pending challenge remains the controller-owned binding for the paused turn.
-        resumed = localchat.resume_connections(team_id, connection["challenge_id"])
-        return inventory, pending_connection, resumed, None, None
-    if not _is_empty_pending(pending_connection, team_id):
-        return inventory, pending_connection, None, None, None
+        resumed = localchat.resume_accounts(team_id, account_challenge["challenge_id"])
+        return inventory, pending_account, resumed, None, None
+    if not _is_empty_pending(pending_account, team_id):
+        return inventory, pending_account, None, None, None
     return (
         inventory,
-        pending_connection,
+        pending_account,
         None,
         localchat.pending_secrets(team_id),
         localchat.pending_approval(team_id),
@@ -775,26 +775,26 @@ def _pending_error(response: object, team_id: str, challenge_type: str) -> dict[
     return _error_terminal(502, f"the Assistant {challenge_type} challenge was invalid")
 
 
-async def _deliver_connection_sync(
+async def _deliver_account_sync(
     websocket: WebSocket,
     connection: _Connection,
     team_id: str,
     pending_response: object,
     resumed_response: object,
 ) -> bool:
-    """Deliver an explicitly resumed connection gate; return whether it consumed sync."""
-    pending = connection_challenge_event(pending_response, team_id)
+    """Deliver an explicitly resumed account gate; return whether it consumed sync."""
+    pending = account_challenge_event(pending_response, team_id)
     if pending is None:
         if _is_empty_pending(pending_response, team_id):
             return False
-        await _send_event(websocket, _pending_error(pending_response, team_id, "connection"))
+        await _send_event(websocket, _pending_error(pending_response, team_id, "account"))
         return True
     if resumed_response is None:
-        await _send_event(websocket, _error_terminal(502, "the Assistant connection challenge was invalid"))
+        await _send_event(websocket, _error_terminal(502, "the Assistant account challenge was invalid"))
         return True
 
-    resumed = connection_challenge_event(resumed_response, team_id)
-    challenge_type = "connection"
+    resumed = account_challenge_event(resumed_response, team_id)
+    challenge_type = "account"
     if resumed is None:
         resumed = secret_challenge_event(resumed_response, team_id)
         challenge_type = "secret"
@@ -805,7 +805,7 @@ async def _deliver_connection_sync(
         pending_turn_id = pending_response.body.get("turn_id")
         resumed_turn_id = resumed_response.body.get("turn_id")
         if pending_turn_id != resumed_turn_id:
-            await _send_event(websocket, _error_terminal(502, "the Assistant connection challenge was invalid"))
+            await _send_event(websocket, _error_terminal(502, "the Assistant account challenge was invalid"))
             return True
         connection.pending_challenge_id = resumed["challenge_id"]
         connection.pending_challenge_type = challenge_type
@@ -817,10 +817,10 @@ async def _deliver_connection_sync(
         resumed_response.status == 428
         or (
             isinstance(resumed_response.body, dict)
-            and resumed_response.body.get("status") in {"connections-required", "secrets-required", "approval-required"}
+            and resumed_response.body.get("status") in {"accounts-required", "secrets-required", "approval-required"}
         )
     ):
-        event = _error_terminal(502, "the Assistant connection challenge was invalid")
+        event = _error_terminal(502, "the Assistant account challenge was invalid")
     else:
         event = turn_terminal(resumed_response, team_id)
     connection.pending_challenge_id = None
@@ -845,8 +845,8 @@ async def _deliver_sync(websocket: WebSocket, connection: _Connection, team_id: 
             return
         (
             inventory_response,
-            pending_connection_response,
-            resumed_connection_response,
+            pending_account_response,
+            resumed_account_response,
             pending_response,
             pending_approval_response,
         ) = snapshot
@@ -870,12 +870,12 @@ async def _deliver_sync(websocket: WebSocket, connection: _Connection, team_id: 
             connection.closed = True
             return
 
-        if await _deliver_connection_sync(
+        if await _deliver_account_sync(
             websocket,
             connection,
             team_id,
-            pending_connection_response,
-            resumed_connection_response,
+            pending_account_response,
+            resumed_account_response,
         ):
             return
 

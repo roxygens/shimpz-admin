@@ -46,9 +46,9 @@ test('changes Team by closing stale transport and clearing route-scoped conversa
   const activation = source.match(/function activateTeam\(nextTeamId\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
   for (const statement of [
     'closeSocket();', 'socketTeamId = nextTeamId;', 'busy = false;', "draft = '';", 'turns = [];',
-    'helpOpen = false;', 'secretsOpen = false;', 'connectionsOpen = false;',
-    'secretChallenge = undefined;', 'approvalChallenge = undefined;', 'connectionChallenge = undefined;',
-    'connections = [];', 'secretInventory = [];', 'rememberedApprovals = [];', 'clearError();',
+    'helpOpen = false;', 'secretsOpen = false;', 'accountsOpen = false;',
+    'secretChallenge = undefined;', 'approvalChallenge = undefined;', 'accountChallenge = undefined;',
+    'accounts = [];', 'secretInventory = [];', 'rememberedApprovals = [];', 'clearError();',
     'if (nextTeamId) connectSocket(nextTeamId);',
   ]) assert.ok(activation.includes(statement), `missing Team reset: ${statement}`);
   assert.match(source, /if \(socket !== active \|\| chatTeamId !== expectedTeamId\) return;/);

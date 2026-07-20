@@ -1,13 +1,13 @@
 <script>
   import { onMount, tick } from 'svelte';
   import AssistantApprovalDialog from '$lib/AssistantApprovalDialog.svelte';
-  import AssistantConnectionsDialog from '$lib/AssistantConnectionsDialog.svelte';
-  import AssistantConnectionsDrawer from '$lib/AssistantConnectionsDrawer.svelte';
+  import AssistantAccountsDialog from '$lib/AssistantAccountsDialog.svelte';
+  import AssistantAccountsDrawer from '$lib/AssistantAccountsDrawer.svelte';
   import AssistantHelpDrawer from '$lib/AssistantHelpDrawer.svelte';
   import AssistantSecretsDialog from '$lib/AssistantSecretsDialog.svelte';
   import AssistantSecretsDrawer from '$lib/AssistantSecretsDrawer.svelte';
   import AssistantSecretRotationDialog from '$lib/AssistantSecretRotationDialog.svelte';
-  import { assistantConnectionsCopy } from '$lib/assistantConnectionsCopy.js';
+  import { assistantAccountsCopy } from '$lib/assistantAccountsCopy.js';
   import { assistantSecretsCopy } from '$lib/assistantSecretsCopy.js';
   import ChatContextControls from '$lib/ChatContextControls.svelte';
   import HelpMarkdown from '$lib/HelpMarkdown.svelte';
@@ -18,15 +18,15 @@
   import { teamContext } from '$lib/teamContext.js';
   import {
     CHAT_WS_PROTOCOL,
-    authorizeAssistantConnection,
+    authorizeAssistantAccount,
     chatSocketUrl,
     createApprovalSubmitFrame,
     createChatFrame,
     createSecretSubmitFrame,
     createStopFrame,
     createSyncFrame,
-    disconnectAssistantConnection,
-    listAssistantConnections,
+    disconnectAssistantAccount,
+    listAssistantAccounts,
     listRememberedApprovals,
     parseChatEvent,
     replaceAssistantSecrets,
@@ -40,7 +40,7 @@
       stop: 'Stop', stopped: 'The active turn was stopped.',
       emptyTeams: 'Create a Team below to start chatting.',
       loading: 'Loading your Team…', loadFailed: 'Local chat data is unavailable.',
-      connecting: 'Connecting…', disconnected: 'The secure chat connection was interrupted. Reconnecting…',
+      connecting: 'Connecting…', disconnected: 'The secure chat account was interrupted. Reconnecting…',
       protocolError: 'The secure chat response was invalid.',
       turnFailed: 'The chat turn could not start.', capacityFailed: 'The local chat is busy. Try again shortly.',
       runtimeFailed: 'The local chat runtime is unavailable.', requestFailed: 'The Team could not complete this turn.',
@@ -84,13 +84,13 @@
   let helpButton = $state();
   let secretsOpen = $state(false);
   let secretsButton = $state();
-  let connectionsOpen = $state(false);
-  let connectionsButton = $state();
-  let connectionsDialogOpen = $state(false);
-  let connectionChallenge = $state();
-  let connections = $state([]);
-  let connectionsReady = $state(false);
-  let connectionWorking = $state('');
+  let accountsOpen = $state(false);
+  let accountsButton = $state();
+  let accountsDialogOpen = $state(false);
+  let accountChallenge = $state();
+  let accounts = $state([]);
+  let accountsReady = $state(false);
+  let accountWorking = $state('');
   let secretsDialogOpen = $state(false);
   let secretChallenge = $state();
   let approvalDialogOpen = $state(false);
@@ -108,7 +108,7 @@
 
   let copy = $derived({ ...COPY.en, ...(COPY[$locale] ?? {}) });
   let secretsCopy = $derived(assistantSecretsCopy($locale));
-  let connectionsCopy = $derived(assistantConnectionsCopy($locale));
+  let accountsCopy = $derived(assistantAccountsCopy($locale));
   let selectedTeamId = $derived($teamContext.selectedTeamId);
   let activeTeam = $derived(
     $teamContext.teams.find((entry) => entry.id === selectedTeamId) ?? null,
@@ -195,7 +195,7 @@
       busy ||
       helpOpen ||
       secretsOpen ||
-      connectionsOpen ||
+      accountsOpen ||
       document.querySelector('dialog[open]')
     ) return;
     composerInput?.focus({ preventScroll: true });
@@ -233,10 +233,10 @@
     secretsDialogOpen = false;
     approvalChallenge = undefined;
     approvalDialogOpen = false;
-    connectionChallenge = undefined;
-    connectionsDialogOpen = false;
-    connectionsReady = false;
-    connectionWorking = '';
+    accountChallenge = undefined;
+    accountsDialogOpen = false;
+    accountsReady = false;
+    accountWorking = '';
     secretInventoryReady = false;
     rotationOpen = false;
     rotationAssistant = undefined;
@@ -253,7 +253,7 @@
     secretsDialogOpen = true;
     helpOpen = false;
     secretsOpen = false;
-    connectionsOpen = false;
+    accountsOpen = false;
     busy = true;
     stopping = false;
   }
@@ -279,21 +279,21 @@
     approvalDialogOpen = true;
     helpOpen = false;
     secretsOpen = false;
-    connectionsOpen = false;
+    accountsOpen = false;
     busy = true;
     stopping = false;
   }
 
-  function acceptConnectionChallenge(incoming) {
+  function acceptAccountChallenge(incoming) {
     const selected = new Set($teamContext.selectedAssistantIds);
     if (incoming.requirements.some((requirement) => !selected.has(requirement.assistant_id))) {
-      throw new Error('unexpected Assistant connection requirement');
+      throw new Error('unexpected Assistant account requirement');
     }
-    connectionChallenge = incoming;
-    connectionsDialogOpen = true;
+    accountChallenge = incoming;
+    accountsDialogOpen = true;
     helpOpen = false;
     secretsOpen = false;
-    connectionsOpen = false;
+    accountsOpen = false;
     busy = true;
     stopping = false;
   }
@@ -363,8 +363,8 @@
           acceptApprovalChallenge(incoming);
           return;
         }
-        if (incoming.type === 'connections-required') {
-          acceptConnectionChallenge(incoming);
+        if (incoming.type === 'accounts-required') {
+          acceptAccountChallenge(incoming);
           return;
         }
         if (incoming.type === 'secret-inventory') {
@@ -381,9 +381,9 @@
         secretsDialogOpen = false;
         approvalChallenge = undefined;
         approvalDialogOpen = false;
-        connectionChallenge = undefined;
-        connectionsDialogOpen = false;
-        connectionWorking = '';
+        accountChallenge = undefined;
+        accountsDialogOpen = false;
+        accountWorking = '';
         secretInventoryReady = false;
         setError(copy.protocolError);
         active.close(1002, 'Invalid chat event');
@@ -396,9 +396,9 @@
       secretsDialogOpen = false;
       approvalChallenge = undefined;
       approvalDialogOpen = false;
-      connectionChallenge = undefined;
-      connectionsDialogOpen = false;
-      connectionWorking = '';
+      accountChallenge = undefined;
+      accountsDialogOpen = false;
+      accountWorking = '';
       if (incoming.type === 'done') {
         turns = [...turns, { role: 'assistant', text: incoming.reply, author: incoming.team_name }];
         void revealLatestTurn();
@@ -422,10 +422,10 @@
       secretsDialogOpen = false;
       approvalChallenge = undefined;
       approvalDialogOpen = false;
-      connectionChallenge = undefined;
-      connectionsDialogOpen = false;
-      connectionsReady = false;
-      connectionWorking = '';
+      accountChallenge = undefined;
+      accountsDialogOpen = false;
+      accountsReady = false;
+      accountWorking = '';
       secretInventoryReady = false;
       setError(copy.disconnected);
       scheduleReconnect(expectedTeamId);
@@ -443,16 +443,16 @@
     scrollRequest += 1;
     helpOpen = false;
     secretsOpen = false;
-    connectionsOpen = false;
+    accountsOpen = false;
     secretsDialogOpen = false;
     secretChallenge = undefined;
     approvalDialogOpen = false;
     approvalChallenge = undefined;
-    connectionsDialogOpen = false;
-    connectionChallenge = undefined;
-    connections = [];
-    connectionsReady = false;
-    connectionWorking = '';
+    accountsDialogOpen = false;
+    accountChallenge = undefined;
+    accounts = [];
+    accountsReady = false;
+    accountWorking = '';
     secretInventory = [];
     secretInventoryReady = false;
     rotationOpen = false;
@@ -474,89 +474,89 @@
     queueMicrotask(() => secretsButton?.focus());
   }
 
-  function closeConnections() {
-    connectionsOpen = false;
-    queueMicrotask(() => connectionsButton?.focus());
+  function closeAccounts() {
+    accountsOpen = false;
+    queueMicrotask(() => accountsButton?.focus());
   }
 
-  function closeConnectionsDialog() {
-    connectionsDialogOpen = false;
+  function closeAccountsDialog() {
+    accountsDialogOpen = false;
   }
 
-  async function refreshConnections(teamId) {
-    connectionsReady = false;
+  async function refreshAccounts(teamId) {
+    accountsReady = false;
     try {
-      const inventory = await listAssistantConnections(fetch, teamId);
+      const inventory = await listAssistantAccounts(fetch, teamId);
       if (chatTeamId !== teamId) return;
       const installed = new Set($teamContext.installedAssistants.map((assistant) => assistant.assistant));
-      if (inventory.connections.some((connection) => !installed.has(connection.assistant_id))) {
-        throw new Error(connectionsCopy.inventoryFailed);
+      if (inventory.accounts.some((account) => !installed.has(account.assistant_id))) {
+        throw new Error(accountsCopy.inventoryFailed);
       }
-      connections = inventory.connections;
-      connectionsReady = true;
+      accounts = inventory.accounts;
+      accountsReady = true;
     } catch (reason) {
       if (chatTeamId !== teamId) return;
-      connections = [];
+      accounts = [];
       setError(
-        connectionsCopy.inventoryFailed,
-        reason instanceof Error ? reason.message : connectionsCopy.inventoryFailed,
+        accountsCopy.inventoryFailed,
+        reason instanceof Error ? reason.message : accountsCopy.inventoryFailed,
       );
     }
   }
 
-  function toggleConnections() {
-    const next = !connectionsOpen;
+  function toggleAccounts() {
+    const next = !accountsOpen;
     helpOpen = false;
     secretsOpen = false;
-    connectionsOpen = next;
-    if (next && chatTeamId) void refreshConnections(chatTeamId);
+    accountsOpen = next;
+    if (next && chatTeamId) void refreshAccounts(chatTeamId);
   }
 
-  async function authorizeConnection(challengeId) {
+  async function authorizeAccount(challengeId) {
     const teamId = chatTeamId;
     if (
       !teamId ||
-      connectionWorking ||
-      !connectionChallenge ||
-      connectionChallenge.challenge_id !== challengeId
-    ) throw new Error(connectionsCopy.authorizationFailed);
-    connectionWorking = 'connect';
+      accountWorking ||
+      !accountChallenge ||
+      accountChallenge.challenge_id !== challengeId
+    ) throw new Error(accountsCopy.authorizationFailed);
+    accountWorking = 'connect';
     try {
-      const authorization = await authorizeAssistantConnection(fetch, teamId, challengeId);
-      if (chatTeamId !== teamId || connectionChallenge?.challenge_id !== challengeId) {
-        throw new Error(connectionsCopy.authorizationFailed);
+      const authorization = await authorizeAssistantAccount(fetch, teamId, challengeId);
+      if (chatTeamId !== teamId || accountChallenge?.challenge_id !== challengeId) {
+        throw new Error(accountsCopy.authorizationFailed);
       }
       location.assign(authorization.authorization_url);
     } catch (reason) {
       if (chatTeamId === teamId) {
         setError(
-          connectionsCopy.authorizationFailed,
-          reason instanceof Error ? reason.message : connectionsCopy.authorizationFailed,
+          accountsCopy.authorizationFailed,
+          reason instanceof Error ? reason.message : accountsCopy.authorizationFailed,
         );
       }
-      connectionWorking = '';
+      accountWorking = '';
       throw reason;
     }
   }
 
-  async function disconnectConnection(connection) {
+  async function disconnectAccount(account) {
     const teamId = chatTeamId;
-    if (!teamId || connectionWorking) return;
-    const identity = `${connection.assistant_id}\u0000${connection.id}`;
-    connectionWorking = identity;
+    if (!teamId || accountWorking) return;
+    const identity = `${account.assistant_id}\u0000${account.id}`;
+    accountWorking = identity;
     try {
-      await disconnectAssistantConnection(fetch, teamId, connection.assistant_id, connection.id);
+      await disconnectAssistantAccount(fetch, teamId, account.assistant_id, account.id);
       if (chatTeamId !== teamId) return;
-      await refreshConnections(teamId);
+      await refreshAccounts(teamId);
     } catch (reason) {
       if (chatTeamId === teamId) {
         setError(
-          connectionsCopy.disconnectFailed,
-          reason instanceof Error ? reason.message : connectionsCopy.disconnectFailed,
+          accountsCopy.disconnectFailed,
+          reason instanceof Error ? reason.message : accountsCopy.disconnectFailed,
         );
       }
     } finally {
-      if (chatTeamId === teamId) connectionWorking = '';
+      if (chatTeamId === teamId) accountWorking = '';
     }
   }
 
@@ -576,7 +576,7 @@
   function toggleSecrets() {
     const next = !secretsOpen;
     helpOpen = false;
-    connectionsOpen = false;
+    accountsOpen = false;
     secretsOpen = next;
     if (next && chatTeamId) void refreshApprovals(chatTeamId);
   }
@@ -750,7 +750,7 @@
   });
 
   $effect(() => {
-    if (mounted && chatTeamId && !busy && !helpOpen && !secretsOpen && !connectionsOpen) void focusComposer();
+    if (mounted && chatTeamId && !busy && !helpOpen && !secretsOpen && !accountsOpen) void focusComposer();
   });
 
   onMount(() => {
@@ -769,7 +769,7 @@
 <div class="chat-route">
   {#if activeTeam}
     {#if chatTeamId}
-      <div class="chat-workspace" class:drawer-open={helpOpen || secretsOpen || connectionsOpen}>
+      <div class="chat-workspace" class:drawer-open={helpOpen || secretsOpen || accountsOpen}>
         <section class="conversation" class:empty-conversation={turns.length === 0} aria-label={teamName}>
         <div class="turns" bind:this={turnsViewport} aria-live="polite">
           {#each turns as turn}
@@ -809,15 +809,15 @@
               <div class="composer-actions">
               {#if busy}<button class="stop" type="button" onclick={stop} disabled={stopping}>{copy.stop}</button>{/if}
               <button
-                bind:this={connectionsButton}
-                class="connections"
+                bind:this={accountsButton}
+                class="accounts"
                 type="button"
-                onclick={toggleConnections}
-                disabled={$teamContext.installedAssistants.length === 0 && !connectionChallenge}
-                aria-label={connectionsCopy.trigger}
-                title={connectionsCopy.trigger}
-                aria-expanded={connectionsOpen}
-                aria-controls="assistant-connections-drawer"
+                onclick={toggleAccounts}
+                disabled={$teamContext.installedAssistants.length === 0 && !accountChallenge}
+                aria-label={accountsCopy.trigger}
+                title={accountsCopy.trigger}
+                aria-expanded={accountsOpen}
+                aria-controls="assistant-accounts-drawer"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M9.2 14.8 14.8 9.2M7.1 17H5.5a3.5 3.5 0 0 1 0-7h3M16.9 7h1.6a3.5 3.5 0 1 1 0 7h-3"></path>
@@ -851,7 +851,7 @@
                 onclick={() => {
                   const next = !helpOpen;
                   secretsOpen = false;
-                  connectionsOpen = false;
+                  accountsOpen = false;
                   helpOpen = next;
                 }}
                 disabled={helpAssistants.length === 0}
@@ -886,15 +886,15 @@
           onrotate={openRotation}
           onrevoke={revokeApprovals}
         />
-        <AssistantConnectionsDrawer
-          open={connectionsOpen}
-          {connections}
-          synced={connectionsReady}
-          pending={connectionChallenge}
-          working={connectionWorking}
-          onclose={closeConnections}
-          onconnect={authorizeConnection}
-          ondisconnect={disconnectConnection}
+        <AssistantAccountsDrawer
+          open={accountsOpen}
+          {accounts}
+          synced={accountsReady}
+          pending={accountChallenge}
+          working={accountWorking}
+          onclose={closeAccounts}
+          onconnect={authorizeAccount}
+          ondisconnect={disconnectAccount}
         />
         <AssistantSecretsDialog
           open={secretsDialogOpen}
@@ -908,11 +908,11 @@
           oncancel={cancelApproval}
           onapprove={submitApproval}
         />
-        <AssistantConnectionsDialog
-          open={connectionsDialogOpen}
-          challenge={connectionChallenge}
-          onclose={closeConnectionsDialog}
-          onauthorize={authorizeConnection}
+        <AssistantAccountsDialog
+          open={accountsDialogOpen}
+          challenge={accountChallenge}
+          onclose={closeAccountsDialog}
+          onauthorize={authorizeAccount}
         />
         <AssistantSecretRotationDialog
           open={rotationOpen}
@@ -1176,21 +1176,21 @@
 
   button.help,
   button.secrets,
-  button.connections {
+  button.accounts {
     width: 3.2rem;
     padding: 0;
     font-size: 0.9rem;
   }
 
   button.secrets,
-  button.connections {
+  button.accounts {
     position: relative;
     display: grid;
     place-items: center;
   }
 
   button.secrets svg,
-  button.connections svg {
+  button.accounts svg {
     width: 1rem;
     fill: none;
     stroke: currentColor;

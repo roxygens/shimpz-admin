@@ -27,7 +27,7 @@ _ERROR_CODE_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _TURN_RESPONSE_FIELDS = frozenset({"team_id", "team_name", "reply", "trace_id"})
 _STOP_RESPONSE_FIELDS = frozenset({"team_id", "requested", "accepted", "confirmed", "forced_restart", "trace_id"})
 _CHALLENGE_RESPONSE_FIELDS = frozenset({"team_id", "status", "turn_id", "challenge_id", "requirements", "trace_id"})
-_CONNECTION_CHALLENGE_RESPONSE_FIELDS = frozenset(
+_ACCOUNT_CHALLENGE_RESPONSE_FIELDS = frozenset(
     {"team_id", "status", "turn_id", "challenge_id", "expires_in", "requirements", "trace_id"}
 )
 _INVENTORY_RESPONSE_FIELDS = frozenset({"team_id", "assistants", "trace_id"})
@@ -38,10 +38,10 @@ MAX_SECRET_LABEL_CHARS = 80
 MAX_SECRET_SUMMARY_CHARS = 160
 MAX_INSTALLED_ASSISTANTS = 128
 MAX_APPROVAL_REQUIREMENTS = 64
-MAX_CONNECTION_REQUIREMENTS = 64
-MAX_CONNECTION_SCOPES = 32
-MAX_CONNECTION_POWERS = 128
-MAX_CONNECTION_SCOPE_CHARS = 128
+MAX_ACCOUNT_REQUIREMENTS = 64
+MAX_ACCOUNT_SCOPES = 32
+MAX_ACCOUNT_POWERS = 128
+MAX_ACCOUNT_SCOPE_CHARS = 128
 MAX_APPROVAL_INPUT_BYTES = 32 * 1024
 MAX_APPROVAL_INPUT_TOTAL_BYTES = 128 * 1024
 MAX_APPROVAL_JSON_DEPTH = 16
@@ -304,17 +304,17 @@ def _project_approval_challenge(response: teams.DriverResponse, team_id: str) ->
     )
 
 
-def _project_connection_challenge(response: teams.DriverResponse, team_id: str) -> teams.DriverResponse:
+def _project_account_challenge(response: teams.DriverResponse, team_id: str) -> teams.DriverResponse:
     """Project an OAuth consent gate without exposing any authorization material."""
     try:
-        if set(response.body) != _CONNECTION_CHALLENGE_RESPONSE_FIELDS:
-            raise ValueError("invalid connection envelope")
+        if set(response.body) != _ACCOUNT_CHALLENGE_RESPONSE_FIELDS:
+            raise ValueError("invalid account envelope")
         if (
             response.body["team_id"] != team_id
-            or response.body["status"] != "connections-required"
+            or response.body["status"] != "accounts-required"
             or not _valid_trace_id(response.body["trace_id"])
         ):
-            raise ValueError("invalid connection identity")
+            raise ValueError("invalid account identity")
         challenge_id = response.body["challenge_id"]
         turn_id = response.body["turn_id"]
         expires_in = response.body["expires_in"]
@@ -328,52 +328,52 @@ def _project_connection_challenge(response: teams.DriverResponse, team_id: str) 
             or isinstance(expires_in, bool)
             or not 1 <= expires_in <= 900
             or not isinstance(raw_requirements, list)
-            or not 1 <= len(raw_requirements) <= MAX_CONNECTION_REQUIREMENTS
+            or not 1 <= len(raw_requirements) <= MAX_ACCOUNT_REQUIREMENTS
         ):
-            raise ValueError("invalid connection metadata")
+            raise ValueError("invalid account metadata")
 
         requirements: list[dict[str, object]] = []
-        seen_connections: set[tuple[str, str]] = set()
+        seen_accounts: set[tuple[str, str]] = set()
         for raw in raw_requirements:
             if not isinstance(raw, dict) or set(raw) != {
                 "assistant_id",
                 "assistant_name",
-                "connection_id",
+                "account_id",
                 "provider",
                 "name",
                 "summary",
                 "scopes",
                 "powers",
             }:
-                raise ValueError("invalid connection requirement")
+                raise ValueError("invalid account requirement")
             assistant_id = teams.canonical_assistant_id(raw["assistant_id"])
-            connection_id = teams.canonical_assistant_id(raw["connection_id"])
-            identity = (assistant_id, connection_id)
-            if identity in seen_connections:
-                raise ValueError("duplicate connection")
-            seen_connections.add(identity)
+            account_id = teams.canonical_assistant_id(raw["account_id"])
+            identity = (assistant_id, account_id)
+            if identity in seen_accounts:
+                raise ValueError("duplicate account")
+            seen_accounts.add(identity)
 
             raw_scopes = raw["scopes"]
             raw_powers = raw["powers"]
             if (
                 not isinstance(raw_scopes, list)
-                or not 1 <= len(raw_scopes) <= MAX_CONNECTION_SCOPES
+                or not 1 <= len(raw_scopes) <= MAX_ACCOUNT_SCOPES
                 or not isinstance(raw_powers, list)
-                or not 1 <= len(raw_powers) <= MAX_CONNECTION_POWERS
+                or not 1 <= len(raw_powers) <= MAX_ACCOUNT_POWERS
             ):
-                raise ValueError("invalid connection capabilities")
-            scopes = [_clean_public_text(scope, MAX_CONNECTION_SCOPE_CHARS) for scope in raw_scopes]
+                raise ValueError("invalid account capabilities")
+            scopes = [_clean_public_text(scope, MAX_ACCOUNT_SCOPE_CHARS) for scope in raw_scopes]
             if len(set(scopes)) != len(scopes):
-                raise ValueError("duplicate connection scope")
+                raise ValueError("duplicate account scope")
 
             powers: list[dict[str, str]] = []
             seen_powers: set[str] = set()
             for raw_power in raw_powers:
                 if not isinstance(raw_power, dict) or set(raw_power) != {"id", "name", "summary"}:
-                    raise ValueError("invalid connection Power")
+                    raise ValueError("invalid account Power")
                 power_id = teams.canonical_assistant_id(raw_power["id"])
                 if power_id in seen_powers:
-                    raise ValueError("duplicate connection Power")
+                    raise ValueError("duplicate account Power")
                 seen_powers.add(power_id)
                 powers.append(
                     {
@@ -386,7 +386,7 @@ def _project_connection_challenge(response: teams.DriverResponse, team_id: str) 
                 {
                     "assistant_id": assistant_id,
                     "assistant_name": _clean_public_text(raw["assistant_name"], MAX_SECRET_LABEL_CHARS),
-                    "connection_id": connection_id,
+                    "account_id": account_id,
                     "provider": teams.canonical_assistant_id(raw["provider"]),
                     "name": _clean_public_text(raw["name"], MAX_SECRET_LABEL_CHARS),
                     "summary": _clean_public_text(raw["summary"], MAX_SECRET_SUMMARY_CHARS),
@@ -395,12 +395,12 @@ def _project_connection_challenge(response: teams.DriverResponse, team_id: str) 
                 }
             )
     except KeyError, TypeError, ValueError, teams.TeamRequestError:
-        return teams.DriverResponse(HTTPStatus.BAD_GATEWAY, {"code": "connection-challenge-response-invalid"})
+        return teams.DriverResponse(HTTPStatus.BAD_GATEWAY, {"code": "account-challenge-response-invalid"})
     return teams.DriverResponse(
         response.status,
         {
             "team_id": team_id,
-            "status": "connections-required",
+            "status": "accounts-required",
             "turn_id": turn_id,
             "challenge_id": challenge_id,
             "expires_in": expires_in,
@@ -411,8 +411,8 @@ def _project_connection_challenge(response: teams.DriverResponse, team_id: str) 
 
 def _project_pending_challenge(response: teams.DriverResponse, team_id: str) -> teams.DriverResponse:
     status = response.body.get("status")
-    if status == "connections-required":
-        return _project_connection_challenge(response, team_id)
+    if status == "accounts-required":
+        return _project_account_challenge(response, team_id)
     if status == "secrets-required":
         return _project_challenge(response, team_id)
     if status == "approval-required":
@@ -568,9 +568,9 @@ def pending_secrets(team_id: object) -> teams.DriverResponse:
     return _project_challenge(response, canonical_id)
 
 
-def pending_connections(team_id: object) -> teams.DriverResponse:
+def pending_accounts(team_id: object) -> teams.DriverResponse:
     canonical_id = teams.canonical_team_id(team_id)
-    response = teams.pending_chat_connections(canonical_id)
+    response = teams.pending_chat_accounts(canonical_id)
     if response.status in _MISSING_RUNTIME_STATUSES:
         return _unavailable()
     if not 200 <= response.status < 300:
@@ -582,18 +582,18 @@ def pending_connections(team_id: object) -> teams.DriverResponse:
             and _valid_trace_id(response.body.get("trace_id"))
         ):
             return teams.DriverResponse(response.status, {"team_id": canonical_id, "status": "none"})
-        return teams.DriverResponse(HTTPStatus.BAD_GATEWAY, {"code": "connection-challenge-response-invalid"})
-    return _project_connection_challenge(response, canonical_id)
+        return teams.DriverResponse(HTTPStatus.BAD_GATEWAY, {"code": "account-challenge-response-invalid"})
+    return _project_account_challenge(response, canonical_id)
 
 
-def resume_connections(team_id: object, challenge_id: object) -> teams.DriverResponse:
+def resume_accounts(team_id: object, challenge_id: object) -> teams.DriverResponse:
     canonical_id = teams.canonical_team_id(team_id)
-    body = teams.canonical_connection_resume({"challenge_id": challenge_id})
+    body = teams.canonical_account_resume({"challenge_id": challenge_id})
     credential = _model_credential(canonical_id)
     if isinstance(credential, teams.DriverResponse):
         return credential
     provider, api_key = credential
-    response = teams.resume_chat_connections(canonical_id, body, provider=provider, api_key=api_key)
+    response = teams.resume_chat_accounts(canonical_id, body, provider=provider, api_key=api_key)
     if response.status in _MISSING_RUNTIME_STATUSES:
         return _unavailable()
     if response.status == HTTPStatus.PRECONDITION_REQUIRED:

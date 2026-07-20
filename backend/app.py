@@ -578,15 +578,15 @@ async def team_assistant_approvals_revoke(team_id: str):
     )
 
 
-@app.get("/api/teams/{team_id}/assistant-connections")
-def team_assistant_connections(team_id: str):
-    response = _team_driver_response(lambda: teams.list_assistant_connections(team_id))
+@app.get("/api/teams/{team_id}/assistant-accounts")
+def team_assistant_accounts(team_id: str):
+    response = _team_driver_response(lambda: teams.list_assistant_accounts(team_id))
     response.headers["Cache-Control"] = "no-store"
     return response
 
 
-@app.post("/api/teams/{team_id}/assistant-connections/challenges/{challenge_id}/authorize")
-async def team_assistant_connection_authorize(team_id: str, challenge_id: str, request: Request):
+@app.post("/api/teams/{team_id}/assistant-accounts/challenges/{challenge_id}/authorize")
+async def team_assistant_account_authorize(team_id: str, challenge_id: str, request: Request):
     payload = await _bounded_json_object(request)
     if payload:
         raise HTTPException(status_code=400, detail="request body must be an empty JSON object")
@@ -612,14 +612,14 @@ async def team_assistant_connection_authorize(team_id: str, challenge_id: str, r
     )
 
 
-@app.delete("/api/teams/{team_id}/assistant-connections/{assistant_id}/{connection_id}")
-async def team_assistant_connection_disconnect(team_id: str, assistant_id: str, connection_id: str):
+@app.delete("/api/teams/{team_id}/assistant-accounts/{assistant_id}/{account_id}")
+async def team_assistant_account_disconnect(team_id: str, assistant_id: str, account_id: str):
     try:
         response = await asyncio.to_thread(
-            teams.disconnect_assistant_connection,
+            teams.disconnect_assistant_account,
             team_id,
             assistant_id,
-            connection_id,
+            account_id,
         )
     except teams.TeamRequestError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
@@ -635,7 +635,7 @@ async def oauth_x_start(request: Request, handoff: str = ""):
     try:
         pending = OAUTH_HANDOFFS.consume(handoff)
         result = await asyncio.to_thread(
-            teams.start_assistant_connection_authorization,
+            teams.start_assistant_account_authorization,
             pending.team_id,
             pending.challenge_id,
             pending.session_binding,

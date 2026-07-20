@@ -171,18 +171,18 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
 
     def test_accepts_only_an_empty_no_content_response(self):
         _DriverHandler.response_by_route = {
-            ("DELETE", "/v1/teams/team_1/assistant-connections/social-publisher/x-account"): (204, b""),
+            ("DELETE", "/v1/teams/team_1/assistant-accounts/social-publisher/x-account"): (204, b""),
         }
 
         response = teams._call(
             "DELETE",
-            "/v1/teams/team_1/assistant-connections/social-publisher/x-account",
+            "/v1/teams/team_1/assistant-accounts/social-publisher/x-account",
         )
 
         self.assertEqual(response, teams.DriverResponse(204, {}))
 
-    def test_projects_only_bounded_connection_status_metadata(self):
-        connection = {
+    def test_projects_only_bounded_account_status_metadata(self):
+        account = {
             "assistant_id": "shimpz-assistant",
             "assistant_name": "Shimpz Assistant",
             "id": "x-account",
@@ -195,24 +195,24 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
             "expires_at": "2026-07-20T12:00:00Z",
         }
         _DriverHandler.response_body = json.dumps(
-            {"team_id": "team_1", "connections": [connection]},
+            {"team_id": "team_1", "accounts": [account]},
             separators=(",", ":"),
         ).encode()
 
-        response = teams.list_assistant_connections("team_1")
+        response = teams.list_assistant_accounts("team_1")
 
-        self.assertEqual(response, teams.DriverResponse(200, {"connections": [connection]}))
-        self.assertEqual(_DriverHandler.requests[-1]["path"], "/v1/teams/team_1/assistant-connections")
+        self.assertEqual(response, teams.DriverResponse(200, {"accounts": [account]}))
+        self.assertEqual(_DriverHandler.requests[-1]["path"], "/v1/teams/team_1/assistant-accounts")
         self.assertNotRegex(json.dumps(response.body), r"token|code|verifier|client_secret")
 
         _DriverHandler.response_body = json.dumps(
-            {"team_id": "team_1", "connections": [{**connection, "access_token": "must-not-cross"}]},
+            {"team_id": "team_1", "accounts": [{**account, "access_token": "must-not-cross"}]},
             separators=(",", ":"),
         ).encode()
-        invalid = teams.list_assistant_connections("team_1")
+        invalid = teams.list_assistant_accounts("team_1")
         self.assertEqual(
             invalid,
-            teams.DriverResponse(502, {"detail": "Assistant connection inventory is invalid."}),
+            teams.DriverResponse(502, {"detail": "Assistant account inventory is invalid."}),
         )
 
     @staticmethod
@@ -235,7 +235,7 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
             {"authorization_url": authorization_url}, separators=(",", ":")
         ).encode()
 
-        response = teams.start_assistant_connection_authorization(
+        response = teams.start_assistant_account_authorization(
             "team_1",
             "c" * 32,
             "d" * 43,
@@ -245,7 +245,7 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
         request = _DriverHandler.requests[-1]
         self.assertEqual(
             request["path"],
-            "/v1/teams/team_1/assistant-connections/challenges/" + "c" * 32 + "/authorize",
+            "/v1/teams/team_1/assistant-accounts/challenges/" + "c" * 32 + "/authorize",
         )
         self.assertEqual(json.loads(request["body"]), {"session_binding": "d" * 43})
         self.assertNotRegex(request["body"].decode(), r"token|code|verifier|client")
@@ -261,7 +261,7 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
             _DriverHandler.response_body = json.dumps(
                 {"authorization_url": invalid_url}, separators=(",", ":")
             ).encode()
-            invalid = teams.start_assistant_connection_authorization("team_1", "c" * 32, "d" * 43)
+            invalid = teams.start_assistant_account_authorization("team_1", "c" * 32, "d" * 43)
             self.assertEqual(
                 invalid,
                 teams.DriverResponse(502, {"detail": "OAuth authorization response is invalid."}),
@@ -271,18 +271,18 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
         _DriverHandler.response_by_route = {
             (
                 "DELETE",
-                "/v1/teams/team_1/assistant-connections/shimpz-assistant/x-account",
+                "/v1/teams/team_1/assistant-accounts/shimpz-assistant/x-account",
             ): (204, b""),
             (
                 "POST",
                 "/v1/oauth/x/callback",
             ): (
                 200,
-                b'{"connected":true,"team_id":"team_1","assistant_id":"shimpz-assistant","connection_id":"x-account"}',
+                b'{"connected":true,"team_id":"team_1","assistant_id":"shimpz-assistant","account_id":"x-account"}',
             ),
         }
 
-        disconnected = teams.disconnect_assistant_connection("team_1", "shimpz-assistant", "x-account")
+        disconnected = teams.disconnect_assistant_account("team_1", "shimpz-assistant", "x-account")
         completed = teams.complete_x_oauth_callback(
             state="a" * 43,
             code="authorization-code-value",
@@ -298,7 +298,7 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
                     "connected": True,
                     "team_id": "team_1",
                     "assistant_id": "shimpz-assistant",
-                    "connection_id": "x-account",
+                    "account_id": "x-account",
                 },
             ),
         )
