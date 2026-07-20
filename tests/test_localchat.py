@@ -56,6 +56,22 @@ def approval_requirements() -> list[dict[str, object]]:
     ]
 
 
+def connection_requirement() -> dict[str, object]:
+    return {
+        "assistant_id": "shimpz-assistant",
+        "assistant_name": "Shimpz Assistant",
+        "connection_id": "x-account",
+        "provider": "x",
+        "name": "X account",
+        "summary": "Lets approved Powers access the connected X account.",
+        "scopes": ["tweet.read", "tweet.write", "users.read", "offline.access"],
+        "powers": [
+            {"id": "identity-me", "name": "Read profile", "summary": "Read the connected X profile."},
+            {"id": "create-post", "name": "Create post", "summary": "Publish a post on X."},
+        ],
+    }
+
+
 class _ControllerHandler(BaseHTTPRequestHandler):
     request: ClassVar[dict[str, object]] = {}
 
@@ -171,6 +187,93 @@ class PrivateChatTransportTests(unittest.TestCase):
 
 
 class LocalChatOrchestrationTests(unittest.TestCase):
+    def test_connection_challenge_projects_only_public_consent_metadata(self) -> None:
+        body = {
+            "team_id": "team_1",
+            "status": "connections-required",
+            "turn_id": CHALLENGE_ID,
+            "challenge_id": CHALLENGE_ID,
+            "expires_in": 300,
+            "requirements": [connection_requirement()],
+            "trace_id": TRACE_ID,
+        }
+
+        response = localchat._project_connection_challenge(teams.DriverResponse(428, body), "team_1")
+
+        self.assertEqual(
+            response,
+            teams.DriverResponse(
+                428,
+                {key: value for key, value in body.items() if key != "trace_id"},
+            ),
+        )
+        self.assertNotIn("token", json.dumps(response.body).lower())
+        self.assertNotIn("client_secret", json.dumps(response.body).lower())
+
+    def test_connection_challenge_fails_closed_on_ambiguous_or_private_data(self) -> None:
+        valid = {
+            "team_id": "team_1",
+            "status": "connections-required",
+            "turn_id": CHALLENGE_ID,
+            "challenge_id": CHALLENGE_ID,
+            "expires_in": 300,
+            "requirements": [connection_requirement()],
+            "trace_id": TRACE_ID,
+        }
+        requirement = connection_requirement()
+        invalid = (
+            {**valid, "team_id": "team_2"},
+            {**valid, "access_token": "must-not-cross"},
+            {**valid, "authorization_code": "must-not-cross"},
+            {**valid, "code_verifier": "must-not-cross"},
+            {**valid, "expires_in": True},
+            {**valid, "expires_in": 0},
+            {**valid, "requirements": [requirement, requirement]},
+            {**valid, "requirements": [{**requirement, "scopes": ["tweet.read", "tweet.read"]}]},
+            {
+                **valid,
+                "requirements": [
+                    {**requirement, "powers": [requirement["powers"][0], requirement["powers"][0]]}
+                ],
+            },
+            {**valid, "requirements": [{**requirement, "client_secret": "must-not-cross"}]},
+        )
+        for body in invalid:
+            with self.subTest(body=body):
+                response = localchat._project_connection_challenge(teams.DriverResponse(428, body), "team_1")
+            self.assertEqual(
+                response,
+                teams.DriverResponse(502, {"code": "connection-challenge-response-invalid"}),
+            )
+
+    def test_turn_preserves_connection_before_later_gates(self) -> None:
+        inference = teams.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})
+        controller = teams.DriverResponse(
+            428,
+            {
+                "team_id": "team_1",
+                "status": "connections-required",
+                "turn_id": CHALLENGE_ID,
+                "challenge_id": CHALLENGE_ID,
+                "expires_in": 300,
+                "requirements": [connection_requirement()],
+                "trace_id": TRACE_ID,
+            },
+        )
+        with (
+            mock.patch.object(teams, "get_inference", return_value=inference),
+            mock.patch.object(modelproviders, "resolve_api_key", return_value="sk-test-0123456789"),
+            mock.patch.object(teams, "chat", return_value=controller),
+        ):
+            response = localchat.turn(
+                "team_1",
+                {"message": "Post an update", "files": [], "assistant_ids": ["shimpz-assistant"]},
+            )
+
+        self.assertEqual(response.status, 428)
+        self.assertEqual(response.body["status"], "connections-required")
+        self.assertEqual(response.body["requirements"], [connection_requirement()])
+
     def test_secret_replacement_is_exact_and_projects_only_masks(self) -> None:
         payload = {
             "assistant_id": "shimpz-assistant",
