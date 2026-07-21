@@ -732,6 +732,22 @@ test('composer context uses separate accessible dialogs instead of selects', () 
   assert.doesNotMatch(contextControlsSource, /\bconfirm\s*\(/);
 });
 
+test('composer context requires the first Team before a clean install can continue', () => {
+  assert.match(
+    contextControlsSource,
+    /requiresTeam = \$derived\(\s*\$teamContext\.phase === 'ready' && \$teamContext\.teams\.length === 0/,
+  );
+  assert.match(
+    contextControlsSource,
+    /\$effect\(\(\) => \{\s*if \(!requiresTeam \|\| createDialog\?\.open\) return;[\s\S]*open\(createDialog\)/,
+  );
+  assert.match(contextControlsSource, /if \(!creating && !requiresTeam\) close\(createDialog, teamTrigger\)/);
+  assert.match(
+    contextControlsSource,
+    /\{#if !requiresTeam\}[\s\S]*onclick=\{closeCreate\}[\s\S]*\{copy\.cancel\}[\s\S]*\{\/if\}/,
+  );
+});
+
 test('composer context provides model buttons and complete Assistant scope controls', () => {
   assert.match(contextControlsSource, /selectTeamBrain\(fetch, teamId, brain\.provider, brain\.model\)/);
   assert.match(contextControlsSource, /brain\.provider === \$modelContext\.provider && brain\.model === \$modelContext\.model/);

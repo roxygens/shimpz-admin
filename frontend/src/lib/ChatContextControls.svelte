@@ -140,6 +140,16 @@
     }),
   );
   let controlsDisabled = $derived(disabled || $teamContext.phase === 'loading');
+  let requiresTeam = $derived(
+    $teamContext.phase === 'ready' && $teamContext.teams.length === 0,
+  );
+
+  $effect(() => {
+    if (!requiresTeam || createDialog?.open) return;
+    queueMicrotask(() => {
+      if (requiresTeam && !createDialog?.open) open(createDialog);
+    });
+  });
 
   function format(template, values) {
     return Object.entries(values).reduce(
@@ -181,7 +191,7 @@
   }
 
   function closeCreate() {
-    if (!creating) close(createDialog, teamTrigger);
+    if (!creating && !requiresTeam) close(createDialog, teamTrigger);
   }
 
   function cancelCreate(event) {
@@ -534,7 +544,9 @@
     </label>
     {#if dialogError}<p class="dialog-error" role="alert">{dialogError}</p>{/if}
     <footer>
-      <button class="secondary" type="button" onclick={closeCreate} disabled={creating}>{copy.cancel}</button>
+      {#if !requiresTeam}
+        <button class="secondary" type="button" onclick={closeCreate} disabled={creating}>{copy.cancel}</button>
+      {/if}
       <button class="primary" type="submit" disabled={creating || !teamName.trim()}>{creating ? copy.creating : copy.create}</button>
     </footer>
   </form>
