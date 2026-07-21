@@ -8,7 +8,10 @@
 </script>
 
 <a class:hero={variant === 'hero'} class="brand-lockup" {href} aria-label={ariaLabel}>
-  <img src="/brand/shimpz-cyberchimp.png" alt="" aria-hidden="true" />
+  <span class="brand-symbol" aria-hidden="true">
+    <img src="/brand/shimpz-thinking.svg" alt="" />
+    <span class="reflection"></span>
+  </span>
   <span class="brand-type">
     <span class="wordmark">Shimpz</span>
     {#if product}<span class="product">{product}</span>{/if}
@@ -25,12 +28,37 @@
     text-decoration: none;
   }
 
-  img {
+  .brand-symbol {
+    position: relative;
     width: 2.75rem;
     height: 2.75rem;
     flex: none;
+    overflow: hidden;
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
     mix-blend-mode: screen;
     object-fit: contain;
+  }
+
+  .reflection {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.78) 50%, transparent 65%);
+    content: '';
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-135%);
+    -webkit-mask: url('/brand/shimpz-thinking.svg') center / contain no-repeat;
+    mask: url('/brand/shimpz-thinking.svg') center / contain no-repeat;
+  }
+
+  .brand-lockup:hover .reflection,
+  .brand-lockup:focus-visible .reflection {
+    animation: glass-reflection 0.8s ease-out;
   }
 
   .brand-type {
@@ -63,9 +91,16 @@
     pointer-events: none;
   }
 
-  .hero img {
+  .hero .brand-symbol {
     width: clamp(7rem, 18vw, 11rem);
     height: clamp(7rem, 18vw, 11rem);
+  }
+
+  @keyframes glass-reflection {
+    0% { opacity: 0; transform: translateX(-135%); }
+    22% { opacity: 0.72; }
+    78% { opacity: 0.5; }
+    100% { opacity: 0; transform: translateX(135%); }
   }
 
   .hero .brand-type {
@@ -98,6 +133,13 @@
 
     .hero .brand-type {
       align-items: center;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .brand-lockup:hover .reflection,
+    .brand-lockup:focus-visible .reflection {
+      animation: none;
     }
   }
 </style>

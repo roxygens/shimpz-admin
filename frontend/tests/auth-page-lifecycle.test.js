@@ -33,6 +33,10 @@ test('places the Admin brand, locale, and primary navigation in the Team rail', 
   assert.match(brand, /product = 'Admin'/);
   assert.match(brand, /ariaLabel = 'Shimpz Admin home'/);
   assert.doesNotMatch(brand, /Team Admin/);
+  assert.match(brand, /src="\/brand\/shimpz-thinking\.svg"/);
+  assert.doesNotMatch(brand, /shimpz-cyberchimp\.png/);
+  assert.match(brand, /mask: url\('\/brand\/shimpz-thinking\.svg'\) center \/ contain no-repeat/);
+  assert.match(brand, /@keyframes glass-reflection/);
   assert.doesNotMatch(shell, /id: 'integrations'/);
   assert.doesNotMatch(shell, /id: 'teams'|href: '\/teams\/'/);
   assert.doesNotMatch(shell, /Local Space|local-status/);
