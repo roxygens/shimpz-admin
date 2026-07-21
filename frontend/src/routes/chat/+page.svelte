@@ -1030,18 +1030,8 @@
     position: relative;
     min-width: 0;
     box-sizing: border-box;
-    padding: 0.3rem 1rem;
+    padding: 0.3rem 0;
     background: transparent;
-  }
-
-  article::before {
-    position: absolute;
-    top: 0.85rem;
-    width: 0.3rem;
-    height: 0.3rem;
-    border-radius: 50%;
-    content: '';
-    box-shadow: 0 0 0.4rem currentColor;
   }
 
   article.user {
@@ -1051,21 +1041,11 @@
     color: var(--accent);
   }
 
-  article.user::before {
-    inset-inline-end: 0;
-    background: var(--accent);
-  }
-
   article.assistant {
     align-self: stretch;
     width: 100%;
     max-width: none;
     color: var(--accent-alt);
-  }
-
-  article.assistant::before {
-    inset-inline-start: 0;
-    background: var(--accent-alt);
   }
 
   article p {

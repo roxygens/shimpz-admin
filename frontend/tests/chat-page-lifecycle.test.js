@@ -158,7 +158,7 @@ test('fills the main column while keeping turns scrollable and the composer visi
   assert.doesNotMatch(source, /class="heading"|max-height: 32rem/);
 });
 
-test('uses the full composer rail for Team replies while keeping user turns bounded', () => {
+test('uses the full composer rail for clean Team replies while keeping user turns bounded', () => {
   assert.match(
     source,
     /article\.assistant \{\s*align-self: stretch;\s*width: 100%;\s*max-width: none;/,
@@ -168,8 +168,8 @@ test('uses the full composer rail for Team replies while keeping user turns boun
     /article\.user \{\s*align-self: flex-end;\s*width: fit-content;\s*max-width: min\(80%, 46rem\);/,
   );
   assert.match(source, /article \{[\s\S]*?background: transparent;/);
-  assert.match(source, /article\.assistant::before \{[\s\S]*?background: var\(--accent-alt\);/);
-  assert.match(source, /article\.user::before \{[\s\S]*?background: var\(--accent\);/);
+  assert.doesNotMatch(source, /article(?:::\w+|\.[\w-]+::\w+)/);
+  assert.match(source, /article \{[\s\S]*?padding: 0\.3rem 0;/);
   assert.match(source, /@media \(max-width: 640px\) \{\s*article\.user \{ max-width: 92%; \}/);
   assert.doesNotMatch(source, /@media \(max-width: 640px\) \{\s*article \{ max-width:/);
 });
