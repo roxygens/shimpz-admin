@@ -117,7 +117,7 @@
                   </div>
                   <p>{account.summary}</p>
                   <dl>
-                    <div><dt>{copy.provider}</dt><dd>{account.provider === 'x' ? 'X' : account.provider}</dd></div>
+                    <div><dt>{copy.provider}</dt><dd>{account.provider === 'cloudflare' ? 'Cloudflare' : account.provider}</dd></div>
                     <div><dt>{copy.account}</dt><dd>{accountLabel(account.account)}</dd></div>
                     <div><dt>{copy.scopes}</dt><dd>{account.scopes.join(' · ')}</dd></div>
                   </dl>

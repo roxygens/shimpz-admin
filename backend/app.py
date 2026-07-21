@@ -56,9 +56,9 @@ EXAMPLE_PATH = REPO / ".env.example"  # the scaffolding baseline (mounted :ro); 
 UI_DIR = Path(__file__).resolve().parent.parent / "frontend" / "build"
 COOKIE = "shimpz_admin"
 OAUTH_COOKIE = "shimpz_oauth_binding"
-OAUTH_COOKIE_PATH = "/api/oauth/x"
+OAUTH_COOKIE_PATH = "/api/oauth/cloudflare"
 OAUTH_COOKIE_TTL = 300
-LOCAL_OAUTH_START = "http://127.0.0.1:7777/api/oauth/x/start"
+LOCAL_OAUTH_START = "http://127.0.0.1:7777/api/oauth/cloudflare/start"
 MIN_PASSWORD_LEN = 12
 MAX_TEAM_DELETE_BODY_BYTES = 8 * 1024
 MAX_ADMIN_PASSWORD_CHARS = 4 * 1024
@@ -75,8 +75,8 @@ OPEN_API = frozenset(
         "/api/login",
         "/api/logout",
         "/api/admin/setup",
-        "/api/oauth/x/start",
-        "/api/oauth/x/callback",
+        "/api/oauth/cloudflare/start",
+        "/api/oauth/cloudflare/callback",
     }
 )
 
@@ -628,8 +628,8 @@ async def team_assistant_account_disconnect(team_id: str, assistant_id: str, acc
     return JSONResponse(response.body, status_code=response.status, headers={"Cache-Control": "no-store"})
 
 
-@app.get("/api/oauth/x/start")
-async def oauth_x_start(request: Request, handoff: str = ""):
+@app.get("/api/oauth/cloudflare/start")
+async def oauth_cloudflare_start(request: Request, handoff: str = ""):
     if request.url.hostname != "127.0.0.1" or request.url.port != 7777:
         return _oauth_chat_redirect()
     try:
@@ -663,8 +663,8 @@ async def oauth_x_start(request: Request, handoff: str = ""):
     return response
 
 
-@app.get("/api/oauth/x/callback")
-async def oauth_x_callback(request: Request):
+@app.get("/api/oauth/cloudflare/callback")
+async def oauth_cloudflare_callback(request: Request):
     response = _oauth_chat_redirect()
     if request.url.hostname != "127.0.0.1" or request.url.port != 7777:
         return response
@@ -675,7 +675,7 @@ async def oauth_x_callback(request: Request):
     binding = request.cookies.get(OAUTH_COOKIE, "")
     try:
         result = await asyncio.to_thread(
-            teams.complete_x_oauth_callback,
+            teams.complete_cloudflare_oauth_callback,
             state=query["state"],
             code=query["code"],
             session_binding=binding,

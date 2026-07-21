@@ -82,13 +82,13 @@ class OAuthRoutesTest(unittest.TestCase):
         self.session = "v1:9999999999:0123456789abcdef:" + "a" * 64
 
     @staticmethod
-    def _x_authorization_url() -> str:
-        return "https://x.com/i/oauth2/authorize?" + urlencode(
+    def _cloudflare_authorization_url() -> str:
+        return "https://dash.cloudflare.com/oauth2/auth?" + urlencode(
             {
                 "response_type": "code",
                 "client_id": "publicClientIdentifier123",
-                "redirect_uri": "http://127.0.0.1:7777/api/oauth/x/callback",
-                "scope": "tweet.read users.read",
+                "redirect_uri": "http://127.0.0.1:7777/api/oauth/cloudflare/callback",
+                "scope": "dns.read offline_access zone.read",
                 "state": "b" * 43,
                 "code_challenge": "c" * 43,
                 "code_challenge_method": "S256",
@@ -111,7 +111,7 @@ class OAuthRoutesTest(unittest.TestCase):
         parsed = urlsplit(body["authorization_url"])
         self.assertEqual(
             (parsed.scheme, parsed.hostname, parsed.port, parsed.path, parsed.fragment),
-            ("http", "127.0.0.1", 7777, "/api/oauth/x/start", ""),
+            ("http", "127.0.0.1", 7777, "/api/oauth/cloudflare/start", ""),
         )
         query = parse_qs(parsed.query, strict_parsing=True)
         self.assertEqual(set(query), {"handoff"})
@@ -124,28 +124,28 @@ class OAuthRoutesTest(unittest.TestCase):
             challenge_id="a" * 32,
             admin_session=self.session,
         )
-        request = _request("GET", f"http://127.0.0.1:7777/api/oauth/x/start?handoff={handoff}")
+        request = _request("GET", f"http://127.0.0.1:7777/api/oauth/cloudflare/start?handoff={handoff}")
         result = self.admin_app.teams.DriverResponse(
             200,
-            {"authorization_url": self._x_authorization_url()},
+            {"authorization_url": self._cloudflare_authorization_url()},
         )
         with mock.patch.object(
             self.admin_app.teams,
             "start_assistant_account_authorization",
             return_value=result,
         ) as start:
-            response = asyncio.run(self.admin_app.oauth_x_start(request, handoff))
-            replay = asyncio.run(self.admin_app.oauth_x_start(request, handoff))
+            response = asyncio.run(self.admin_app.oauth_cloudflare_start(request, handoff))
+            replay = asyncio.run(self.admin_app.oauth_cloudflare_start(request, handoff))
 
         self.assertEqual(response.status_code, 303)
-        self.assertEqual(response.headers["location"], self._x_authorization_url())
+        self.assertEqual(response.headers["location"], self._cloudflare_authorization_url())
         cookie = SimpleCookie()
         cookie.load(response.headers["set-cookie"])
         binding = cookie["shimpz_oauth_binding"]
         self.assertRegex(binding.value, r"^[A-Za-z0-9_-]{43}$")
         self.assertTrue(binding["httponly"])
         self.assertEqual(binding["samesite"].lower(), "lax")
-        self.assertEqual(binding["path"], "/api/oauth/x")
+        self.assertEqual(binding["path"], "/api/oauth/cloudflare")
         self.assertEqual(binding["max-age"], "300")
         self.assertFalse(binding["secure"])
         start.assert_called_once_with("team_1", "a" * 32, binding.value)
@@ -158,7 +158,7 @@ class OAuthRoutesTest(unittest.TestCase):
         code = "authorization-code-value"
         request = _request(
             "GET",
-            f"http://127.0.0.1:7777/api/oauth/x/callback?state={state}&code={code}",
+            f"http://127.0.0.1:7777/api/oauth/cloudflare/callback?state={state}&code={code}",
             cookie=f"shimpz_oauth_binding={binding}",
         )
         result = self.admin_app.teams.DriverResponse(
@@ -172,10 +172,10 @@ class OAuthRoutesTest(unittest.TestCase):
         )
         with mock.patch.object(
             self.admin_app.teams,
-            "complete_x_oauth_callback",
+            "complete_cloudflare_oauth_callback",
             return_value=result,
         ) as complete:
-            response = asyncio.run(self.admin_app.oauth_x_callback(request))
+            response = asyncio.run(self.admin_app.oauth_cloudflare_callback(request))
 
         complete.assert_called_once_with(state=state, code=code, session_binding=binding)
         self.assertEqual(response.status_code, 303)
@@ -190,7 +190,7 @@ class OAuthRoutesTest(unittest.TestCase):
         requests = (
             _request(
                 "GET",
-                "http://127.0.0.1:7777/api/oauth/x/callback?state="
+                "http://127.0.0.1:7777/api/oauth/cloudflare/callback?state="
                 + "a" * 43
                 + "&state="
                 + "b" * 43
@@ -199,19 +199,19 @@ class OAuthRoutesTest(unittest.TestCase):
             ),
             _request(
                 "GET",
-                "http://127.0.0.1:7777/api/oauth/x/callback?state="
+                "http://127.0.0.1:7777/api/oauth/cloudflare/callback?state="
                 + "a" * 43
                 + "&code=authorization-code-value&access_token=must-not-cross",
                 cookie="shimpz_oauth_binding=" + "c" * 43,
             ),
             _request(
                 "GET",
-                "http://localhost:7777/api/oauth/x/callback?state=" + "a" * 43 + "&code=authorization-code-value",
+                "http://localhost:7777/api/oauth/cloudflare/callback?state=" + "a" * 43 + "&code=authorization-code-value",
                 cookie="shimpz_oauth_binding=" + "c" * 43,
             ),
         )
-        with mock.patch.object(self.admin_app.teams, "complete_x_oauth_callback") as complete:
-            responses = [asyncio.run(self.admin_app.oauth_x_callback(request)) for request in requests]
+        with mock.patch.object(self.admin_app.teams, "complete_cloudflare_oauth_callback") as complete:
+            responses = [asyncio.run(self.admin_app.oauth_cloudflare_callback(request)) for request in requests]
         complete.assert_not_called()
         self.assertTrue(all(response.headers["location"] == "/chat" for response in responses))
 

@@ -57,7 +57,7 @@ _OAUTH_CODE_RE = re.compile(r"^[A-Za-z0-9._~-]{16,4096}$")
 _OAUTH_CLIENT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,256}$")
 _OAUTH_SCOPE_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$")
-_LOCAL_X_CALLBACK = "http://127.0.0.1:7777/api/oauth/x/callback"
+_LOCAL_CLOUDFLARE_CALLBACK = "http://127.0.0.1:7777/api/oauth/cloudflare/callback"
 
 
 class TeamRequestError(ValueError):
@@ -754,7 +754,7 @@ def list_assistant_accounts(team_id: object) -> DriverResponse:
     )
 
 
-def _trusted_x_authorization_url(value: object) -> str:
+def _trusted_cloudflare_authorization_url(value: object) -> str:
     if not isinstance(value, str) or not 1 <= len(value) <= 4096:
         raise ValueError("invalid OAuth authorization URL")
     try:
@@ -770,11 +770,11 @@ def _trusted_x_authorization_url(value: object) -> str:
         raise ValueError("invalid OAuth authorization URL") from exc
     if (
         parsed.scheme != "https"
-        or parsed.hostname != "x.com"
+        or parsed.hostname != "dash.cloudflare.com"
         or port is not None
         or parsed.username is not None
         or parsed.password is not None
-        or parsed.path != "/i/oauth2/authorize"
+        or parsed.path != "/oauth2/auth"
         or parsed.params
         or parsed.fragment
         or len(query) != 7
@@ -794,7 +794,7 @@ def _trusted_x_authorization_url(value: object) -> str:
         raise ValueError("invalid OAuth authorization URL")
     if (
         fields["response_type"] != "code"
-        or fields["redirect_uri"] != _LOCAL_X_CALLBACK
+        or fields["redirect_uri"] != _LOCAL_CLOUDFLARE_CALLBACK
         or fields["code_challenge_method"] != "S256"
         or _OAUTH_CLIENT_ID_RE.fullmatch(fields["client_id"]) is None
         or _OAUTH_BINDING_RE.fullmatch(fields["state"]) is None
@@ -824,7 +824,7 @@ def start_assistant_account_authorization(
     try:
         if set(response.body) != {"authorization_url"}:
             raise ValueError("invalid OAuth authorization response")
-        authorization_url = _trusted_x_authorization_url(response.body["authorization_url"])
+        authorization_url = _trusted_cloudflare_authorization_url(response.body["authorization_url"])
     except KeyError, TypeError, ValueError:
         log.warning("team-driver returned an invalid OAuth authorization response")
         return DriverResponse(502, {"detail": "OAuth authorization response is invalid."})
@@ -849,13 +849,13 @@ def disconnect_assistant_account(
     return response
 
 
-def complete_x_oauth_callback(*, state: object, code: object, session_binding: object) -> DriverResponse:
+def complete_cloudflare_oauth_callback(*, state: object, code: object, session_binding: object) -> DriverResponse:
     identifier = canonical_oauth_binding(state)
     authorization_code = canonical_oauth_code(code)
     binding = canonical_oauth_binding(session_binding)
     response = _call(
         "POST",
-        "/v1/oauth/x/callback",
+        "/v1/oauth/cloudflare/callback",
         {"state": identifier, "code": authorization_code, "session_binding": binding},
     )
     if not 200 <= response.status < 300:

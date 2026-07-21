@@ -439,15 +439,15 @@ function trustedAuthorizationUrl(value) {
   }
   const directProvider = (
     url.protocol === 'https:' &&
-    url.hostname === 'x.com' &&
+    url.hostname === 'dash.cloudflare.com' &&
     !url.port &&
-    url.pathname === '/i/oauth2/authorize'
+    url.pathname === '/oauth2/auth'
   );
   const localHandoff = (
     url.protocol === 'http:' &&
     url.hostname === '127.0.0.1' &&
     url.port === '7777' &&
-    url.pathname === '/api/oauth/x/start' &&
+    url.pathname === '/api/oauth/cloudflare/start' &&
     [...url.searchParams.keys()].length === 1 &&
     /^[0-9a-f]{64}$/.test(url.searchParams.get('handoff') ?? '')
   );

@@ -452,9 +452,9 @@ test('lists only bounded status metadata for Team-scoped Assistant accounts', as
   }
 });
 
-test('starts only a trusted X authorization and disconnects with an empty 204', async () => {
+test('starts only a trusted Cloudflare authorization and disconnects with an empty 204', async () => {
   const calls = [];
-  const authorizationUrl = 'https://x.com/i/oauth2/authorize?response_type=code&state=opaque';
+  const authorizationUrl = 'https://dash.cloudflare.com/oauth2/auth?response_type=code&state=opaque';
   assert.deepEqual(
     await authorizeAssistantAccount(async (url, options) => {
       calls.push({ url, options });
@@ -469,7 +469,7 @@ test('starts only a trusted X authorization and disconnects with an empty 204', 
   assert.equal(calls[0].options.method, 'POST');
   assert.equal(calls[0].options.body, '{}');
 
-  const handoffUrl = `http://127.0.0.1:7777/api/oauth/x/start?handoff=${'a'.repeat(64)}`;
+  const handoffUrl = `http://127.0.0.1:7777/api/oauth/cloudflare/start?handoff=${'a'.repeat(64)}`;
   assert.deepEqual(
     await authorizeAssistantAccount(
       async () => response(200, { authorization_url: handoffUrl }),
@@ -480,17 +480,17 @@ test('starts only a trusted X authorization and disconnects with an empty 204', 
   );
 
   for (const body of [
-    { authorization_url: 'http://x.com/i/oauth2/authorize' },
-    { authorization_url: 'https://evil.example/i/oauth2/authorize' },
-    { authorization_url: 'https://x.com.evil.example/i/oauth2/authorize' },
-    { authorization_url: 'https://x.com/settings' },
-    { authorization_url: 'https://user@x.com/i/oauth2/authorize' },
-    { authorization_url: 'https://x.com/i/oauth2/authorize#token=value' },
-    { authorization_url: `http://localhost:7777/api/oauth/x/start?handoff=${'a'.repeat(64)}` },
-    { authorization_url: `http://127.0.0.1:7777/api/oauth/x/start?handoff=${'a'.repeat(63)}` },
-    { authorization_url: `http://127.0.0.1:7777/api/oauth/x/start?handoff=${'a'.repeat(64)}&next=https://evil.example` },
-    { authorization_url: `http://user@127.0.0.1:7777/api/oauth/x/start?handoff=${'a'.repeat(64)}` },
-    { authorization_url: `http://127.0.0.1:7777/api/oauth/x/start?handoff=${'a'.repeat(64)}#token=value` },
+    { authorization_url: 'http://dash.cloudflare.com/oauth2/auth' },
+    { authorization_url: 'https://evil.example/oauth2/auth' },
+    { authorization_url: 'https://dash.cloudflare.com.evil.example/oauth2/auth' },
+    { authorization_url: 'https://dash.cloudflare.com/settings' },
+    { authorization_url: 'https://user@dash.cloudflare.com/oauth2/auth' },
+    { authorization_url: 'https://dash.cloudflare.com/oauth2/auth#token=value' },
+    { authorization_url: `http://localhost:7777/api/oauth/cloudflare/start?handoff=${'a'.repeat(64)}` },
+    { authorization_url: `http://127.0.0.1:7777/api/oauth/cloudflare/start?handoff=${'a'.repeat(63)}` },
+    { authorization_url: `http://127.0.0.1:7777/api/oauth/cloudflare/start?handoff=${'a'.repeat(64)}&next=https://evil.example` },
+    { authorization_url: `http://user@127.0.0.1:7777/api/oauth/cloudflare/start?handoff=${'a'.repeat(64)}` },
+    { authorization_url: `http://127.0.0.1:7777/api/oauth/cloudflare/start?handoff=${'a'.repeat(64)}#token=value` },
     { authorization_url: authorizationUrl, code_verifier: 'must-not-cross' },
   ]) {
     await assert.rejects(
