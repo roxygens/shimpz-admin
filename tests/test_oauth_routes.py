@@ -206,7 +206,9 @@ class OAuthRoutesTest(unittest.TestCase):
             ),
             _request(
                 "GET",
-                "http://localhost:7777/api/oauth/cloudflare/callback?state=" + "a" * 43 + "&code=authorization-code-value",
+                "http://localhost:7777/api/oauth/cloudflare/callback?state="
+                + "a" * 43
+                + "&code=authorization-code-value",
                 cookie="shimpz_oauth_binding=" + "c" * 43,
             ),
         )
