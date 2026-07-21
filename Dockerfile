@@ -9,6 +9,7 @@
 
 # ── stage 1: obtain the exact uv binary without retaining an installer toolchain ──────────────
 FROM ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 AS uv
+ARG SOURCE_DATE_EPOCH=0
 
 # ── stage 2: build the SvelteKit static UI ────────────────────────────────────────────────────
 FROM --platform=$BUILDPLATFORM node:24-bookworm@sha256:5711a0d445a1af54af9589066c646df387d1831a608226f4cd694fc59e745059 AS ui
@@ -28,6 +29,7 @@ RUN npm test && npm run build && \
 # ── stage 3: resolve target-platform Python dependencies ───────────────────────────────────────
 # This stage deliberately follows TARGETPLATFORM so native wheels match the final image.
 FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 AS dependencies
+ARG SOURCE_DATE_EPOCH=0
 COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
 RUN UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --no-install-project --no-dev --python 3.14 && \
