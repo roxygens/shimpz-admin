@@ -88,6 +88,8 @@ test('offers an immersive Team destination chooser above the Store', () => {
   assert.match(source, /<dialog[\s\S]*bind:this=\{createTeamDialog\}[\s\S]*<form class="destination-dialog-panel" onsubmit=\{submitDestinationTeam\}>/);
   assert.doesNotMatch(source, /<select/);
   assert.ok(source.indexOf('class="store-destination"') < source.indexOf('class="store-frame"'));
+  assert.doesNotMatch(source, /\.store-destination::before/);
+  assert.match(source, /\.store-destination \{[\s\S]*padding: 0\.25rem 0;/);
   for (const [locale, localeMessages] of Object.entries(messages)) {
     for (const key of ['destinationKicker', 'destinationLead']) {
       assert.equal(typeof localeMessages.store[key], 'string', `${locale}.store.${key}`);

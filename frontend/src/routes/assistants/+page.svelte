@@ -798,22 +798,10 @@
 
 <style>
   .store-destination {
-    position: relative;
     display: grid;
     gap: 0.35rem;
     margin: 0 0 1rem;
-    padding-block: 0.25rem;
-    padding-inline: 1rem 0;
-  }
-
-  .store-destination::before {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
-    width: 2px;
-    background: linear-gradient(var(--accent), var(--accent-alt));
-    box-shadow: 0 0 12px rgba(0, 240, 255, 0.28);
-    content: '';
+    padding: 0.25rem 0;
   }
 
   .store-destination p,
