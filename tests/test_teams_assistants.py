@@ -530,6 +530,7 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
                     teams.DriverResponse(502, {"detail": "team-driver unavailable"}),
                 )
 
+
 class TeamAssistantRouteTest(_LiveDriverCase):
     def test_exposes_only_session_gated_assistant_routes(self):
         document = self._run_asgi_probe("routes")
