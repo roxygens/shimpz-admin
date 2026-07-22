@@ -24,7 +24,7 @@ CATALOG = {
     "internal": {
         "public_name": "Datastores",
         "category": INFRA,
-        "blurb": "PostgreSQL + Redpanda — generated and managed for you.",
+        "blurb": "PostgreSQL — generated and managed for you.",
         "recreate_target": None,  # stateful: rotation is not a clean recreate
         "reconfigurable": False,
     },
