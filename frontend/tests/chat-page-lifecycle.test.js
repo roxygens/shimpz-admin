@@ -266,9 +266,10 @@ test('keeps Assistant Help at full viewport height across desktop and narrow lay
 
 test('renders only closed Svelte Help nodes without an HTML injection escape hatch', () => {
   assert.doesNotMatch(`${drawerSource}\n${markdownSource}\n${inlineSource}`, /\{@html/i);
-  for (const element of ['h1', 'h2', 'h3', 'p', 'ul', 'ol', 'pre', 'code', 'strong', 'em']) {
+  for (const element of ['h1', 'h2', 'h3', 'p', 'ul', 'ol', 'pre', 'code', 'strong', 'em', 'table', 'thead', 'tbody', 'th', 'td']) {
     assert.match(`${markdownSource}\n${inlineSource}`, new RegExp(`<${element}(?:>|\\s)`));
   }
+  assert.match(markdownSource, /\.table-scroll \{[^}]*overflow-x: auto;/);
   assert.match(inlineSource, /target="_blank" rel="noopener noreferrer"/);
   assert.doesNotMatch(inlineSource, /src=|style=|onerror=|onclick=/i);
 });

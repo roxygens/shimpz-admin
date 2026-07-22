@@ -1,6 +1,9 @@
 const HTTP_URL = /^https?:\/\//i;
 const LIST_ITEM = /^ {0,3}([-+*]|\d+[.)])\s+(.+)$/;
 const HEADING = /^(#{1,3})\s+(.+?)\s*$/;
+const TABLE_DIVIDER = /^:?-{3,}:?$/;
+const MAX_TABLE_COLUMNS = 32;
+const MAX_TABLE_ROWS = 256;
 
 function textToken(text) {
   return { type: 'text', text };
@@ -91,6 +94,75 @@ function startsBlock(line) {
   return line.startsWith('```') || HEADING.test(line) || LIST_ITEM.test(line);
 }
 
+function tableCells(line) {
+  const trimmed = line.trim();
+  if (!trimmed.includes('|')) return null;
+  const content = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed;
+  const bounded = content.endsWith('|') && !content.endsWith('\\|') ? content.slice(0, -1) : content;
+  const cells = [];
+  let cell = '';
+  let code = false;
+
+  for (let index = 0; index < bounded.length; index += 1) {
+    const character = bounded[index];
+    if (character === '\\' && index + 1 < bounded.length) {
+      cell += character + bounded[index + 1];
+      index += 1;
+    } else if (character === '`') {
+      code = !code;
+      cell += character;
+    } else if (character === '|' && !code) {
+      cells.push(cell.trim());
+      cell = '';
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function tableAlignment(cell) {
+  const value = cell.replaceAll(' ', '');
+  if (!TABLE_DIVIDER.test(value)) return '';
+  if (value.startsWith(':') && value.endsWith(':')) return 'center';
+  if (value.endsWith(':')) return 'right';
+  return 'left';
+}
+
+function parseTable(lines, index) {
+  if (index + 1 >= lines.length) return null;
+  const header = tableCells(lines[index]);
+  const divider = tableCells(lines[index + 1]);
+  if (
+    !header || !divider || header.length !== divider.length || header.length < 1
+    || header.length > MAX_TABLE_COLUMNS || header.every((cell) => !cell)
+  ) return null;
+  const align = divider.map(tableAlignment);
+  if (align.some((value) => !value)) return null;
+
+  const rows = [];
+  let cursor = index + 2;
+  while (cursor < lines.length && lines[cursor].trim() && rows.length < MAX_TABLE_ROWS) {
+    const cells = tableCells(lines[cursor]);
+    if (!cells || cells.length > header.length) break;
+    rows.push([
+      ...cells.map(parseHelpInline),
+      ...Array.from({ length: header.length - cells.length }, () => []),
+    ]);
+    cursor += 1;
+  }
+  return {
+    block: {
+      type: 'table',
+      align,
+      header: header.map(parseHelpInline),
+      rows,
+    },
+    next: cursor,
+  };
+}
+
 /**
  * Convert bounded Help Markdown into a closed AST. Raw HTML is always ordinary escaped text;
  * callers render only the node types returned here and never inject HTML.
@@ -116,6 +188,13 @@ export function parseHelpMarkdown(markdown) {
       }
       if (index < lines.length) index += 1;
       blocks.push({ type: 'code', text: content.join('\n') });
+      continue;
+    }
+
+    const table = parseTable(lines, index);
+    if (table) {
+      blocks.push(table.block);
+      index = table.next;
       continue;
     }
 
@@ -146,7 +225,10 @@ export function parseHelpMarkdown(markdown) {
 
     const paragraph = [line.trim()];
     index += 1;
-    while (index < lines.length && lines[index].trim() && !startsBlock(lines[index])) {
+    while (
+      index < lines.length && lines[index].trim() && !startsBlock(lines[index])
+      && !parseTable(lines, index)
+    ) {
       paragraph.push(lines[index].trim());
       index += 1;
     }

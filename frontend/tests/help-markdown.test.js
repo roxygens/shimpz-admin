@@ -56,3 +56,34 @@ test('does not expose any HTML node or attribute channel in its output model', (
   assert.match(encoded, /<svg onload=alert\(1\)>/);
   assert.match(encoded, /<script>alert\(1\)<\/script>/);
 });
+
+test('parses bounded GitHub-style tables with alignment and safe inline tokens', () => {
+  const blocks = parseHelpMarkdown(`Records
+
+| Type | Name | Value | Proxy |
+| :--- | --- | ---: | :---: |
+| CNAME | **docs.example.com** | \`target.example.net\` | Active |
+| TXT | example.com | escaped \\| value |
+
+Done.`);
+
+  assert.deepEqual(blocks.map((block) => block.type), ['paragraph', 'table', 'paragraph']);
+  const table = blocks[1];
+  assert.deepEqual(table.align, ['left', 'left', 'right', 'center']);
+  assert.equal(table.header.length, 4);
+  assert.equal(table.rows.length, 2);
+  assert.deepEqual(table.rows[0][1], [{ type: 'strong', text: 'docs.example.com' }]);
+  assert.deepEqual(table.rows[0][2], [{ type: 'code', text: 'target.example.net' }]);
+  assert.equal(table.rows[1][2][0].text, 'escaped | value');
+  assert.deepEqual(table.rows[1][3], []);
+});
+
+test('keeps malformed and oversized table candidates as ordinary text', () => {
+  const malformed = parseHelpMarkdown('| A | B |\n| -- | --- |\n| one | two |');
+  assert.deepEqual(malformed.map((block) => block.type), ['paragraph']);
+
+  const header = `| ${Array.from({ length: 33 }, (_, index) => `h${index}`).join(' | ')} |`;
+  const divider = `| ${Array.from({ length: 33 }, () => '---').join(' | ')} |`;
+  const oversized = parseHelpMarkdown(`${header}\n${divider}`);
+  assert.deepEqual(oversized.map((block) => block.type), ['paragraph']);
+});
