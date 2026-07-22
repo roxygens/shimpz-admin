@@ -1,6 +1,6 @@
 """Integration wiring metadata for each keyset group.
 
-One entry per `keyset` group (asserted complete by test-admin-catalog.py, so no field is ever
+One entry per `keyset` group (asserted complete by tests/test_catalog.py, so no field is ever
 orphaned from the configuration API). `recreate_target` names the STATELESS sidecar that must be
 recreated for a saved secret to take effect live (Phase C2) — `None` means "applies on next restart"
 (the brain, stateful datastores, and no-consumer groups). `container_env_for` maps the `.env` key
