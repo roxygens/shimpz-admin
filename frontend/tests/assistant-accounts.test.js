@@ -83,6 +83,10 @@ test('pauses chat for account challenges and leaves authorization to the control
   );
   assert.match(
     pageSource,
+    /accountChallenge = incoming;\s*accountsDialogOpen = true;\s*oauthFailedOnReturn = false;/,
+  );
+  assert.match(
+    pageSource,
     /authorizeAssistantAccount\(fetch, teamId, challengeId\)[\s\S]*stashOAuthChatTurns\(sessionStorage, teamId, turns\);[\s\S]*location\.assign\(authorization\.authorization_url\)/,
   );
   assert.doesNotMatch(pageSource, /window\.open\(authorization|target=['"]_blank/i);

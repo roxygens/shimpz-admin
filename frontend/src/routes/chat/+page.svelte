@@ -295,7 +295,7 @@
       throw new Error('unexpected Assistant account requirement');
     }
     accountChallenge = incoming;
-    accountsDialogOpen = !oauthFailedOnReturn;
+    accountsDialogOpen = true;
     oauthFailedOnReturn = false;
     helpOpen = false;
     secretsOpen = false;
