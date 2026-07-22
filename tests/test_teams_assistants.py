@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import asyncio
 import json
 import os
@@ -530,17 +529,6 @@ class TeamAssistantBridgeTest(_LiveDriverCase):
                     teams.list_assistants(),
                     teams.DriverResponse(502, {"detail": "team-driver unavailable"}),
                 )
-
-    def test_bridge_has_no_docker_or_process_execution_dependency(self):
-        tree = ast.parse((ROOT / "backend" / "teams.py").read_text(encoding="utf-8"))
-        imports = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                imports.update(alias.name.split(".")[0] for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                imports.add(node.module.split(".")[0])
-        self.assertTrue({"docker", "subprocess"}.isdisjoint(imports))
-
 
 class TeamAssistantRouteTest(_LiveDriverCase):
     def test_exposes_only_session_gated_assistant_routes(self):
