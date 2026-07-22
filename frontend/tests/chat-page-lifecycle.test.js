@@ -45,8 +45,9 @@ test('changes Team by closing stale transport and clearing route-scoped conversa
   );
   const activation = source.match(/function activateTeam\(nextTeamId\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
   for (const statement of [
-    'closeSocket();', 'socketTeamId = nextTeamId;', 'busy = false;', "draft = '';",
+    'closeSocket();', 'socketTeamId = nextTeamId;', "draft = '';",
     'turns = nextTeamId ? restoreOAuthChatTurns(sessionStorage, nextTeamId) : [];',
+    'busy = turns.length > 0;',
     'helpOpen = false;', 'secretsOpen = false;', 'accountsOpen = false;',
     'secretChallenge = undefined;', 'approvalChallenge = undefined;', 'accountChallenge = undefined;',
     'accounts = [];', 'secretInventory = [];', 'rememberedApprovals = [];', 'clearError();',
@@ -56,8 +57,17 @@ test('changes Team by closing stale transport and clearing route-scoped conversa
   assert.match(source, /current\?\.close\(1000, 'Team changed'\)/);
   assert.match(
     source,
-    /onMount\(\(\) => \{\s+mounted = true;\s+const initialTeamId = chatTeamId;\s+if \(initialTeamId !== socketTeamId\) activateTeam\(initialTeamId\);/,
+    /onMount\(\(\) => \{\s+mounted = true;\s+oauthFailedOnReturn = oauthReturnFailure\(location\.href\);\s+const initialTeamId = chatTeamId;\s+if \(initialTeamId !== socketTeamId\) activateTeam\(initialTeamId\);/,
   );
+});
+
+test('accepts exactly one terminal event after restoring an OAuth-paused turn', () => {
+  assert.match(
+    source,
+    /turns = nextTeamId \? restoreOAuthChatTurns\(sessionStorage, nextTeamId\) : \[\];\s+busy = turns\.length > 0;/,
+  );
+  assert.match(source, /if \(!busy && !stopping\) throw new Error\('unexpected terminal frame'\);/);
+  assert.match(source, /if \(oauthFailedOnReturn\) \{\s+busy = false;/);
 });
 
 test('keeps WebSocket and composer unavailable until the selected Team model is verified', () => {

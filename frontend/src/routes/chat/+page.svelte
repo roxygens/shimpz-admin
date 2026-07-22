@@ -442,10 +442,10 @@
     closeSocket();
     socketTeamId = nextTeamId;
     reconnectAttempt = 0;
-    busy = false;
     stopping = false;
     draft = '';
     turns = nextTeamId ? restoreOAuthChatTurns(sessionStorage, nextTeamId) : [];
+    busy = turns.length > 0;
     scrollRequest += 1;
     helpOpen = false;
     secretsOpen = false;
@@ -764,10 +764,11 @@
 
   onMount(() => {
     mounted = true;
+    oauthFailedOnReturn = oauthReturnFailure(location.href);
     const initialTeamId = chatTeamId;
     if (initialTeamId !== socketTeamId) activateTeam(initialTeamId);
-    oauthFailedOnReturn = oauthReturnFailure(location.href);
     if (oauthFailedOnReturn) {
+      busy = false;
       history.replaceState(history.state, '', '/chat');
       setError(accountsCopy.authorizationFailed);
     }
