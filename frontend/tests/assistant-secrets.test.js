@@ -91,7 +91,13 @@ test('syncs inventory, pauses for challenges, and submits only through WebSocket
     /const frame = createSecretSubmitFrame\(teamId, challengeId, values\);[\s\S]*socket\.send\(JSON\.stringify\(frame\)\);/,
   );
   assert.match(pageSource, /secretChallenge = undefined;\s*secretsDialogOpen = false;/);
-  assert.doesNotMatch(pageSource, /localStorage|sessionStorage|document\.cookie/);
+  assert.doesNotMatch(pageSource, /localStorage|document\.cookie/);
+  const submissionSource = pageSource.slice(
+    pageSource.indexOf('function submitSecrets'),
+    pageSource.indexOf('function submitApproval'),
+  );
+  assert.doesNotMatch(submissionSource, /localStorage|sessionStorage|document\.cookie/);
+  assert.match(pageSource, /stashOAuthChatTurns\(sessionStorage, teamId, turns\)/);
 });
 
 test('cancels the suspended Team turn when the secret dialog is dismissed', () => {

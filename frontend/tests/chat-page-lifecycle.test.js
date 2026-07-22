@@ -45,7 +45,8 @@ test('changes Team by closing stale transport and clearing route-scoped conversa
   );
   const activation = source.match(/function activateTeam\(nextTeamId\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
   for (const statement of [
-    'closeSocket();', 'socketTeamId = nextTeamId;', 'busy = false;', "draft = '';", 'turns = [];',
+    'closeSocket();', 'socketTeamId = nextTeamId;', 'busy = false;', "draft = '';",
+    'turns = nextTeamId ? restoreOAuthChatTurns(sessionStorage, nextTeamId) : [];',
     'helpOpen = false;', 'secretsOpen = false;', 'accountsOpen = false;',
     'secretChallenge = undefined;', 'approvalChallenge = undefined;', 'accountChallenge = undefined;',
     'accounts = [];', 'secretInventory = [];', 'rememberedApprovals = [];', 'clearError();',

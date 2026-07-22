@@ -83,7 +83,7 @@ test('pauses chat for account challenges and leaves authorization to the control
   );
   assert.match(
     pageSource,
-    /authorizeAssistantAccount\(fetch, teamId, challengeId\)[\s\S]*location\.assign\(authorization\.authorization_url\)/,
+    /authorizeAssistantAccount\(fetch, teamId, challengeId\)[\s\S]*stashOAuthChatTurns\(sessionStorage, teamId, turns\);[\s\S]*location\.assign\(authorization\.authorization_url\)/,
   );
   assert.doesNotMatch(pageSource, /window\.open\(authorization|target=['"]_blank/i);
   assert.match(pageSource, /disconnectAssistantAccount\(fetch, teamId, account\.assistant_id, account\.id\)/);

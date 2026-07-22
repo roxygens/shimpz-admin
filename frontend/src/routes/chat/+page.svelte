@@ -32,7 +32,9 @@
     parseChatEvent,
     oauthReturnFailure,
     replaceAssistantSecrets,
+    restoreOAuthChatTurns,
     revokeRememberedApprovals,
+    stashOAuthChatTurns,
   } from '$lib/localChat.js';
 
   const COPY = {
@@ -443,7 +445,7 @@
     busy = false;
     stopping = false;
     draft = '';
-    turns = [];
+    turns = nextTeamId ? restoreOAuthChatTurns(sessionStorage, nextTeamId) : [];
     scrollRequest += 1;
     helpOpen = false;
     secretsOpen = false;
@@ -530,6 +532,7 @@
       if (chatTeamId !== teamId || accountChallenge?.challenge_id !== challengeId) {
         throw new Error(accountsCopy.authorizationFailed);
       }
+      stashOAuthChatTurns(sessionStorage, teamId, turns);
       location.assign(authorization.authorization_url);
     } catch (reason) {
       if (chatTeamId === teamId) {

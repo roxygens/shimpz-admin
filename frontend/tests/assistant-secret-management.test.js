@@ -58,5 +58,11 @@ test('offers per-Assistant rotation and one Team-wide remembered approval reset'
 test('mounts rotation closed and never stores a submitted secret in page state', () => {
   assert.match(pageSource, /<AssistantSecretRotationDialog[\s\S]*onsubmit=\{rotateSecrets\}/);
   assert.match(pageSource, /secretInventory = inventory\.assistants;\s*secretInventoryReady = true;\s*closeRotation\(\);/);
-  assert.doesNotMatch(pageSource, /secretValues|credentialValues|localStorage|sessionStorage|indexedDB/);
+  assert.doesNotMatch(pageSource, /secretValues|credentialValues|localStorage|indexedDB/);
+  const rotationSource = pageSource.slice(
+    pageSource.indexOf('async function rotateSecrets'),
+    pageSource.indexOf('async function revokeApprovals'),
+  );
+  assert.doesNotMatch(rotationSource, /localStorage|sessionStorage|indexedDB/);
+  assert.match(pageSource, /stashOAuthChatTurns\(sessionStorage, teamId, turns\)/);
 });
