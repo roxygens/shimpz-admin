@@ -808,11 +808,12 @@ if UI_DIR.is_dir():
     # typos or retired endpoints from being answered with the SPA shell.
     @app.get("/{path:path}")
     async def spa(path: str):
-        if ".." not in path.split("/"):
-            candidate = UI_DIR / path
-            if path and candidate.is_file():
+        ui_root = UI_DIR.resolve()
+        if path and not Path(path).is_absolute() and not path.startswith("/"):
+            candidate = (ui_root / path).resolve()
+            if candidate.is_relative_to(ui_root) and candidate.is_file():
                 return FileResponse(candidate)
-        return FileResponse(UI_DIR / "index.html")
+        return FileResponse(ui_root / "index.html")
 else:
 
     @app.get("/")
