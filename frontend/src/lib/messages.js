@@ -162,14 +162,6 @@ export const messages = {
       disable: 'Disable',
     },
     fields: {
-      SHIMPZ_OPENAI_MEDIA_API_KEY: {
-        help: 'Optional platform media key — powers transcription, speech, and image generation only; never a Brain or Team.',
-        linkLabel: 'OpenAI → API keys',
-        steps: [
-          'Sign in at platform.openai.com → API keys.',
-          'Create a secret key and copy the sk-… value.',
-        ],
-      },
       R2_ACCOUNT_ID: {
         help: 'Optional — Cloudflare R2 for uploads, share links and backups.',
         linkLabel: 'Cloudflare → R2',
@@ -346,14 +338,6 @@ export const messages = {
       disable: 'Desativar',
     },
     fields: {
-      SHIMPZ_OPENAI_MEDIA_API_KEY: {
-        help: 'Chave opcional de mídia da plataforma — só habilita voz e imagens; nunca um Brain ou Time.',
-        linkLabel: 'OpenAI → API keys',
-        steps: [
-          'Entre em platform.openai.com → API keys.',
-          'Crie uma chave secreta e copie o valor sk-… .',
-        ],
-      },
       R2_ACCOUNT_ID: {
         help: 'Opcional — Cloudflare R2 para uploads, links e backups.',
         linkLabel: 'Cloudflare → R2',
@@ -530,14 +514,6 @@ export const messages = {
       disable: 'Desactivar',
     },
     fields: {
-      SHIMPZ_OPENAI_MEDIA_API_KEY: {
-        help: 'Clave multimedia opcional de la plataforma — solo voz e imágenes; nunca un Cerebro ni un Equipo.',
-        linkLabel: 'OpenAI → API keys',
-        steps: [
-          'Entra en platform.openai.com → API keys.',
-          'Crea una clave secreta y copia el valor sk-… .',
-        ],
-      },
       R2_ACCOUNT_ID: {
         help: 'Opcional — Cloudflare R2 para subidas, enlaces y copias.',
         linkLabel: 'Cloudflare → R2',
@@ -714,14 +690,6 @@ export const messages = {
       disable: '停用',
     },
     fields: {
-      SHIMPZ_OPENAI_MEDIA_API_KEY: {
-        help: '可选的平台媒体密钥——仅用于转录、语音和图像；绝不会注入大脑或团队。',
-        linkLabel: 'OpenAI → API keys',
-        steps: [
-          '登录 platform.openai.com → API keys。',
-          '创建一个密钥并复制 sk-… 值。',
-        ],
-      },
       R2_ACCOUNT_ID: {
         help: '可选——用于上传、分享链接和备份的 Cloudflare R2。',
         linkLabel: 'Cloudflare → R2',
@@ -898,14 +866,6 @@ export const messages = {
       disable: 'Désactiver',
     },
     fields: {
-      SHIMPZ_OPENAI_MEDIA_API_KEY: {
-        help: 'Clé média de plateforme facultative — voix et images uniquement, jamais un Cerveau ou une Équipe.',
-        linkLabel: 'OpenAI → API keys',
-        steps: [
-          'Connectez-vous à platform.openai.com → API keys.',
-          'Créez une clé secrète et copiez la valeur sk-… .',
-        ],
-      },
       R2_ACCOUNT_ID: {
         help: 'Optionnel — Cloudflare R2 pour les envois, liens et sauvegardes.',
         linkLabel: 'Cloudflare → R2',
@@ -1082,14 +1042,6 @@ export const messages = {
       disable: 'Deaktivieren',
     },
     fields: {
-      SHIMPZ_OPENAI_MEDIA_API_KEY: {
-        help: 'Optionaler Plattform-Medienschlüssel — nur Sprache und Bilder, nie ein Brain oder ein Team.',
-        linkLabel: 'OpenAI → API keys',
-        steps: [
-          'Melde dich bei platform.openai.com → API keys an.',
-          'Erstelle einen geheimen Schlüssel und kopiere den sk-…-Wert.',
-        ],
-      },
       R2_ACCOUNT_ID: {
         help: 'Optional — Cloudflare R2 für Uploads, Links und Backups.',
         linkLabel: 'Cloudflare → R2',
@@ -1266,14 +1218,6 @@ export const messages = {
       disable: '無効化',
     },
     fields: {
-      SHIMPZ_OPENAI_MEDIA_API_KEY: {
-        help: '任意のプラットフォーム用メディアキー——音声と画像専用で、Brain やチームには入りません。',
-        linkLabel: 'OpenAI → API keys',
-        steps: [
-          'platform.openai.com → API keys にサインイン。',
-          'シークレットキーを作成し sk-… の値をコピー。',
-        ],
-      },
       R2_ACCOUNT_ID: {
         help: '任意——アップロード・共有リンク・バックアップ用の Cloudflare R2。',
         linkLabel: 'Cloudflare → R2',
@@ -1450,14 +1394,6 @@ export const messages = {
       disable: 'تعطيل',
     },
     fields: {
-      SHIMPZ_OPENAI_MEDIA_API_KEY: {
-        help: 'مفتاح وسائط اختياري للمنصة — للصوت والصور فقط، ولا يُحقن في أي عقل أو فريق.',
-        linkLabel: 'OpenAI → API keys',
-        steps: [
-          'سجّل الدخول إلى platform.openai.com → API keys.',
-          'أنشئ مفتاحًا سرّيًا وانسخ القيمة ‎sk-… .',
-        ],
-      },
       R2_ACCOUNT_ID: {
         help: 'اختياري — Cloudflare R2 للرفع والروابط والنُّسخ الاحتياطية.',
         linkLabel: 'Cloudflare → R2',

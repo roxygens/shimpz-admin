@@ -27,7 +27,7 @@ class PlatformIntegrationTests(unittest.TestCase):
         groups = {field["group"] for field in keyset.SCHEMA}
 
         self.assertEqual(groups, set(catalog.CATALOG))
-        self.assertEqual(catalog.keys_for("openai"), ["SHIMPZ_OPENAI_MEDIA_API_KEY", "VOICE_TOOLS_OPENAI_KEY"])
+        self.assertNotIn("openai", groups)
 
 
 if __name__ == "__main__":

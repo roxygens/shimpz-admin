@@ -3,7 +3,7 @@
 Fail-fast at config time: each check returns (ok, detail) and distinguishes "credential rejected"
 from "network unreachable" in the detail, never logging or echoing the value itself.
 
-IPv4-first: dual-stack endpoints (api.cloudflare.com, api.openai.com, …) fail TLS handshake on
+IPv4-first: dual-stack validation endpoints can fail TLS handshake on
 hosts with broken IPv6 egress (this repo's own incident class — see MEMORY.md gotchas; the
 container bakes a gai.conf fix, but the wizard runs on the BARE host of a fresh machine where no
 such fix exists). Sorting A records first is the fail-safe.
@@ -40,13 +40,6 @@ def _http_json(url, headers):
         return e.code, None
 
 
-def _live_openai(value):
-    status, _ = _http_json("https://api.openai.com/v1/models", {"Authorization": f"Bearer {value}"})
-    if status == 200:
-        return True, "key accepted"
-    return False, f"OpenAI rejected the key (HTTP {status})"
-
-
 def _live_github(value):
     status, body = _http_json("https://api.github.com/user", {"Authorization": f"Bearer {value}"})
     if status == 200 and body:
@@ -54,10 +47,7 @@ def _live_github(value):
     return False, f"GitHub rejected the token (HTTP {status})"
 
 
-_LIVE = {
-    "live_openai": _live_openai,
-    "live_github": _live_github,
-}
+_LIVE = {"live_github": _live_github}
 
 
 def validate(key, value):

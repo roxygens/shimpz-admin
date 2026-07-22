@@ -14,13 +14,6 @@ CATEGORIES = (CAPABILITY, INFRA)
 
 # group → configuration and runtime metadata.
 CATALOG = {
-    "openai": {
-        "public_name": "OpenAI",
-        "category": CAPABILITY,
-        "blurb": "Transcription, speech generation, and image generation.",
-        "recreate_target": "openai-driver",
-        "reconfigurable": True,
-    },
     "storage-r2": {
         "public_name": "Cloudflare R2",
         "category": CAPABILITY,
@@ -62,7 +55,7 @@ def keys_for(group):
 def container_env_for(group, values):
     """Map the group's `.env` values → the env var names the recreate target actually reads.
 
-    Only the two stateless recreate targets need this; everything else returns {} (nothing to
+    Only the stateless recreate target needs this; everything else returns {} (nothing to
     recreate). Mirrors docker-compose.yml's `environment:` for each driver. Empty strings are
     intentional — disabling an integration recreates the sidecar INERT.
     """
@@ -73,11 +66,5 @@ def container_env_for(group, values):
             "RCLONE_CONFIG_R2_ACCESS_KEY_ID": values.get("R2_ACCESS_KEY_ID", ""),
             "RCLONE_CONFIG_R2_SECRET_ACCESS_KEY": values.get("R2_SECRET_ACCESS_KEY", ""),
             "RCLONE_CONFIG_R2_ENDPOINT": f"https://{acct}.r2.cloudflarestorage.com" if acct else "",
-        }
-    if group == "openai":
-        return {
-            "OPENAI_API_KEY": values.get("SHIMPZ_OPENAI_MEDIA_API_KEY", ""),
-            "VOICE_TOOLS_OPENAI_KEY": values.get("VOICE_TOOLS_OPENAI_KEY")
-            or values.get("SHIMPZ_OPENAI_MEDIA_API_KEY", ""),
         }
     return {}

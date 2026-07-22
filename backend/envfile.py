@@ -26,7 +26,7 @@ def reject_legacy_root_credentials(values):
         names = ", ".join(present)
         raise LegacyRootCredentialError(
             f"nonempty legacy root Brain credential(s) are forbidden: {names}; remove and rotate them, "
-            "configure Brain credentials per account, and use SHIMPZ_OPENAI_MEDIA_API_KEY only for media"
+            "and configure Brain credentials per account"
         )
     return values
 
