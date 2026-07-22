@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 UV_IMAGE = "ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9"
 
 
-class DockerfileDeliveryTests(unittest.TestCase):
-    def test_build_context_excludes_local_dependencies_caches_and_secrets(self) -> None:
+class StaticDockerfileDeliveryTests(unittest.TestCase):
+    def test_static_build_context_excludes_local_dependencies_caches_and_secrets(self) -> None:
         dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
 
         self.assertLessEqual(
@@ -41,7 +41,7 @@ class DockerfileDeliveryTests(unittest.TestCase):
             dockerfile,
         )
 
-    def test_runtime_contains_only_the_resolved_virtual_environment(self) -> None:
+    def test_static_runtime_contains_only_the_resolved_virtual_environment(self) -> None:
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         runtime = dockerfile.split(" AS runtime\n", 1)[1]
 
@@ -53,7 +53,7 @@ class DockerfileDeliveryTests(unittest.TestCase):
         self.assertNotIn("curl", runtime)
         self.assertNotIn("/usr/local/bin/uv", runtime)
 
-    def test_runtime_copy_contains_every_backend_module(self) -> None:
+    def test_static_runtime_copy_contains_every_backend_module(self) -> None:
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         logical_lines = re.sub(r"\\\n\s*", " ", dockerfile).splitlines()
         runtime_copy = next(
