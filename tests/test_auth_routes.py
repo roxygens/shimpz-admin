@@ -41,6 +41,22 @@ class AuthRouteTests(unittest.TestCase):
     def setUp(self) -> None:
         self.admin_app.adminstore.STORE_PATH.unlink(missing_ok=True)
 
+    def test_open_api_is_the_exact_reviewed_auth_surface(self) -> None:
+        self.assertEqual(
+            self.admin_app.OPEN_API,
+            frozenset(
+                {
+                    "/api/session",
+                    "/api/login",
+                    "/api/logout",
+                    "/api/admin/setup",
+                    "/api/oauth/cloudflare/start",
+                    "/api/oauth/cloudflare/callback",
+                }
+            ),
+        )
+        self.assertFalse(any("/api/teams" in path or "/assistants" in path for path in self.admin_app.OPEN_API))
+
     @staticmethod
     def _request(path: str) -> Request:
         raw_path, _, query = path.partition("?")
