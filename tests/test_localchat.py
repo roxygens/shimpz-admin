@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 import tempfile
 import threading
@@ -69,6 +70,16 @@ def account_requirement() -> dict[str, object]:
             {"id": "identity-me", "name": "Read profile", "summary": "Read the connected X profile."},
             {"id": "create-post", "name": "Create post", "summary": "Publish a post on X."},
         ],
+    }
+
+
+def input_request(request_type: str, options: list[str] | None = None) -> dict[str, object]:
+    return {
+        "type": request_type,
+        "title": "Choose",
+        "summary": "Provide one value.",
+        "docs": "https://docs.example.com",
+        "options": options or [],
     }
 
 
@@ -533,6 +544,85 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         self.assertNotIn("trace_id", response.body)
         self.assertNotIn("api_key", json.dumps(response.body))
         self.assertNotIn("secret_values", json.dumps(response.body))
+
+    def test_human_input_projects_all_six_closed_request_types(self) -> None:
+        cases = (
+            ("str", []),
+            ("int", []),
+            ("float", []),
+            ("bool", []),
+            ("choice", ["one", "two"]),
+            ("choices", ["one", "two"]),
+        )
+        for request_type, options in cases:
+            controller = teams.DriverResponse(
+                428,
+                {
+                    "team_id": "team_1",
+                    "status": "input-required",
+                    "turn_id": CHALLENGE_ID,
+                    "challenge_id": CHALLENGE_ID,
+                    "request": input_request(request_type, options),
+                    "trace_id": TRACE_ID,
+                },
+            )
+            with (
+                self.subTest(request_type=request_type),
+                mock.patch.object(teams, "get_inference", return_value=teams.DriverResponse(
+                    200, {"provider": "openai", "model": "gpt-5.5"}
+                )),
+                mock.patch.object(modelproviders, "resolve_api_key", return_value="sk-test-0123456789"),
+                mock.patch.object(teams, "chat", return_value=controller),
+            ):
+                response = localchat.turn(
+                    "team_1",
+                    {"message": "Ask", "files": [], "assistant_ids": ["shimpz-cloudflare"]},
+                )
+            self.assertEqual(response.status, 428)
+            self.assertEqual(response.body["request"], input_request(request_type, options))
+            self.assertNotIn("trace_id", response.body)
+
+    def test_human_input_challenge_and_submission_fail_closed(self) -> None:
+        valid = {
+            "team_id": "team_1",
+            "status": "input-required",
+            "turn_id": CHALLENGE_ID,
+            "challenge_id": CHALLENGE_ID,
+            "request": input_request("choice", ["one", "two"]),
+            "trace_id": TRACE_ID,
+        }
+        invalid_challenges = (
+            {**valid, "team_id": "team_2"},
+            {**valid, "secret": "must-not-cross"},
+            {**valid, "request": input_request("unknown")},
+            {**valid, "request": input_request("str", ["one"])},
+            {**valid, "request": input_request("choice", ["one", "one"])},
+        )
+        for body in invalid_challenges:
+            with self.subTest(body=body):
+                response = localchat._project_input_challenge(teams.DriverResponse(428, body), "team_1")
+            self.assertEqual(response, teams.DriverResponse(502, {"code": "input-challenge-response-invalid"}))
+
+        valid_answers = ("Ada", 3, 3.5, True, ["one", "two"])
+        invalid_answers = (None, {"value": "Ada"}, math.inf, ["one", "one"], "x" * 4097)
+        with mock.patch.object(teams, "_call") as transport:
+            for answer in valid_answers:
+                with self.subTest(answer=answer):
+                    teams.submit_chat_input(
+                        "team_1",
+                        {"challenge_id": CHALLENGE_ID, "answer": answer},
+                        provider="openai",
+                        api_key="sk-test-0123456789",
+                    )
+            for answer in invalid_answers:
+                with self.subTest(answer=answer), self.assertRaises(teams.TeamRequestError):
+                    teams.submit_chat_input(
+                        "team_1",
+                        {"challenge_id": CHALLENGE_ID, "answer": answer},
+                        provider="openai",
+                        api_key="sk-test-0123456789",
+                    )
+        self.assertEqual(transport.call_count, len(valid_answers))
 
     def test_power_approval_contract_fails_closed_on_ambiguous_or_unbounded_data(self) -> None:
         valid = {

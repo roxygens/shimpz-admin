@@ -28,6 +28,9 @@ _ERROR_CODE_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _TURN_RESPONSE_FIELDS = frozenset({"team_id", "team_name", "reply", "trace_id"})
 _STOP_RESPONSE_FIELDS = frozenset({"team_id", "requested", "accepted", "confirmed", "forced_restart", "trace_id"})
 _CHALLENGE_RESPONSE_FIELDS = frozenset({"team_id", "status", "turn_id", "challenge_id", "requirements", "trace_id"})
+_INPUT_CHALLENGE_RESPONSE_FIELDS = frozenset(
+    {"team_id", "status", "turn_id", "challenge_id", "request", "trace_id"}
+)
 _ACCOUNT_CHALLENGE_RESPONSE_FIELDS = frozenset(
     {"team_id", "status", "turn_id", "challenge_id", "expires_in", "requirements", "trace_id"}
 )
@@ -48,10 +51,15 @@ MAX_APPROVAL_INPUT_TOTAL_BYTES = 128 * 1024
 MAX_APPROVAL_JSON_DEPTH = 16
 MAX_APPROVAL_JSON_NODES = 1024
 MAX_REMEMBERED_APPROVALS = 8192
+INPUT_TYPES = frozenset({"str", "int", "float", "bool", "choice", "choices"})
+MAX_INPUT_OPTIONS = 64
+MAX_INPUT_OPTION_CHARS = 200
 _CHAT_ERROR_DETAILS = {
     "assistant-power-blocked": "Assistant Power execution is blocked until it is reinstalled",
     "assistant-approval-challenge-expired": "the Assistant approval expired; retry the message",
     "assistant-approval-state-unavailable": "remembered Assistant approvals are unavailable",
+    "assistant-input-challenge-expired": "the Assistant input request expired; retry the message",
+    "assistant-input-replay-changed": "the Assistant input flow changed; retry the message",
     "assistant-account-challenge-expired": "the Assistant account expired; retry the message",
     "assistant-account-contract-invalid": "the Assistant account contract changed; retry the message",
     "assistant-account-state-unavailable": "Assistant account state is unavailable",
@@ -80,6 +88,7 @@ _CHAT_ERROR_DETAILS = {
     "approval-challenge-response-invalid": "the Assistant approval challenge was invalid",
     "approval-inventory-response-invalid": "the remembered Assistant approvals were invalid",
     "account-challenge-response-invalid": "the Assistant account challenge was invalid",
+    "input-challenge-response-invalid": "the Assistant input challenge was invalid",
     "team-context-changed": "the Team capabilities changed; retry",
     "team-has-no-active-assistants": "install and start at least one Assistant before chatting",
 }
@@ -125,7 +134,7 @@ class PublicResponse(teams.DriverResponse):
     def websocket_event(self, team_id: str) -> dict[str, object] | None:
         body = self.body
         challenge_status = body.get("status")
-        if challenge_status in {"secrets-required", "approval-required", "accounts-required"}:
+        if challenge_status in {"secrets-required", "approval-required", "accounts-required", "input-required"}:
             if body.get("team_id") != team_id:
                 return None
             event = {"type": challenge_status, **body}
@@ -411,6 +420,76 @@ def _project_approval_challenge(response: teams.DriverResponse, team_id: str) ->
     )
 
 
+def _project_input_challenge(response: teams.DriverResponse, team_id: str) -> teams.DriverResponse:
+    try:
+        if set(response.body) != _INPUT_CHALLENGE_RESPONSE_FIELDS:
+            raise ValueError("invalid input envelope")
+        if (
+            response.body["team_id"] != team_id
+            or response.body["status"] != "input-required"
+            or not _valid_trace_id(response.body["trace_id"])
+        ):
+            raise ValueError("invalid input identity")
+        challenge_id = response.body["challenge_id"]
+        turn_id = response.body["turn_id"]
+        request = response.body["request"]
+        if (
+            not isinstance(challenge_id, str)
+            or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None
+            or not isinstance(turn_id, str)
+            or _CHALLENGE_ID_RE.fullmatch(turn_id) is None
+            or not isinstance(request, dict)
+            or set(request) != {"type", "title", "summary", "docs", "options"}
+        ):
+            raise ValueError("invalid input metadata")
+        request_type = request["type"]
+        options = request["options"]
+        if (
+            not isinstance(request_type, str)
+            or request_type not in INPUT_TYPES
+            or not isinstance(options, list)
+            or len(options) > MAX_INPUT_OPTIONS
+        ):
+            raise ValueError("invalid input request")
+        if request_type in {"choice", "choices"}:
+            if (
+                not options
+                or any(
+                    not isinstance(option, str)
+                    or not option
+                    or len(option) > MAX_INPUT_OPTION_CHARS
+                    or "\0" in option
+                    for option in options
+                )
+                or len(options) != len(set(options))
+            ):
+                raise ValueError("invalid input options")
+        elif options:
+            raise ValueError("invalid primitive input options")
+        docs = request["docs"]
+        if docs is not None:
+            docs = _clean_public_text(docs, 2048)
+        projected = {
+            "type": request_type,
+            "title": _clean_public_text(request["title"], 80),
+            "summary": _clean_public_text(request["summary"], 240),
+            "docs": docs,
+            "options": list(options),
+        }
+    except KeyError, TypeError, ValueError, teams.TeamRequestError:
+        return PublicResponse(HTTPStatus.BAD_GATEWAY, {"code": "input-challenge-response-invalid"})
+    return PublicResponse(
+        response.status,
+        {
+            "team_id": team_id,
+            "status": "input-required",
+            "turn_id": turn_id,
+            "challenge_id": challenge_id,
+            "request": projected,
+        },
+    )
+
+
 def _project_account_challenge(response: teams.DriverResponse, team_id: str) -> teams.DriverResponse:
     """Project an OAuth consent gate without exposing any authorization material."""
     try:
@@ -524,6 +603,8 @@ def _project_pending_challenge(response: teams.DriverResponse, team_id: str) -> 
         return _project_challenge(response, team_id)
     if status == "approval-required":
         return _project_approval_challenge(response, team_id)
+    if status == "input-required":
+        return _project_input_challenge(response, team_id)
     return PublicResponse(HTTPStatus.BAD_GATEWAY, {"code": "chat-challenge-response-invalid"})
 
 
@@ -727,6 +808,25 @@ def submit_approval(team_id: object, payload: object) -> teams.DriverResponse:
     return _project_turn(response, canonical_id, forbidden_values=(api_key,))
 
 
+def submit_input(team_id: object, payload: object) -> teams.DriverResponse:
+    canonical_id = teams.canonical_team_id(team_id)
+    body = teams.canonical_input_submission(payload)
+    credential = _model_credential(canonical_id)
+    if isinstance(credential, teams.DriverResponse):
+        return credential
+    provider, api_key = credential
+    response = teams.submit_chat_input(canonical_id, body, provider=provider, api_key=api_key)
+    if response.status in _MISSING_RUNTIME_STATUSES:
+        return _unavailable()
+    if response.status == HTTPStatus.PRECONDITION_REQUIRED:
+        return _project_pending_challenge(response, canonical_id)
+    if not 200 <= response.status < 300:
+        return _safe_error(response)
+    answer = body["answer"]
+    forbidden = (api_key, answer) if isinstance(answer, str) else (api_key,)
+    return _project_turn(response, canonical_id, forbidden_values=forbidden)
+
+
 def pending_approval(team_id: object) -> teams.DriverResponse:
     canonical_id = teams.canonical_team_id(team_id)
     response = teams.pending_chat_approval(canonical_id)
@@ -743,6 +843,24 @@ def pending_approval(team_id: object) -> teams.DriverResponse:
             return PublicResponse(response.status, {"team_id": canonical_id, "status": "none"})
         return PublicResponse(HTTPStatus.BAD_GATEWAY, {"code": "approval-challenge-response-invalid"})
     return _project_approval_challenge(response, canonical_id)
+
+
+def pending_input(team_id: object) -> teams.DriverResponse:
+    canonical_id = teams.canonical_team_id(team_id)
+    response = teams.pending_chat_input(canonical_id)
+    if response.status in _MISSING_RUNTIME_STATUSES:
+        return _unavailable()
+    if not 200 <= response.status < 300:
+        return _safe_error(response)
+    if set(response.body) == {"team_id", "status", "trace_id"}:
+        if (
+            response.body.get("team_id") == canonical_id
+            and response.body.get("status") == "none"
+            and _valid_trace_id(response.body.get("trace_id"))
+        ):
+            return PublicResponse(response.status, {"team_id": canonical_id, "status": "none"})
+        return PublicResponse(HTTPStatus.BAD_GATEWAY, {"code": "input-challenge-response-invalid"})
+    return _project_input_challenge(response, canonical_id)
 
 
 def secret_inventory(team_id: object) -> teams.DriverResponse:
