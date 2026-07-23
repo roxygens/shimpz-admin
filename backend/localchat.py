@@ -11,8 +11,6 @@ buggy controller can never echo that key or internal execution details back to t
 
 from __future__ import annotations
 
-import json
-import math
 import re
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -41,15 +39,10 @@ MAX_SECRETS_PER_CHALLENGE = 64
 MAX_SECRET_LABEL_CHARS = 80
 MAX_SECRET_SUMMARY_CHARS = 160
 MAX_INSTALLED_ASSISTANTS = 128
-MAX_APPROVAL_REQUIREMENTS = 64
 MAX_ACCOUNT_REQUIREMENTS = 64
 MAX_ACCOUNT_SCOPES = 32
 MAX_ACCOUNT_POWERS = 128
 MAX_ACCOUNT_SCOPE_CHARS = 128
-MAX_APPROVAL_INPUT_BYTES = 32 * 1024
-MAX_APPROVAL_INPUT_TOTAL_BYTES = 128 * 1024
-MAX_APPROVAL_JSON_DEPTH = 16
-MAX_APPROVAL_JSON_NODES = 1024
 MAX_REMEMBERED_APPROVALS = 8192
 INPUT_TYPES = frozenset({"str", "int", "float", "bool", "choice", "choices"})
 MAX_INPUT_OPTIONS = 64
@@ -80,7 +73,6 @@ _CHAT_ERROR_DETAILS = {
     "model-credential-missing": "the selected model provider needs an API key",
     "model-credential-store-invalid": "the model credential store is invalid",
     "ownership-conflict": "the Team resource ownership check failed",
-    "power-approval-required": "an Assistant Power requires approval",
     "power-state-unavailable": "Team Power execution state is unavailable",
     "runtime-unavailable": "the local chat runtime is unavailable; update this Shimpz Space",
     "secret-challenge-response-invalid": "the Assistant secret challenge was invalid",
@@ -310,42 +302,6 @@ def _project_challenge(response: teams.DriverResponse, team_id: str) -> teams.Dr
     )
 
 
-def _bounded_approval_input(value: object) -> dict[str, object]:
-    budget = [MAX_APPROVAL_JSON_NODES]
-
-    def walk(node: object, depth: int) -> None:
-        budget[0] -= 1
-        if budget[0] < 0 or depth > MAX_APPROVAL_JSON_DEPTH:
-            raise ValueError("approval input exceeds its structure limit")
-        if node is None or isinstance(node, bool | str):
-            return
-        if isinstance(node, int) and not isinstance(node, bool):
-            return
-        if isinstance(node, float):
-            if not math.isfinite(node):
-                raise ValueError("approval input contains a non-finite number")
-            return
-        if isinstance(node, list):
-            for item in node:
-                walk(item, depth + 1)
-            return
-        if isinstance(node, dict):
-            for key, item in node.items():
-                if not isinstance(key, str) or len(key) > 128:
-                    raise ValueError("approval input key is invalid")
-                walk(item, depth + 1)
-            return
-        raise ValueError("approval input is not JSON")
-
-    if not isinstance(value, dict):
-        raise ValueError("approval input must be an object")
-    walk(value, 0)
-    encoded = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"), sort_keys=True).encode()
-    if len(encoded) > MAX_APPROVAL_INPUT_BYTES:
-        raise ValueError("approval input exceeds its byte limit")
-    return value
-
-
 def _project_approval_challenge(response: teams.DriverResponse, team_id: str) -> teams.DriverResponse:
     try:
         if set(response.body) != _CHALLENGE_RESPONSE_FIELDS:
@@ -365,45 +321,37 @@ def _project_approval_challenge(response: teams.DriverResponse, team_id: str) ->
             or not isinstance(turn_id, str)
             or _CHALLENGE_ID_RE.fullmatch(turn_id) is None
             or not isinstance(raw_requirements, list)
-            or not 1 <= len(raw_requirements) <= MAX_APPROVAL_REQUIREMENTS
+            or len(raw_requirements) != 1
         ):
             raise ValueError("invalid approval metadata")
         requirements: list[dict[str, object]] = []
-        total_input_bytes = 0
         for raw in raw_requirements:
             if not isinstance(raw, dict) or set(raw) != {
                 "assistant_id",
                 "assistant_name",
                 "power_id",
-                "power_summary",
-                "input",
+                "title",
+                "summary",
+                "docs",
                 "approval",
             }:
                 raise ValueError("invalid approval requirement")
             assistant_id = teams.canonical_assistant_id(raw["assistant_id"])
             power_id = teams.canonical_assistant_id(raw["power_id"])
-            if raw["approval"] not in {"each-run", "once"}:
+            if raw["approval"] not in {"always", "once"}:
                 raise ValueError("invalid approval policy")
-            power_input = _bounded_approval_input(raw["input"])
-            total_input_bytes += len(
-                json.dumps(
-                    power_input,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                    separators=(",", ":"),
-                    sort_keys=True,
-                ).encode()
-            )
-            if total_input_bytes > MAX_APPROVAL_INPUT_TOTAL_BYTES:
-                raise ValueError("approval inputs exceed their aggregate byte limit")
+            docs = raw["docs"]
+            if docs is not None:
+                docs = _clean_public_text(docs, 2048)
             requirements.append(
                 {
                     "assistant_id": assistant_id,
                     "assistant_name": _clean_public_text(raw["assistant_name"], MAX_SECRET_LABEL_CHARS),
                     "power_id": power_id,
-                    "power_summary": _clean_public_text(raw["power_summary"], MAX_SECRET_SUMMARY_CHARS),
-                    "input": power_input,
-                    "approval": "always" if raw["approval"] == "each-run" else "once",
+                    "title": _clean_public_text(raw["title"], MAX_SECRET_LABEL_CHARS),
+                    "summary": _clean_public_text(raw["summary"], 240),
+                    "docs": docs,
+                    "approval": raw["approval"],
                 }
             )
     except KeyError, TypeError, ValueError, UnicodeError, teams.TeamRequestError:

@@ -62,16 +62,9 @@ def _approval_requirements() -> list[dict[str, object]]:
             "assistant_id": "social-publisher",
             "assistant_name": "Social Publisher",
             "power_id": "create-post",
-            "power_summary": "Publish this exact post on X.",
-            "input": {"text": "Hello from Shimpz", "reply_to": None},
-            "approval": "always",
-        },
-        {
-            "assistant_id": "social-publisher",
-            "assistant_name": "Social Publisher",
-            "power_id": "create-post",
-            "power_summary": "Publish this exact post on X.",
-            "input": {"text": "A second post", "reply_to": "123"},
+            "title": "Publish post",
+            "summary": "Publish this exact post on X.",
+            "docs": "https://docs.example.com/publish",
             "approval": "once",
         },
     ]
@@ -389,7 +382,7 @@ class ChatWebSocketTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             _inventory().body["assistants"][0]["secrets"][0]["mask"] = "secret-value"
 
-    def test_approval_events_project_exact_inputs_without_internal_authority(self) -> None:
+    def test_approval_events_project_in_body_metadata_without_internal_authority(self) -> None:
         expected = {
             "type": "approval-required",
             "turn_id": TURN_ID,

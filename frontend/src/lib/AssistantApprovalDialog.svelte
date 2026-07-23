@@ -36,10 +36,12 @@
             </div>
             <code>{requirement.power_id}</code>
           </header>
-          <p>{requirement.power_summary}</p>
+          <h3>{requirement.title}</h3>
+          <p>{requirement.summary}</p>
+          {#if requirement.docs}
+            <span class="docs">{requirement.docs}</span>
+          {/if}
           <span class="policy">{requirement.approval === 'once' ? copy.once : copy.always}</span>
-          <span class="input-label">{copy.input}</span>
-          <pre><code>{JSON.stringify(requirement.input, null, 2)}</code></pre>
         </article>
       {/each}
     </div>
@@ -64,11 +66,10 @@
   article > header div { display: grid; gap: 0.18rem; }
   article strong { font-size: 0.8rem; }
   article code { color: var(--accent); font-size: 0.58rem; overflow-wrap: anywhere; }
+  article h3 { margin: 0; font-size: 0.85rem; }
   article p { margin: 0; color: var(--text); font-size: 0.72rem; line-height: 1.5; }
+  article .docs { color: var(--accent); font-size: 0.62rem; overflow-wrap: anywhere; }
   .policy { border-inline-start: 2px solid var(--warn); padding-inline-start: 0.55rem; color: var(--text-dim); font-size: 0.64rem; line-height: 1.45; }
-  .input-label { color: var(--text-faint); font-family: var(--font-mono); font-size: 0.54rem; letter-spacing: 0.1em; text-transform: uppercase; }
-  pre { max-height: 14rem; margin: 0; border: 1px solid var(--border); padding: 0.7rem; background: #000; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-  pre code { color: var(--text-dim); font-size: 0.62rem; line-height: 1.5; }
   footer { display: flex; margin: 1rem calc(0px - var(--pad)) calc(0px - var(--pad)); }
   footer button { width: 50%; min-height: 3.2rem; flex: 1 1 0; border: 0; cursor: pointer; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; }
   footer .secondary { box-shadow: inset 0 0 0 1px var(--border-strong); background: transparent; color: var(--text-dim); }

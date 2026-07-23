@@ -126,8 +126,9 @@ function approvalRequirement(approval = 'always') {
     assistant_id: 'social-publisher',
     assistant_name: 'Social Publisher',
     power_id: 'create-post',
-    power_summary: 'Publish this exact post on X.',
-    input: { text: 'Hello from Shimpz', reply_to: null },
+    title: 'Publish post',
+    summary: 'Publish this exact post on X.',
+    docs: 'https://docs.example.com/publish',
     approval,
   };
 }
@@ -328,22 +329,17 @@ test('chat accepts exact secret challenges and Team-bound inventory snapshots', 
   );
 });
 
-test('chat accepts bounded exact Power approvals and preserves repeated operations', () => {
-  const first = approvalRequirement('always');
-  const second = {
-    ...approvalRequirement('once'),
-    input: { text: 'A second post', reply_to: '123' },
-  };
+test('chat accepts one bounded in-body Power approval', () => {
+  const requirement = approvalRequirement('once');
   const challenge = {
     type: 'approval-required',
     turn_id: TURN_ID,
     challenge_id: CHALLENGE_ID,
-    requirements: [first, second],
+    requirements: [requirement],
   };
   const parsed = parseChatEvent(challenge, 'team_1', 'Marketing');
   assert.deepEqual(parsed, challenge);
   assert.notEqual(parsed.requirements, challenge.requirements);
-  assert.notEqual(parsed.requirements[0].input, challenge.requirements[0].input);
 });
 
 test('chat accepts only exact bounded public account requirements', () => {
@@ -391,7 +387,7 @@ test('chat rejects augmented, duplicated, and sensitive account requirements', (
   }
 });
 
-test('chat rejects augmented, unsafe, and unbounded approval previews', () => {
+test('chat rejects augmented, ambiguous, and unbounded approval metadata', () => {
   const base = {
     type: 'approval-required',
     turn_id: TURN_ID,
@@ -401,10 +397,9 @@ test('chat rejects augmented, unsafe, and unbounded approval previews', () => {
   for (const invalid of [
     { ...base, api_key: 'must-not-cross' },
     { ...base, requirements: [{ ...approvalRequirement(), approval: 'each-run' }] },
-    { ...base, requirements: [{ ...approvalRequirement(), input: [] }] },
-    { ...base, requirements: [{ ...approvalRequirement(), input: { temperature: Number.NaN } }] },
-    { ...base, requirements: [{ ...approvalRequirement(), input: { text: 'x'.repeat(32 * 1024 + 1) } }] },
-    { ...base, requirements: Array.from({ length: 65 }, () => approvalRequirement()) },
+    { ...base, requirements: [{ ...approvalRequirement(), title: 'x'.repeat(81) }] },
+    { ...base, requirements: [{ ...approvalRequirement(), docs: 'x'.repeat(2049) }] },
+    { ...base, requirements: [approvalRequirement(), approvalRequirement()] },
   ]) {
     assert.throws(
       () => parseChatEvent(invalid, 'team_1', 'Marketing'),

@@ -42,16 +42,9 @@ def approval_requirements() -> list[dict[str, object]]:
             "assistant_id": "shimpz-cloudflare",
             "assistant_name": "Shimpz Cloudflare",
             "power_id": "create-post",
-            "power_summary": "Publish this exact post on X.",
-            "input": {"text": "Hello", "reply_to": None},
-            "approval": "each-run",
-        },
-        {
-            "assistant_id": "shimpz-cloudflare",
-            "assistant_name": "Shimpz Cloudflare",
-            "power_id": "create-post",
-            "power_summary": "Publish this exact post on X.",
-            "input": {"text": "Second", "reply_to": "123"},
+            "title": "Publish post",
+            "summary": "Publish this exact post on X.",
+            "docs": "https://docs.example.com/publish",
             "approval": "once",
         },
     ]
@@ -512,7 +505,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         )
         self.assertNotIn("value", json.dumps(response.body))
 
-    def test_power_approvals_project_exact_inputs_and_public_policies(self) -> None:
+    def test_power_approvals_project_exact_in_body_metadata(self) -> None:
         inference = teams.DriverResponse(200, {"provider": "openai", "model": "gpt-5.5"})
         controller = teams.DriverResponse(
             428,
@@ -532,15 +525,14 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         ):
             response = localchat.turn(
                 "team_1",
-                {"message": "Post both", "files": [], "assistant_ids": ["shimpz-cloudflare"]},
+                {"message": "Post it", "files": [], "assistant_ids": ["shimpz-cloudflare"]},
             )
 
         expected = approval_requirements()
-        expected[0]["approval"] = "always"
         self.assertEqual(response.status, 428)
         self.assertEqual(response.body["requirements"], expected)
-        self.assertEqual(response.body["requirements"][0]["input"], {"text": "Hello", "reply_to": None})
-        self.assertEqual(response.body["requirements"][1]["power_id"], "create-post")
+        self.assertEqual(response.body["requirements"][0]["title"], "Publish post")
+        self.assertEqual(response.body["requirements"][0]["docs"], "https://docs.example.com/publish")
         self.assertNotIn("trace_id", response.body)
         self.assertNotIn("api_key", json.dumps(response.body))
         self.assertNotIn("secret_values", json.dumps(response.body))
@@ -624,7 +616,7 @@ class LocalChatOrchestrationTests(unittest.TestCase):
                     )
         self.assertEqual(transport.call_count, len(valid_answers))
 
-    def test_power_approval_contract_fails_closed_on_ambiguous_or_unbounded_data(self) -> None:
+    def test_power_approval_contract_fails_closed_on_ambiguous_or_unbounded_metadata(self) -> None:
         valid = {
             "team_id": "team_1",
             "status": "approval-required",
@@ -636,14 +628,15 @@ class LocalChatOrchestrationTests(unittest.TestCase):
         invalid = (
             {**valid, "team_id": "other-team"},
             {**valid, "api_key": "must-not-cross"},
-            {**valid, "requirements": [{**approval_requirements()[0], "approval": "always"}]},
+            {**valid, "requirements": [{**approval_requirements()[0], "approval": "each-run"}]},
+            {**valid, "requirements": approval_requirements() * 2},
             {
                 **valid,
-                "requirements": [{**approval_requirements()[0], "input": {"text": "x" * (32 * 1024 + 1)}}],
+                "requirements": [{**approval_requirements()[0], "title": "x" * 81}],
             },
             {
                 **valid,
-                "requirements": [{**approval_requirements()[0], "input": {"temperature": float("nan")}}],
+                "requirements": [{**approval_requirements()[0], "docs": "x" * 2049}],
             },
         )
         for body in invalid:
