@@ -538,6 +538,35 @@ def _project_pending_challenge(response: teams.DriverResponse, team_id: str) -> 
     return PublicResponse(HTTPStatus.BAD_GATEWAY, {"code": "chat-challenge-response-invalid"})
 
 
+def _project_inventory_secret(secret: object, seen_secrets: set[str]) -> dict[str, object]:
+    if not isinstance(secret, dict) or set(secret) != {
+        "id",
+        "name",
+        "summary",
+        "configured",
+        "mask",
+    }:
+        raise ValueError("invalid secret inventory item")
+    secret_id = teams.canonical_assistant_id(secret["id"])
+    configured = secret["configured"]
+    mask = secret["mask"]
+    if (
+        secret_id in seen_secrets
+        or not isinstance(configured, bool)
+        or (configured and (not isinstance(mask, str) or not 1 <= len(mask) <= 9))
+        or (not configured and mask is not None)
+    ):
+        raise ValueError("invalid secret inventory status")
+    seen_secrets.add(secret_id)
+    return {
+        "id": secret_id,
+        "name": _clean_public_text(secret["name"], MAX_SECRET_LABEL_CHARS),
+        "summary": _clean_public_text(secret["summary"], MAX_SECRET_SUMMARY_CHARS),
+        "configured": configured,
+        "mask": mask,
+    }
+
+
 def _project_inventory(response: teams.DriverResponse, team_id: str) -> teams.DriverResponse:
     if response.status in _MISSING_RUNTIME_STATUSES:
         return _unavailable()
@@ -563,37 +592,8 @@ def _project_inventory(response: teams.DriverResponse, team_id: str) -> teams.Dr
             raw_secrets = raw["secrets"]
             if not isinstance(raw_secrets, list) or len(raw_secrets) > 32:
                 raise ValueError("invalid secret inventory")
-            secrets: list[dict[str, object]] = []
             seen_secrets: set[str] = set()
-            for secret in raw_secrets:
-                if not isinstance(secret, dict) or set(secret) != {
-                    "id",
-                    "name",
-                    "summary",
-                    "configured",
-                    "mask",
-                }:
-                    raise ValueError("invalid secret inventory item")
-                secret_id = teams.canonical_assistant_id(secret["id"])
-                configured = secret["configured"]
-                mask = secret["mask"]
-                if (
-                    secret_id in seen_secrets
-                    or not isinstance(configured, bool)
-                    or (configured and (not isinstance(mask, str) or not 1 <= len(mask) <= 9))
-                    or (not configured and mask is not None)
-                ):
-                    raise ValueError("invalid secret inventory status")
-                seen_secrets.add(secret_id)
-                secrets.append(
-                    {
-                        "id": secret_id,
-                        "name": _clean_public_text(secret["name"], MAX_SECRET_LABEL_CHARS),
-                        "summary": _clean_public_text(secret["summary"], MAX_SECRET_SUMMARY_CHARS),
-                        "configured": configured,
-                        "mask": mask,
-                    }
-                )
+            secrets = [_project_inventory_secret(secret, seen_secrets) for secret in raw_secrets]
             assistants.append(
                 {
                     "id": assistant_id,
