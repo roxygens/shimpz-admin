@@ -324,6 +324,14 @@ def list_notifications() -> dict[str, object]:
     return _public_envelope(_read())
 
 
+def _require_feed_length(response: http.client.HTTPResponse) -> None:
+    raw_length = response.getheader("Content-Length")
+    if raw_length is not None and (
+        not raw_length.isascii() or not raw_length.isdigit() or int(raw_length) > MAX_FEED_BYTES
+    ):
+        raise ReleaseFeedError("invalid release feed length")
+
+
 def _fetch_feed(etag: str | None) -> tuple[str, dict[str, object] | None, str | None]:
     """Fetch the one fixed HTTPS feed without redirects or caller-controlled authority."""
     connection = None
@@ -344,11 +352,7 @@ def _fetch_feed(etag: str | None) -> tuple[str, dict[str, object] | None, str | 
         content_type = (response.getheader("Content-Type") or "").partition(";")[0].strip().lower()
         if content_type != "application/json":
             raise ReleaseFeedError("invalid release feed content type")
-        raw_length = response.getheader("Content-Length")
-        if raw_length is not None and (
-            not raw_length.isascii() or not raw_length.isdigit() or int(raw_length) > MAX_FEED_BYTES
-        ):
-            raise ReleaseFeedError("invalid release feed length")
+        _require_feed_length(response)
         raw = response.read(MAX_FEED_BYTES + 1)
         if not raw or len(raw) > MAX_FEED_BYTES:
             raise ReleaseFeedError("invalid release feed length")
