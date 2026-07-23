@@ -8,8 +8,10 @@ placed in Team inference metadata, or sent through the Assistant Store iframe.
 from __future__ import annotations
 
 import http.client
+import json
 import ssl
 from dataclasses import dataclass
+from pathlib import Path
 
 import adminstore
 
@@ -29,36 +31,33 @@ class ProviderDefinition:
     models: tuple[ModelDefinition, ...]
 
 
-# Base rates verified 2026-07-17: https://developers.openai.com/api/docs/models and https://platform.claude.com/docs/en/about-claude/pricing
+_CATALOG = json.loads(Path(__file__).with_name("model_catalog.json").read_text(encoding="utf-8"))
 PROVIDERS = {
-    "openai": ProviderDefinition(
-        title="OpenAI",
-        default_model="gpt-5.6-terra",
-        models=(
-            ModelDefinition("gpt-5.6-sol", "GPT-5.6 Sol", 500, 3_000),
-            ModelDefinition("gpt-5.6-terra", "GPT-5.6 Terra", 250, 1_500),
-            ModelDefinition("gpt-5.6-luna", "GPT-5.6 Luna", 100, 600),
-            ModelDefinition("gpt-5.5", "GPT-5.5", 500, 3_000),
+    provider["id"]: ProviderDefinition(
+        title=provider["title"],
+        default_model=provider["default_model"],
+        models=tuple(
+            ModelDefinition(
+                model["id"],
+                model["title"],
+                model["input_usd_per_million_cents"],
+                model["output_usd_per_million_cents"],
+            )
+            for model in provider["models"]
         ),
-    ),
-    "anthropic": ProviderDefinition(
-        title="Anthropic",
-        default_model="claude-sonnet-5",
-        models=(
-            ModelDefinition("claude-fable-5", "Claude Fable 5", 1_000, 5_000),
-            ModelDefinition("claude-opus-4-8", "Claude Opus 4.8", 500, 2_500),
-            ModelDefinition("claude-sonnet-5", "Claude Sonnet 5", 300, 1_500),
-            ModelDefinition("claude-haiku-4-5-20251001", "Claude Haiku 4.5", 100, 500),
-        ),
-    ),
+    )
+    for provider in _CATALOG["providers"]
 }
 MAX_API_KEY_BYTES = 8 * 1024
 MIN_API_KEY_BYTES = 16
 VALIDATION_TIMEOUT_SECONDS = 5.0
 
 _VALIDATION_ENDPOINTS = {
-    "openai": ("api.openai.com", "/v1/models"),
-    "anthropic": ("api.anthropic.com", "/v1/models"),
+    provider["id"]: (
+        provider["credential_validation"]["host"],
+        provider["credential_validation"]["path"],
+    )
+    for provider in _CATALOG["providers"]
 }
 
 

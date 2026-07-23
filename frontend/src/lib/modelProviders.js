@@ -1,28 +1,15 @@
 import { LocalApiError, safeApiError } from './localApi.js';
+import MODEL_CATALOG from './modelCatalog.json' with { type: 'json' };
 
 const TEAM_ID_RE = /^[a-z0-9_]{1,40}$/;
-const EXPECTED_CATALOG = Object.freeze({
-  openai: Object.freeze({
-    title: 'OpenAI',
-    default_model: 'gpt-5.6-terra',
-    models: Object.freeze([
-      Object.freeze({ id: 'gpt-5.6-sol', title: 'GPT-5.6 Sol', input_usd_per_million_cents: 500, output_usd_per_million_cents: 3000 }),
-      Object.freeze({ id: 'gpt-5.6-terra', title: 'GPT-5.6 Terra', input_usd_per_million_cents: 250, output_usd_per_million_cents: 1500 }),
-      Object.freeze({ id: 'gpt-5.6-luna', title: 'GPT-5.6 Luna', input_usd_per_million_cents: 100, output_usd_per_million_cents: 600 }),
-      Object.freeze({ id: 'gpt-5.5', title: 'GPT-5.5', input_usd_per_million_cents: 500, output_usd_per_million_cents: 3000 }),
-    ]),
+const EXPECTED_CATALOG = Object.freeze(Object.fromEntries(MODEL_CATALOG.providers.map((provider) => [
+  provider.id,
+  Object.freeze({
+    title: provider.title,
+    default_model: provider.default_model,
+    models: Object.freeze(provider.models.map((model) => Object.freeze({ ...model }))),
   }),
-  anthropic: Object.freeze({
-    title: 'Anthropic',
-    default_model: 'claude-sonnet-5',
-    models: Object.freeze([
-      Object.freeze({ id: 'claude-fable-5', title: 'Claude Fable 5', input_usd_per_million_cents: 1000, output_usd_per_million_cents: 5000 }),
-      Object.freeze({ id: 'claude-opus-4-8', title: 'Claude Opus 4.8', input_usd_per_million_cents: 500, output_usd_per_million_cents: 2500 }),
-      Object.freeze({ id: 'claude-sonnet-5', title: 'Claude Sonnet 5', input_usd_per_million_cents: 300, output_usd_per_million_cents: 1500 }),
-      Object.freeze({ id: 'claude-haiku-4-5-20251001', title: 'Claude Haiku 4.5', input_usd_per_million_cents: 100, output_usd_per_million_cents: 500 }),
-    ]),
-  }),
-});
+])));
 const PROVIDER_IDS = new Set(Object.keys(EXPECTED_CATALOG));
 const MAX_PROVIDERS = PROVIDER_IDS.size;
 const MODEL_FIELDS = ['id', 'input_usd_per_million_cents', 'output_usd_per_million_cents', 'title'];
