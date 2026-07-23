@@ -759,6 +759,29 @@ def _session_valid(session_ok: Callable[[Mapping[str, str]], bool], cookies: Map
     return False
 
 
+async def _admit(
+    websocket: WebSocket,
+    team_id: object,
+    session_ok: Callable[[Mapping[str, str]], bool],
+) -> str | None:
+    origin = canonical_origin(websocket.headers.get("origin"))
+    if origin is None or origin not in ALLOWED_ORIGINS:
+        await websocket.close(code=4403)
+        return None
+    if not _has_subprotocol(websocket):
+        await websocket.close(code=4406)
+        return None
+    try:
+        canonical_id = teams.canonical_team_id(team_id)
+    except teams.TeamRequestError:
+        await websocket.close(code=4400)
+        return None
+    if not _session_valid(session_ok, websocket.cookies):
+        await websocket.close(code=4401)
+        return None
+    return canonical_id
+
+
 async def serve(
     websocket: WebSocket,
     team_id: object,
@@ -766,20 +789,8 @@ async def serve(
     session_ok: Callable[[Mapping[str, str]], bool],
 ) -> None:
     """Serve one authenticated local chat socket without letting it outlive its Admin session."""
-    origin = canonical_origin(websocket.headers.get("origin"))
-    if origin is None or origin not in ALLOWED_ORIGINS:
-        await websocket.close(code=4403)
-        return
-    if not _has_subprotocol(websocket):
-        await websocket.close(code=4406)
-        return
-    try:
-        canonical_id = teams.canonical_team_id(team_id)
-    except teams.TeamRequestError:
-        await websocket.close(code=4400)
-        return
-    if not _session_valid(session_ok, websocket.cookies):
-        await websocket.close(code=4401)
+    canonical_id = await _admit(websocket, team_id, session_ok)
+    if canonical_id is None:
         return
 
     await websocket.accept(subprotocol=CHAT_SUBPROTOCOL)
