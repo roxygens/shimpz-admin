@@ -33,7 +33,7 @@ class AuthHTTPTests(unittest.TestCase):
             payload,
             {"authenticated": False, "initialized": False, "features": {"teamCredentials": False}},
         )
-        self.assertEqual(request(port, "GET", "/api/state")[0], 401)
+        self.assertEqual(request(port, "GET", "/api/model-providers")[0], 401)
         self.assertEqual(request(port, "POST", "/api/admin/setup", {"password": "short"})[0], 400)
 
         status, payload, set_cookie = request(
@@ -45,7 +45,7 @@ class AuthHTTPTests(unittest.TestCase):
         session = session_cookie(set_cookie)
         self.assertEqual((status, payload), (200, {"ok": True}))
         self.assertIsNotNone(session)
-        self.assertEqual(request(port, "GET", "/api/state", session=session)[0], 200)
+        self.assertEqual(request(port, "GET", "/api/model-providers", session=session)[0], 200)
 
         self.assertEqual(store.stat().st_mode & 0o777, 0o600)
         disk = store.read_text(encoding="utf-8")
@@ -73,13 +73,13 @@ class AuthHTTPTests(unittest.TestCase):
         fresh_session = session_cookie(login_cookie)
         self.assertEqual((login_status, login_payload), (200, {"ok": True}))
         self.assertIsNotNone(fresh_session)
-        self.assertEqual(request(port, "GET", "/api/state", session=fresh_session)[0], 200)
+        self.assertEqual(request(port, "GET", "/api/model-providers", session=fresh_session)[0], 200)
 
-        self.assertEqual(request(port, "GET", "/api/state", session="garbage-not-a-token")[0], 401)
+        self.assertEqual(request(port, "GET", "/api/model-providers", session="garbage-not-a-token")[0], 401)
         expired = auth.issue_session(record["session_secret"], ttl=-10)
-        self.assertEqual(request(port, "GET", "/api/state", session=expired)[0], 401)
+        self.assertEqual(request(port, "GET", "/api/model-providers", session=expired)[0], 401)
         foreign = auth.issue_session(auth.new_secret())
-        self.assertEqual(request(port, "GET", "/api/state", session=foreign)[0], 401)
+        self.assertEqual(request(port, "GET", "/api/model-providers", session=foreign)[0], 401)
         self.assertEqual(request(port, "GET", "/")[0], 200)
 
 

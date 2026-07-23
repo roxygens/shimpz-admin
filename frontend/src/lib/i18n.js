@@ -1,7 +1,7 @@
 // Tiny i18n: a locale store, a dotted-key t() with English fallback, browser detection, and dir.
 // English (en) is the canonical baseline — every other locale falls back to it key-by-key, so a
 // partial translation never shows a blank; it shows English. Field help/guide text that isn't
-// localized here falls back further to the backend's English (served in /api/state).
+// localized here falls back further to the canonical English copy.
 import { writable, derived, get } from 'svelte/store';
 import { messages } from './messages.js';
 

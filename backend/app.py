@@ -5,13 +5,9 @@ while uninitialized (the panel binds loopback / sits behind Cloudflare Access; t
 forever the instant a password is set). After that, a signed session cookie (`shimpz_admin`) is the
 only way in. Query parameters never grant a session.
 
-The static SPA + the auth endpoints are open (the login form carries no secret); everything that
-reads or writes the keyset requires a valid session. Secrets flow IN via /api/validate + /api/apply
-and are never logged; reads expose only `set` + masked last4 (envfile.mask).
-
-This process holds NO docker.sock and never runs `docker compose`: it edits `.env` and reports
-config only. Booting the stack is `scripts/shimpz-init && docker compose up`; recreating a service
-after a config change is the marketplace's job (via shimpz-driver), not this app's.
+The static SPA + the auth endpoints are open (the login form carries no secret); every Team,
+Assistant, model-provider, OAuth, notification, and chat endpoint requires a valid session. This
+process holds no Docker socket and has no host configuration write surface.
 """
 
 import asyncio
@@ -32,26 +28,18 @@ from starlette.formparsers import MultiPartException, MultiPartParser
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import adminstore
 import auth
-import catalog
 import chat_ws
-import envfile
-import integrations
-import keyset
 import localchat
 import modelproviders
 import notifications
 import oauth_handoff
 import teams
-import validate_live
 
 log = logging.getLogger("shimpz-admin")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 TEAM_CREDENTIALS_ENABLED = os.environ.get("SHIMPZ_TEAM_CREDENTIALS_ENABLED", "1").strip() == "1"
 
-REPO = Path(os.environ.get("SHIMPZ_REPO") or Path(__file__).resolve().parents[3])
-ENV_PATH = REPO / ".env"
-EXAMPLE_PATH = REPO / ".env.example"  # the scaffolding baseline (mounted :ro); see `_configured`
 UI_DIR = Path(__file__).resolve().parent.parent / "frontend" / "build"
 COOKIE = "shimpz_admin"
 OAUTH_COOKIE = "shimpz_oauth_binding"
@@ -65,10 +53,6 @@ OAUTH_ORIGINS = {
 MIN_PASSWORD_LEN = 12
 MAX_TEAM_DELETE_BODY_BYTES = 8 * 1024
 MAX_ADMIN_PASSWORD_CHARS = 4 * 1024
-
-# Boot preflight: an upgraded install must explicitly remove and rotate deprecated global Brain keys.
-# The exception names only offending variable names, never their values.
-envfile.read(ENV_PATH)
 
 # Open surface: the SPA shell (served for any non-/api path) + these auth endpoints. Everything
 # else under /api/ needs a session.
@@ -193,169 +177,6 @@ async def admin_setup(request: Request, payload: dict):
     _set_session(resp, request, auth.issue_session(adminstore.get()["session_secret"]))
     log.info("admin password created")
     return resp
-
-
-def _field_view(f, values):
-    """The masked, UI-safe view of one keyset field (never the whole secret)."""
-    return {
-        "key": f["key"],
-        "group": f["group"],
-        "required": f["required"],
-        "generated": f["generate"],
-        "secret": f["secret"],
-        "set": bool(values.get(f["key"], "").strip()),
-        "masked": envfile.mask(values.get(f["key"], "")) if f["secret"] else values.get(f["key"], ""),
-        "help": f["help"],
-        "live": bool(f["validator"] and f["validator"].startswith("live_")),
-        "guide": keyset.GUIDES.get(f["key"]),
-    }
-
-
-def _example_defaults():
-    """The `.env.example` scaffolding values — the baseline a fresh `cp .env.example .env` starts from.
-
-    Mounted read-only into the container (docker-compose.yml). Read per request (a tiny file); a card
-    reads as "configured" only when a field DIFFERS from its default here (see `_configured`). Absent
-    → `{}` (every field then compares against ""); the compose mount is pinned by a test.
-    """
-    return envfile.read(EXAMPLE_PATH) if EXAMPLE_PATH.exists() else {}
-
-
-def _configured(fields, values, defaults):
-    """True when the user configured this card — a field set to a non-default, non-generated value.
-
-    A fresh install is `cp .env.example .env`, so only a value the user changed or provided counts.
-    Generated values and unchanged scaffolding defaults do not mark an integration as configured.
-    """
-    return any(
-        not f["generated"] and (v := values.get(f["key"], "").strip()) and v != defaults.get(f["key"], "").strip()
-        for f in fields
-    )
-
-
-def _persist(updates):
-    """Validate then write `updates` to `.env` (with generated internals). → (applied, results, generated).
-
-    A bad non-empty value blocks the whole batch (applied=False, nothing written); an empty optional
-    doesn't. Shared by /api/apply and /api/integrations/{group}.
-    """
-    results, failed = {}, False
-    for k, v in updates.items():
-        try:
-            ok, detail = validate_live.validate(k, v)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from None
-        results[k] = {"ok": ok, "detail": detail}
-        failed = failed or (not ok and v.strip())
-    if failed:
-        return False, results, []
-    merged = envfile.merge(envfile.read(ENV_PATH), updates)
-    generated = keyset.generate_internal(merged)
-    merged.update(generated)
-    envfile.write(ENV_PATH, merged)
-    return True, results, sorted(generated)
-
-
-def _maybe_recreate(group, *, enabled=True):
-    """Make a saved integration take effect live: recreate its consuming sidecar via shimpz-driver.
-
-    Only the stateless capability sidecars carry a `recreate_target`; everything else just reports that
-    it applies on the next restart. Disabling recreates the sidecar INERT (empty secrets). Never fatal:
-    the `.env` write already succeeded, so a failed apply is surfaced (ok=False), never raised.
-    """
-    target = catalog.entry(group)["recreate_target"]
-    if not target:
-        return {"target": None, "note": "saved; applies on the next restart of the affected service"}
-    env = catalog.container_env_for(group, envfile.read(ENV_PATH))
-    if not enabled:
-        env = dict.fromkeys(env, "")  # disable = recreate the sidecar with empty secrets (inert boot)
-    ok, body = integrations.recreate(target, env)
-    detail = body.get("health") or body.get("error") or ("recreated" if ok else "apply failed")
-    return {"target": target, "ok": ok, "detail": detail}
-
-
-@app.get("/api/state")
-async def state():
-    values = envfile.read(ENV_PATH)
-    fields = [_field_view(f, values) for f in keyset.SCHEMA]
-    return {"fields": fields, "env_path": str(ENV_PATH), "env_exists": ENV_PATH.exists()}
-
-
-@app.get("/api/integrations")
-async def integrations_list():
-    values = envfile.read(ENV_PATH)
-    defaults = _example_defaults()
-    store = integrations.read()
-    out = []
-    for group, meta in catalog.CATALOG.items():
-        fields = [_field_view(keyset.BY_KEY[k], values) for k in catalog.keys_for(group)]
-        configured = _configured(fields, values, defaults)
-        out.append(
-            {
-                "group": group,
-                "public_name": meta["public_name"],
-                "category": meta["category"],
-                "blurb": meta["blurb"],
-                "reconfigurable": meta["reconfigurable"],
-                "auto_apply": meta["recreate_target"] is not None,
-                "configured": configured,
-                "enabled": store.get(group, {}).get("enabled", configured),
-                "fields": fields,
-            }
-        )
-    return {"integrations": out, "categories": list(catalog.CATEGORIES)}
-
-
-@app.post("/api/integrations/{group}")
-async def integrations_save(group: str, payload: dict):
-    try:
-        catalog.entry(group)
-        group_keys = set(catalog.keys_for(group))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
-    updates = {str(k): str(v) for k, v in dict(payload.get("values", {})).items()}
-    stray = sorted(k for k in updates if k not in group_keys)
-    if stray:
-        raise HTTPException(status_code=400, detail=f"keys not in integration {group!r}: {stray}")
-    applied, results, generated = _persist(updates)
-    if not applied:
-        return JSONResponse(status_code=400, content={"applied": False, "results": results})
-    integrations.set_group(group, enabled=True)
-    log.info("integration %s saved (%d keys, +%d generated)", group, len(updates), len(generated))
-    return {"applied": True, "results": results, "generated": generated, "recreate": _maybe_recreate(group)}
-
-
-@app.post("/api/integrations/{group}/toggle")
-async def integrations_toggle(group: str, payload: dict):
-    try:
-        catalog.entry(group)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from None
-    enabled = bool(payload.get("enabled"))
-    integrations.set_group(group, enabled=enabled)
-    log.info("integration %s toggled -> enabled=%s", group, enabled)
-    return {"enabled": enabled, "recreate": _maybe_recreate(group, enabled=enabled)}
-
-
-@app.post("/api/validate")
-async def validate(payload: dict):
-    key, value = str(payload.get("key", "")), str(payload.get("value", ""))
-    try:
-        ok, detail = validate_live.validate(key, value)
-    except ValueError as e:  # unknown key — the fail-fast contract
-        raise HTTPException(status_code=400, detail=str(e)) from None
-    log.info("validate %s -> %s", key, "ok" if ok else "fail")  # never the value
-    return {"key": key, "ok": ok, "detail": detail}
-
-
-@app.post("/api/apply")
-async def apply(payload: dict):
-    updates = {str(k): str(v) for k, v in dict(payload.get("values", {})).items()}
-    applied, results, generated = _persist(updates)
-    if not applied:
-        return JSONResponse(status_code=400, content={"applied": False, "results": results})
-    log.info("applied %d keys (+%d generated) -> %s", len(updates), len(generated), ENV_PATH)
-    return {"applied": True, "results": results, "generated": generated}
 
 
 # ── Teams + Assistants: authenticated control plane for team-driver. Every route stays under

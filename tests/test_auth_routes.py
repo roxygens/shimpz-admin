@@ -94,7 +94,10 @@ class AuthRouteTests(unittest.TestCase):
             self.fail("a query token reached a session-gated endpoint")
 
         guarded = asyncio.run(
-            self.admin_app._gate(self._request("/api/state?token=retired-token-must-be-inert"), should_not_run)
+            self.admin_app._gate(
+                self._request("/api/model-providers?token=retired-token-must-be-inert"),
+                should_not_run,
+            )
         )
         self.assertEqual(guarded.status_code, 401)
         self.assertFalse(self.admin_app.adminstore.is_initialized())
