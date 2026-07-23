@@ -34,7 +34,9 @@ class SpaFallbackTests(unittest.TestCase):
                 "SHIMPZ_REPO": str(cls.root),
                 "SHIMPZ_ADMIN_STORE": str(cls.root / "admin.json"),
             },
-        ):
+        ), mock.patch.object(Path, "is_dir", return_value=True):
+            # Register the production SPA route even in a clean source checkout, where the
+            # frontend build directory is intentionally absent until the image build.
             sys.modules.pop("app", None)
             cls.admin_app = importlib.import_module("app")
 
