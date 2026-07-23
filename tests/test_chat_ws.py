@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import chat_ws_fixtures
 import uvicorn
 import websockets
 from websockets.exceptions import InvalidStatus
@@ -21,145 +22,16 @@ from websockets.exceptions import InvalidStatus
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-TURN_ID = "a" * 32
-CHALLENGE_ID = "b" * 32
-
-
-def _requirements() -> list[dict[str, object]]:
-    return [
-        {
-            "assistant_id": "weather-guide",
-            "assistant_name": "Weather Guide",
-            "power_ids": ["current-weather", "daily-forecast"],
-            "secrets": [
-                {
-                    "id": "weather-api-token",
-                    "name": "Weather API token",
-                    "summary": "Authenticates requests to the configured weather provider.",
-                }
-            ],
-        }
-    ]
-
-
-def _challenge(status: int = 428) -> object:
-    localchat_module = importlib.import_module("localchat")
-    return localchat_module.PublicResponse(
-        status,
-        {
-            "team_id": "team_1",
-            "status": "secrets-required",
-            "turn_id": TURN_ID,
-            "challenge_id": CHALLENGE_ID,
-            "requirements": _requirements(),
-        },
-    )
-
-
-def _approval_requirements() -> list[dict[str, object]]:
-    return [
-        {
-            "assistant_id": "social-publisher",
-            "assistant_name": "Social Publisher",
-            "power_id": "create-post",
-            "title": "Publish post",
-            "summary": "Publish this exact post on X.",
-            "docs": "https://docs.example.com/publish",
-            "approval": "once",
-        },
-    ]
-
-
-def _approval_challenge(status: int = 428) -> object:
-    localchat_module = importlib.import_module("localchat")
-    return localchat_module.PublicResponse(
-        status,
-        {
-            "team_id": "team_1",
-            "status": "approval-required",
-            "turn_id": TURN_ID,
-            "challenge_id": CHALLENGE_ID,
-            "requirements": _approval_requirements(),
-        },
-    )
-
-
-def _input_challenge(request_type: str, answer_options: list[str] | None = None, status: int = 428) -> object:
-    localchat_module = importlib.import_module("localchat")
-    return localchat_module.PublicResponse(
-        status,
-        {
-            "team_id": "team_1",
-            "status": "input-required",
-            "turn_id": TURN_ID,
-            "challenge_id": CHALLENGE_ID,
-            "request": {
-                "type": request_type,
-                "title": "Choose",
-                "summary": "Provide one value.",
-                "docs": None,
-                "options": answer_options or [],
-            },
-        },
-    )
-
-
-def _account_requirements() -> list[dict[str, object]]:
-    return [
-        {
-            "assistant_id": "social-publisher",
-            "assistant_name": "Social Publisher",
-            "account_id": "x-account",
-            "provider": "x",
-            "name": "X account",
-            "summary": "Lets approved Powers access the connected X account.",
-            "scopes": ["tweet.read", "tweet.write", "users.read", "offline.access"],
-            "powers": [
-                {"id": "profile-me", "name": "Read profile", "summary": "Read the connected X profile."},
-                {"id": "create-post", "name": "Create post", "summary": "Publish a post on X."},
-            ],
-        }
-    ]
-
-
-def _account_challenge(status: int = 428) -> object:
-    localchat_module = importlib.import_module("localchat")
-    return localchat_module.PublicResponse(
-        status,
-        {
-            "team_id": "team_1",
-            "status": "accounts-required",
-            "turn_id": TURN_ID,
-            "challenge_id": CHALLENGE_ID,
-            "expires_in": 300,
-            "requirements": _account_requirements(),
-        },
-    )
-
-
-def _inventory() -> object:
-    localchat_module = importlib.import_module("localchat")
-    return localchat_module.PublicResponse(
-        200,
-        {
-            "team_id": "team_1",
-            "assistants": [
-                {
-                    "id": "weather-guide",
-                    "name": "Weather Guide",
-                    "secrets": [
-                        {
-                            "id": "weather-api-token",
-                            "name": "Weather API token",
-                            "summary": "Authenticates requests to the configured weather provider.",
-                            "configured": True,
-                            "mask": "sk…89",
-                        }
-                    ],
-                }
-            ],
-        },
-    )
+TURN_ID = chat_ws_fixtures.TURN_ID
+CHALLENGE_ID = chat_ws_fixtures.CHALLENGE_ID
+_account_challenge = chat_ws_fixtures.account_challenge
+_account_requirements = chat_ws_fixtures.account_requirements
+_approval_challenge = chat_ws_fixtures.approval_challenge
+_approval_requirements = chat_ws_fixtures.approval_requirements
+_challenge = chat_ws_fixtures.challenge
+_input_challenge = chat_ws_fixtures.input_challenge
+_inventory = chat_ws_fixtures.inventory
+_requirements = chat_ws_fixtures.requirements
 
 
 class _Socket:
