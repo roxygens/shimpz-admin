@@ -790,51 +790,58 @@ def _multipart_file_body(boundary: str, content: bytes) -> bytes:
     )
 
 
-def _run_asgi_probe(scenario: str) -> None:
-    """Fresh-process route probe: real env, store, session, ASGI middleware and HTTP bridge."""
+def _probe_routes(admin_app, token: str) -> dict[str, object]:
+    routes = {
+        (route.path, method) for route in admin_app.app.routes for method in (getattr(route, "methods", None) or set())
+    }
+    expected = {
+        ("/api/assistants", "GET"),
+        ("/api/teams/{team_id}", "DELETE"),
+        ("/api/teams/{team_id}/assistants", "GET"),
+        ("/api/teams/{team_id}/assistants", "POST"),
+        ("/api/teams/{team_id}/assistants/{assistant_id}", "DELETE"),
+        ("/api/teams/{team_id}/assistants/{assistant_id}/help", "GET"),
+        ("/api/teams/{team_id}/files", "GET"),
+        ("/api/teams/{team_id}/files", "POST"),
+        ("/api/teams/{team_id}/files/{file_id}", "DELETE"),
+    }
+    status, body = asyncio.run(_asgi_request(admin_app, "GET", "/api/assistants"))
+    power_status, _power_body = asyncio.run(
+        _asgi_request(
+            admin_app,
+            "POST",
+            "/api/teams/team_1/assistants/hello-pulse/powers/hello",
+            b'{"name":"Captain"}',
+            token=token,
+        )
+    )
+    return {
+        "routes_ok": expected.issubset(routes),
+        "closed_api_ok": all(path not in admin_app.OPEN_API for path, _method in expected),
+        "legacy_operations_absent": not any("/operations/" in path for path, _method in routes),
+        "power_routes_absent": not any("/powers/" in path for path, _method in routes),
+        "power_status": power_status,
+        "anonymous_status": status,
+        "anonymous_body": body,
+    }
+
+
+def _probe_session():
     import adminstore
     import app as admin_app
     import auth
 
     adminstore.set_password("test-admin-password")
     token = auth.issue_session(adminstore.get()["session_secret"])
+    return admin_app, token
+
+
+def _run_asgi_probe(scenario: str) -> None:
+    """Fresh-process route probe: real env, store, session, ASGI middleware and HTTP bridge."""
+    admin_app, token = _probe_session()
 
     if scenario == "routes":
-        routes = {
-            (route.path, method)
-            for route in admin_app.app.routes
-            for method in (getattr(route, "methods", None) or set())
-        }
-        expected = {
-            ("/api/assistants", "GET"),
-            ("/api/teams/{team_id}", "DELETE"),
-            ("/api/teams/{team_id}/assistants", "GET"),
-            ("/api/teams/{team_id}/assistants", "POST"),
-            ("/api/teams/{team_id}/assistants/{assistant_id}", "DELETE"),
-            ("/api/teams/{team_id}/assistants/{assistant_id}/help", "GET"),
-            ("/api/teams/{team_id}/files", "GET"),
-            ("/api/teams/{team_id}/files", "POST"),
-            ("/api/teams/{team_id}/files/{file_id}", "DELETE"),
-        }
-        status, body = asyncio.run(_asgi_request(admin_app, "GET", "/api/assistants"))
-        power_status, _power_body = asyncio.run(
-            _asgi_request(
-                admin_app,
-                "POST",
-                "/api/teams/team_1/assistants/hello-pulse/powers/hello",
-                b'{"name":"Captain"}',
-                token=token,
-            )
-        )
-        output = {
-            "routes_ok": expected.issubset(routes),
-            "closed_api_ok": all(path not in admin_app.OPEN_API for path, _method in expected),
-            "legacy_operations_absent": not any("/operations/" in path for path, _method in routes),
-            "power_routes_absent": not any("/powers/" in path for path, _method in routes),
-            "power_status": power_status,
-            "anonymous_status": status,
-            "anonymous_body": body,
-        }
+        output = _probe_routes(admin_app, token)
     elif scenario == "install-conflict":
         payload = json.dumps({"assistant": "hello-pulse"}, separators=(",", ":")).encode()
         status, body = asyncio.run(
