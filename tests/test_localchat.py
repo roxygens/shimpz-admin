@@ -16,6 +16,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
+import driver_client
 import localchat
 import modelproviders
 import teams
@@ -109,14 +110,13 @@ class PrivateChatTransportTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.token_file = Path(self.temporary.name) / "token"
         self.token_file.write_text("controller-test-token", encoding="ascii")
-        self.previous_url = teams.URL
-        self.previous_token = teams.TOKEN_FILE
-        teams.URL = f"http://127.0.0.1:{self.server.server_port}"
-        teams.TOKEN_FILE = str(self.token_file)
+        self.previous_url, self.previous_token = driver_client.URL, driver_client.TOKEN_FILE
+        driver_client.URL = f"http://127.0.0.1:{self.server.server_port}"
+        driver_client.TOKEN_FILE = str(self.token_file)
 
     def tearDown(self) -> None:
-        teams.URL = self.previous_url
-        teams.TOKEN_FILE = self.previous_token
+        driver_client.URL = self.previous_url
+        driver_client.TOKEN_FILE = self.previous_token
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=2)

@@ -19,6 +19,7 @@ from urllib.parse import urlencode
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
+import driver_client
 import teams
 
 
@@ -124,15 +125,15 @@ class _LiveDriverCase(unittest.TestCase):
 class TeamAssistantBridgeTest(_LiveDriverCase):
     def setUp(self):
         super().setUp()
-        self.original_token_file = teams.TOKEN_FILE
-        self.original_url = teams.URL
-        teams.TOKEN_FILE = str(self.token_file)
-        teams.URL = self.driver_url
+        self.original_token_file = driver_client.TOKEN_FILE
+        self.original_url = driver_client.URL
+        driver_client.TOKEN_FILE = str(self.token_file)
+        driver_client.URL = self.driver_url
         self.addCleanup(self._restore_bridge_config)
 
     def _restore_bridge_config(self):
-        teams.TOKEN_FILE = self.original_token_file
-        teams.URL = self.original_url
+        driver_client.TOKEN_FILE = self.original_token_file
+        driver_client.URL = self.original_url
 
     def test_forwards_only_the_fixed_assistant_routes_with_existing_bearer(self):
         teams.list_assistants()
