@@ -91,6 +91,26 @@ def _approval_challenge(status: int = 428) -> object:
     )
 
 
+def _input_challenge(request_type: str, answer_options: list[str] | None = None, status: int = 428) -> object:
+    localchat_module = importlib.import_module("localchat")
+    return localchat_module.PublicResponse(
+        status,
+        {
+            "team_id": "team_1",
+            "status": "input-required",
+            "turn_id": TURN_ID,
+            "challenge_id": CHALLENGE_ID,
+            "request": {
+                "type": request_type,
+                "title": "Choose",
+                "summary": "Provide one value.",
+                "docs": None,
+                "options": answer_options or [],
+            },
+        },
+    )
+
+
 def _account_requirements() -> list[dict[str, object]]:
     return [
         {
@@ -382,6 +402,62 @@ class ChatWebSocketTests(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             _approval_challenge().body["requirements"][0]["approval"] = "each-run"
+
+    def test_typed_input_frames_resume_all_six_request_types(self) -> None:
+        async def scenario() -> None:
+            cases = (
+                ("str", [], "Ada"),
+                ("int", [], 3),
+                ("float", [], 3.5),
+                ("bool", [], True),
+                ("choice", ["one", "two"], "two"),
+                ("choices", ["one", "two"], ["one", "two"]),
+            )
+            completed = self.chat_ws.localchat.PublicResponse(
+                200,
+                {"team_id": "team_1", "team_name": "Marketing", "reply": "Answered."},
+            )
+            for request_type, options, answer in cases:
+                with (
+                    self.subTest(request_type=request_type),
+                    mock.patch.object(
+                        self.chat_ws.localchat,
+                        "turn",
+                        return_value=_input_challenge(request_type, options),
+                    ),
+                    mock.patch.object(self.chat_ws.localchat, "submit_input", return_value=completed) as submit,
+                ):
+                    websocket = _Socket(self.admin_app.app, token=self.token)
+                    self.assertTrue(self._accepted(await websocket.start()))
+                    await websocket.send_json(
+                        {"type": "chat", "message": "ask", "files": [], "assistant_ids": ["weather-guide"]}
+                    )
+                    self.assertEqual(
+                        await websocket.next_json(),
+                        {
+                            "type": "input-required",
+                            "turn_id": TURN_ID,
+                            "challenge_id": CHALLENGE_ID,
+                            "request": {
+                                "type": request_type,
+                                "title": "Choose",
+                                "summary": "Provide one value.",
+                                "docs": None,
+                                "options": options,
+                            },
+                        },
+                    )
+                    await websocket.send_json(
+                        {"type": "input-submit", "challenge_id": CHALLENGE_ID, "answer": answer}
+                    )
+                    self.assertEqual((await websocket.next_json())["type"], "done")
+                    submit.assert_called_once_with(
+                        "team_1",
+                        {"challenge_id": CHALLENGE_ID, "answer": answer},
+                    )
+                    await websocket.disconnect()
+
+        asyncio.run(scenario())
 
     def test_account_events_are_exact_and_never_project_oauth_material(self) -> None:
         expected = {
@@ -760,6 +836,11 @@ class ChatWebSocketTests(unittest.TestCase):
                     mock.patch.object(
                         self.chat_ws.localchat,
                         "pending_approval",
+                        return_value=none_pending,
+                    ),
+                    mock.patch.object(
+                        self.chat_ws.localchat,
+                        "pending_input",
                         return_value=none_pending,
                     ),
                 ):
