@@ -368,42 +368,6 @@ def _sync_snapshot(team_id: str) -> tuple[object, object, object | None, object 
     )
 
 
-def _pending_secret_event(response: object, team_id: str) -> dict[str, object] | None:
-    if (
-        isinstance(response, teams.DriverResponse)
-        and isinstance(response.status, int)
-        and not isinstance(response.status, bool)
-        and 200 <= response.status < 300
-        and isinstance(response.body, dict)
-        and set(response.body) == {"team_id", "status"}
-        and response.body.get("team_id") == team_id
-        and response.body.get("status") == "none"
-    ):
-        return None
-    return secret_challenge_event(response, team_id)
-
-
-def _pending_approval_event(response: object, team_id: str) -> dict[str, object] | None:
-    if (
-        isinstance(response, teams.DriverResponse)
-        and isinstance(response.status, int)
-        and not isinstance(response.status, bool)
-        and 200 <= response.status < 300
-        and isinstance(response.body, dict)
-        and set(response.body) == {"team_id", "status"}
-        and response.body.get("team_id") == team_id
-        and response.body.get("status") == "none"
-    ):
-        return None
-    return approval_challenge_event(response, team_id)
-
-
-def _pending_input_event(response: object, team_id: str) -> dict[str, object] | None:
-    if _is_empty_pending(response, team_id):
-        return None
-    return input_challenge_event(response, team_id)
-
-
 def _is_empty_pending(response: object, team_id: str) -> bool:
     return (
         isinstance(response, teams.DriverResponse)
@@ -434,9 +398,9 @@ def _select_synced_challenge(
 ) -> tuple[dict[str, object] | None, str | None, dict[str, object] | None]:
     candidates: list[tuple[dict[str, object], str]] = []
     for response, projector, challenge_type in (
-        (secret_response, _pending_secret_event, "secret"),
-        (input_response, _pending_input_event, "input"),
-        (approval_response, _pending_approval_event, "approval"),
+        (secret_response, secret_challenge_event, "secret"),
+        (input_response, input_challenge_event, "input"),
+        (approval_response, approval_challenge_event, "approval"),
     ):
         challenge = projector(response, team_id)
         if challenge is not None:
