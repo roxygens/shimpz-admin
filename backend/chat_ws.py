@@ -468,19 +468,53 @@ async def _deliver_account_sync(
     return True
 
 
+async def _load_sync_snapshot(
+    websocket: WebSocket,
+    team_id: str,
+) -> tuple[object, object, object | None, object | None, object | None, object | None] | None:
+    try:
+        future = _SYNC_EXECUTOR.submit(_sync_snapshot, team_id)
+    except ExecutorSaturatedError:
+        await _send_event(websocket, _error_terminal(429, "local chat capacity reached"))
+        return None
+    snapshot = None
+    with contextlib.suppress(Exception):
+        snapshot = await asyncio.wrap_future(future)
+    if snapshot is None:
+        await _send_event(websocket, _error_terminal(502))
+    return snapshot
+
+
+async def _deliver_sync_inventory(
+    websocket: WebSocket,
+    connection: _Connection,
+    team_id: str,
+    response: object,
+) -> bool:
+    inventory = secret_inventory_event(response, team_id)
+    if inventory is None:
+        if (
+            isinstance(response, teams.DriverResponse)
+            and isinstance(response.status, int)
+            and not isinstance(response.status, bool)
+            and not 200 <= response.status < 300
+        ):
+            event = turn_terminal(response, team_id)
+        else:
+            event = _error_terminal(502, "the Assistant secret inventory was invalid")
+        await _send_event(websocket, event)
+        return False
+    if not await _send_event(websocket, inventory):
+        connection.closed = True
+        return False
+    return True
+
+
 async def _deliver_sync(websocket: WebSocket, connection: _Connection, team_id: str) -> None:
     task = asyncio.current_task()
     try:
-        snapshot: tuple[object, object, object | None, object | None, object | None, object | None] | None = None
-        try:
-            future = _SYNC_EXECUTOR.submit(_sync_snapshot, team_id)
-        except ExecutorSaturatedError:
-            await _send_event(websocket, _error_terminal(429, "local chat capacity reached"))
-            return
-        with contextlib.suppress(Exception):
-            snapshot = await asyncio.wrap_future(future)
+        snapshot = await _load_sync_snapshot(websocket, team_id)
         if snapshot is None:
-            await _send_event(websocket, _error_terminal(502))
             return
         (
             inventory_response,
@@ -490,24 +524,12 @@ async def _deliver_sync(websocket: WebSocket, connection: _Connection, team_id: 
             pending_input_response,
             pending_approval_response,
         ) = snapshot
-        if connection.closed:
-            return
-
-        inventory = secret_inventory_event(inventory_response, team_id)
-        if inventory is None:
-            if (
-                isinstance(inventory_response, teams.DriverResponse)
-                and isinstance(inventory_response.status, int)
-                and not isinstance(inventory_response.status, bool)
-                and not 200 <= inventory_response.status < 300
-            ):
-                event = turn_terminal(inventory_response, team_id)
-            else:
-                event = _error_terminal(502, "the Assistant secret inventory was invalid")
-            await _send_event(websocket, event)
-            return
-        if not await _send_event(websocket, inventory):
-            connection.closed = True
+        if connection.closed or not await _deliver_sync_inventory(
+            websocket,
+            connection,
+            team_id,
+            inventory_response,
+        ):
             return
 
         if await _deliver_account_sync(
