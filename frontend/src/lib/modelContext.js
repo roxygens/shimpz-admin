@@ -20,6 +20,23 @@ function emptyContext() {
 export const modelContext = writable(emptyContext());
 
 let generation = 0;
+let providerCatalogCache = null;
+let providerCatalogRequest = null;
+
+function cachedModelProviders(fetcher) {
+  if (providerCatalogCache) return Promise.resolve(providerCatalogCache);
+  if (providerCatalogRequest) return providerCatalogRequest;
+  const request = listModelProviders(fetcher)
+    .then((providers) => {
+      if (providerCatalogRequest === request) providerCatalogCache = providers;
+      return providers;
+    })
+    .finally(() => {
+      if (providerCatalogRequest === request) providerCatalogRequest = null;
+    });
+  providerCatalogRequest = request;
+  return request;
+}
 
 function requireRequest(fetcher, teamId) {
   if (typeof fetcher !== 'function' || typeof teamId !== 'string' || !TEAM_ID_RE.test(teamId)) {
@@ -50,7 +67,14 @@ function fail(attempt, error, state) {
 
 export function clearModelContext() {
   generation += 1;
+  providerCatalogCache = null;
+  providerCatalogRequest = null;
   modelContext.set(emptyContext());
+}
+
+export function preloadModelProviders(fetcher) {
+  if (typeof fetcher !== 'function') throw new LocalApiError('Invalid model provider request.');
+  return cachedModelProviders(fetcher);
 }
 
 export async function loadModelContext(fetcher, teamId) {
@@ -60,7 +84,7 @@ export async function loadModelContext(fetcher, teamId) {
   modelContext.set(loading);
   try {
     const [providers, inference] = await Promise.all([
-      listModelProviders(fetcher),
+      cachedModelProviders(fetcher),
       loadInference(fetcher, teamId),
     ]);
     const selected = inference
@@ -112,6 +136,7 @@ async function persist(fetcher, teamId, apiKey = '') {
     const providers = current.providers.map((entry) => (
       entry.id === result.providerState.id ? result.providerState : entry
     ));
+    providerCatalogCache = providers;
     const snapshot = {
       ...saving,
       phase: 'ready',

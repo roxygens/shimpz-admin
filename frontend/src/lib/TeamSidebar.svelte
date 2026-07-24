@@ -4,7 +4,12 @@
   import { onMount } from 'svelte';
 
   import { locale } from '$lib/i18n.js';
-  import { clearModelContext, loadModelContext, modelContext } from '$lib/modelContext.js';
+  import {
+    clearModelContext,
+    loadModelContext,
+    modelContext,
+    preloadModelProviders,
+  } from '$lib/modelContext.js';
   import { ASSISTANT_RUNTIME_UPDATED_EVENT } from '$lib/notifications.js';
   import { loadTeamContext, refreshTeamInventory, selectTeam, teamContext } from '$lib/teamContext.js';
 
@@ -77,6 +82,7 @@
   });
 
   onMount(() => {
+    preloadModelProviders(fetch).catch(() => {});
     if ($teamContext.phase === 'idle') {
       loadTeamContext(fetch, requestedTeamId).catch(() => {});
     }

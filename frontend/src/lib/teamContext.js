@@ -35,6 +35,23 @@ export const teamContext = writable(emptyContext());
 
 let generation = 0;
 const assistantIntents = new Map();
+let assistantCatalogCache = null;
+let assistantCatalogRequest = null;
+
+function cachedAssistantCatalog(fetcher) {
+  if (assistantCatalogCache) return Promise.resolve(assistantCatalogCache);
+  if (assistantCatalogRequest) return assistantCatalogRequest;
+  const request = listAssistantCatalog(fetcher)
+    .then((catalog) => {
+      if (assistantCatalogRequest === request) assistantCatalogCache = catalog;
+      return catalog;
+    })
+    .finally(() => {
+      if (assistantCatalogRequest === request) assistantCatalogRequest = null;
+    });
+  assistantCatalogRequest = request;
+  return request;
+}
 
 function intentStorage() {
   try {
@@ -251,13 +268,16 @@ function markFailure(attempt, error, fallback, clearAuthority) {
 }
 
 async function hydrate(fetcher, preferredId, attempt, previousId = '') {
-  const teams = await listTeams(fetcher);
+  const [teams, catalog] = await Promise.all([
+    listTeams(fetcher),
+    cachedAssistantCatalog(fetcher),
+  ]);
   const selectedTeamId = selectAvailableTeam(teams, preferredId, previousId);
   if (!selectedTeamId) {
     const snapshot = {
       teams,
       selectedTeamId: '',
-      catalog: [],
+      catalog,
       installedAssistants: [],
       selectedAssistantIds: [],
       files: [],
@@ -273,7 +293,6 @@ async function hydrate(fetcher, preferredId, attempt, previousId = '') {
     return snapshot;
   }
 
-  const catalog = await listAssistantCatalog(fetcher);
   const inventory = await inventorySnapshot(fetcher, selectedTeamId, catalog);
   const selectedAssistantIds = reconcileAssistantIntent(
     selectedTeamId,
@@ -502,6 +521,8 @@ export function selectOnlyTeamAssistant(id) {
 
 export function clearTeamContext() {
   generation += 1;
+  assistantCatalogCache = null;
+  assistantCatalogRequest = null;
   assistantIntents.clear();
   teamContext.set(emptyContext());
 }

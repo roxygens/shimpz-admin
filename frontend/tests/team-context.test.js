@@ -147,27 +147,77 @@ test('file selection accepts only current files and enforces the chat limit', as
   assert.equal(get(teamContext).selectedFileIds.length, 7);
 });
 
-test('a confirmed empty inventory is ready while malformed Team data fails closed', async () => {
+test('Team and Assistant catalogs load in parallel and the validated catalog is reused', async () => {
+  let releaseTeams;
+  let releaseCatalog;
+  let teamRequests = 0;
+  let catalogRequests = 0;
+  const teams = new Promise((resolve) => { releaseTeams = resolve; });
+  const catalog = new Promise((resolve) => { releaseCatalog = resolve; });
+  const fetcher = fixtureFetcher({
+    '/api/teams': async () => {
+      teamRequests += 1;
+      return teams;
+    },
+    '/api/assistants': async () => {
+      catalogRequests += 1;
+      return catalog;
+    },
+  });
+
+  const pending = loadTeamContext(fetcher, 'marketing');
+  assert.equal(teamRequests, 1);
+  assert.equal(catalogRequests, 1);
+  releaseTeams(response(200, {
+    teams: [{ team_id: 'marketing', team_name: 'Marketing', status: 'running' }],
+  }));
+  releaseCatalog(response(200, {
+    assistants: [
+      { id: 'hello-pulse', title: 'Hello Pulse' },
+      { id: 'salesnator', title: 'Salesnator' },
+    ],
+  }));
+  await pending;
+
+  await loadTeamContext(fixtureFetcher({
+    '/api/assistants': async () => {
+      catalogRequests += 1;
+      return response(200, { assistants: [] });
+    },
+  }), 'support');
+  assert.equal(catalogRequests, 1);
+  assert.equal(get(teamContext).selectedTeamId, 'support');
+});
+
+test('a confirmed empty inventory retains the catalog while malformed Team data fails closed', async () => {
   let catalogRequests = 0;
   await loadTeamContext(fixtureFetcher({
     '/api/teams': async () => response(200, { teams: [] }),
     '/api/assistants': async () => {
       catalogRequests += 1;
-      return response(503, { error: 'catalog unavailable' });
+      return response(200, {
+        assistants: [
+          { id: 'hello-pulse', title: 'Hello Pulse' },
+          { id: 'salesnator', title: 'Salesnator' },
+        ],
+      });
     },
   }));
   assert.deepEqual(get(teamContext), {
     phase: 'ready',
     teams: [],
     selectedTeamId: '',
-    catalog: [],
+    catalog: [
+      { id: 'hello-pulse', name: 'Hello Pulse' },
+      { id: 'salesnator', name: 'Salesnator' },
+    ],
     installedAssistants: [],
     selectedAssistantIds: [],
     files: [],
     selectedFileIds: [],
     error: '',
   });
-  assert.equal(catalogRequests, 0);
+  assert.equal(catalogRequests, 1);
 
   for (const teams of [
     [{ team_id: '../escape', team_name: 'Unsafe', status: 'running' }],
@@ -421,7 +471,10 @@ test('deleting the last Team rehydrates an authoritative empty context', async (
     phase: 'ready',
     teams: [],
     selectedTeamId: '',
-    catalog: [],
+    catalog: [
+      { id: 'hello-pulse', name: 'Hello Pulse' },
+      { id: 'salesnator', name: 'Salesnator' },
+    ],
     installedAssistants: [],
     selectedAssistantIds: [],
     files: [],

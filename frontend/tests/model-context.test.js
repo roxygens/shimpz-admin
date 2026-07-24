@@ -8,6 +8,7 @@ import {
   configureModelContext,
   loadModelContext,
   modelContext,
+  preloadModelProviders,
   selectTeamBrain,
 } from '../src/lib/modelContext.js';
 
@@ -63,6 +64,37 @@ test('loads one verified provider/model authority for the selected Team', async 
     phase: 'ready', teamId: 'marketing', providers,
     provider: 'openai', model: 'gpt-5.6-terra', ready: true, error: '',
   });
+});
+
+test('provider preload is shared with model hydration and cached across Team switches', async () => {
+  let releaseProviders;
+  const pendingProviders = new Promise((resolve) => { releaseProviders = resolve; });
+  let providerRequests = 0;
+  let inferenceRequests = 0;
+  const fetcher = async (url) => {
+    if (url === '/api/model-providers') {
+      providerRequests += 1;
+      return pendingProviders;
+    }
+    if (url === '/api/teams/marketing/inference' || url === '/api/teams/support/inference') {
+      inferenceRequests += 1;
+      const teamId = url.split('/')[3];
+      return response(200, { team_id: teamId, provider: 'openai', model: 'gpt-5.6-terra' });
+    }
+    throw new Error(`Unexpected request: GET ${url}`);
+  };
+
+  const preload = preloadModelProviders(fetcher);
+  const marketing = loadModelContext(fetcher, 'marketing');
+  assert.equal(providerRequests, 1);
+  assert.equal(inferenceRequests, 1);
+  releaseProviders(response(200, { providers }));
+  await Promise.all([preload, marketing]);
+
+  await loadModelContext(fetcher, 'support');
+  assert.equal(providerRequests, 1);
+  assert.equal(inferenceRequests, 2);
+  assert.equal(get(modelContext).teamId, 'support');
 });
 
 test('keeps Chat locked when the Team has no inference selection', async () => {
@@ -211,12 +243,16 @@ test('late model responses from the previous Team cannot replace current authori
   let releaseOld;
   const delayed = new Promise((resolve) => { releaseOld = resolve; });
   const oldFetcher = async (url) => {
-    if (url === '/api/model-providers') return delayed;
-    return response(200, { team_id: 'marketing', provider: 'openai', model: 'gpt-5.6-terra' });
+    if (url === '/api/model-providers') return response(200, { providers });
+    return delayed;
   };
   const oldLoad = loadModelContext(oldFetcher, 'marketing');
   await loadModelContext(fixtureFetcher('support'), 'support');
-  releaseOld(response(200, { providers }));
+  releaseOld(response(200, {
+    team_id: 'marketing',
+    provider: 'openai',
+    model: 'gpt-5.6-terra',
+  }));
   await oldLoad;
   assert.equal(get(modelContext).teamId, 'support');
   assert.equal(get(modelContext).ready, true);
