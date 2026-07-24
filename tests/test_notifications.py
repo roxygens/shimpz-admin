@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -262,6 +263,52 @@ class NotificationStateTests(unittest.TestCase):
         self.assertEqual(result["sync"]["failed_updates"], 1)
         self.assertEqual(result["notifications"], [])
         self.assertEqual(notifications._read()["cursors"], {"shimpz-cloudflare": 1})
+
+    def test_sync_parallelizes_team_inventories_and_independent_upgrades(self) -> None:
+        team_assistants = {
+            "marketing": "assistant-one",
+            "support": "assistant-two",
+        }
+        inventory_barrier = threading.Barrier(2)
+        upgrade_barrier = threading.Barrier(2)
+        inventory_threads: set[int] = set()
+        upgrade_threads: set[int] = set()
+        calls: dict[str, int] = {}
+        guard = threading.Lock()
+
+        def list_installed(team_id: str):
+            with guard:
+                calls[team_id] = calls.get(team_id, 0) + 1
+                call_number = calls[team_id]
+                if call_number == 1:
+                    inventory_threads.add(threading.get_ident())
+            assistant_id = team_assistants[team_id]
+            if call_number == 1:
+                inventory_barrier.wait(timeout=2)
+                return _installed(**{assistant_id: "outdated"})
+            return _installed(**{assistant_id: "running"})
+
+        def install(team_id: str, payload: dict[str, str]):
+            self.assertEqual(payload, {"assistant": team_assistants[team_id]})
+            with guard:
+                upgrade_threads.add(threading.get_ident())
+            upgrade_barrier.wait(timeout=2)
+            return _install_response(team_assistants[team_id])
+
+        feed = _feed(*(_release(assistant_id, 1) for assistant_id in team_assistants.values()))
+        with (
+            mock.patch.object(notifications, "_fetch_feed", return_value=("fresh", feed, '"v1"')),
+            mock.patch.object(notifications.teams, "list_teams", return_value=_teams(*team_assistants)),
+            mock.patch.object(notifications.teams, "list_installed_assistants", side_effect=list_installed),
+            mock.patch.object(notifications.teams, "install_assistant", side_effect=install),
+        ):
+            result = notifications.sync()
+
+        self.assertEqual(len(inventory_threads), 2)
+        self.assertEqual(len(upgrade_threads), 2)
+        self.assertEqual(calls, {"marketing": 2, "support": 2})
+        self.assertEqual(result["sync"]["updated_assistants"], 2)
+        self.assertEqual(result["sync"]["failed_updates"], 0)
 
     def test_feed_cannot_supply_a_digest_or_expand_the_update_request(self) -> None:
         unsafe = _release("shimpz-cloudflare", 1)

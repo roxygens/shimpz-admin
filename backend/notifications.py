@@ -16,6 +16,7 @@ import os
 import re
 import stat
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -40,6 +41,7 @@ MAX_HEADLINE_BYTES = 160
 MAX_CHANGELOG_BYTES = 32 * 1024
 MAX_ETAG_CHARS = 256
 MAX_SEQUENCE = (1 << 63) - 1
+MAX_SYNC_WORKERS = 8
 
 _TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _NOTIFICATION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -509,8 +511,18 @@ def _resolve_feed(state: dict[str, object]) -> tuple[str, dict[str, object], str
     return "ok", feed, etag if isinstance(etag, str) else None
 
 
+def _parallel_calls(function, arguments: list[tuple]) -> list:
+    if len(arguments) < 2:
+        return [function(*items) for items in arguments]
+    with ThreadPoolExecutor(max_workers=min(MAX_SYNC_WORKERS, len(arguments))) as executor:
+        futures = [executor.submit(function, *items) for items in arguments]
+        return [future.result() for future in futures]
+
+
 def _inventories() -> dict[str, dict[str, str]]:
-    return {team_id: _installed(teams.list_installed_assistants(team_id)) for team_id in _team_ids(teams.list_teams())}
+    team_ids = _team_ids(teams.list_teams())
+    responses = _parallel_calls(teams.list_installed_assistants, [(team_id,) for team_id in team_ids])
+    return {team_id: _installed(response) for team_id, response in zip(team_ids, responses, strict=True)}
 
 
 def _inventory_failure(
@@ -539,19 +551,22 @@ def _inventory_failure(
 def _upgrade_outdated(
     inventories: dict[str, dict[str, str]],
 ) -> tuple[set[str], set[tuple[str, str]], int]:
-    had_outdated: set[str] = set()
+    outdated = sorted(
+        (team_id, assistant_id)
+        for team_id, inventory in inventories.items()
+        for assistant_id, status in inventory.items()
+        if status == "outdated"
+    )
+    had_outdated = {assistant_id for _team_id, assistant_id in outdated}
     successful: set[tuple[str, str]] = set()
     failed = 0
-    for team_id, inventory in inventories.items():
-        for assistant_id, status in inventory.items():
-            if status != "outdated":
-                continue
-            had_outdated.add(assistant_id)
-            if _upgrade(team_id, assistant_id):
-                successful.add((team_id, assistant_id))
-                inventory[assistant_id] = "running"
-            else:
-                failed += 1
+    results = _parallel_calls(_upgrade, outdated)
+    for (team_id, assistant_id), updated in zip(outdated, results, strict=True):
+        if updated:
+            successful.add((team_id, assistant_id))
+            inventories[team_id][assistant_id] = "running"
+        else:
+            failed += 1
     return had_outdated, successful, failed
 
 
