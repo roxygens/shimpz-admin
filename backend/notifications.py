@@ -7,6 +7,7 @@ build-pinned Assistant registry and are requested only by canonical Assistant id
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import http.client
 import json
@@ -16,6 +17,7 @@ import re
 import stat
 import threading
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -51,6 +53,16 @@ _RUNTIME_STATUSES = frozenset({"created", "restarting", "running", "removing", "
 
 _STORE_LOCK = threading.RLock()
 _SYNC_LOCK = threading.Lock()
+
+
+@dataclass(frozen=True)
+class _StateCache:
+    path: Path
+    identity: tuple[int, int, int, int, int, int] | None
+    state: dict[str, object]
+
+
+_state_cache: _StateCache | None = None
 
 
 class NotificationStoreError(RuntimeError):
@@ -251,26 +263,47 @@ def _validate_state(value: object) -> dict[str, object]:
     }
 
 
-def _read_unlocked() -> dict[str, object]:
-    if not STORE_PATH.exists():
-        return _default_state()
+def _store_identity(path: Path) -> tuple[int, int, int, int, int, int] | None:
     try:
-        info = STORE_PATH.lstat()
-        if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > MAX_STORE_BYTES:
-            raise NotificationStoreError("notification store has unsafe metadata")
-        raw = STORE_PATH.read_bytes()
-        if len(raw) > MAX_STORE_BYTES:
-            raise NotificationStoreError("notification store is too large")
-        document = json.loads(raw)
-        state = _validate_state(document)
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > MAX_STORE_BYTES:
+        raise NotificationStoreError("notification store has unsafe metadata")
+    return info.st_dev, info.st_ino, info.st_mtime_ns, info.st_ctime_ns, info.st_size, info.st_mode
+
+
+def _read_store_bytes(path: Path) -> bytes:
+    return path.read_bytes()
+
+
+def _read_unlocked() -> dict[str, object]:
+    global _state_cache
+    path = STORE_PATH
+    try:
+        identity = _store_identity(path)
+        if _state_cache is not None and (_state_cache.path, _state_cache.identity) == (path, identity):
+            return copy.deepcopy(_state_cache.state)
+        if identity is None:
+            state = _default_state()
+        else:
+            raw = _read_store_bytes(path)
+            if len(raw) > MAX_STORE_BYTES:
+                raise NotificationStoreError("notification store is too large")
+            if _store_identity(path) != identity:
+                raise NotificationStoreError("notification store changed while reading")
+            document = json.loads(raw)
+            state = _validate_state(document)
     except NotificationStoreError:
         raise
     except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError, teams.TeamRequestError) as exc:
         raise NotificationStoreError("notification store is corrupt; refusing to continue") from exc
-    return state
+    _state_cache = _StateCache(path, identity, state)
+    return copy.deepcopy(state)
 
 
 def _write_unlocked(state: dict[str, object]) -> None:
+    global _state_cache
     try:
         canonical = _validate_state(state)
         payload = json.dumps(
@@ -299,6 +332,7 @@ def _write_unlocked(state: dict[str, object]) -> None:
         os.close(fd)
         fd = -1
         temporary.replace(STORE_PATH)
+        _state_cache = _StateCache(STORE_PATH, _store_identity(STORE_PATH), canonical)
     except OSError as exc:
         raise NotificationStoreError("notification store could not be written") from exc
     finally:

@@ -71,6 +71,8 @@ class NotificationStateTests(unittest.TestCase):
         self.previous_store = notifications.STORE_PATH
         notifications.STORE_PATH = Path(self.tempdir.name) / "notifications.json"
         self.addCleanup(setattr, notifications, "STORE_PATH", self.previous_store)
+        with notifications._STORE_LOCK:
+            notifications._state_cache = None
 
     def _sync_mocks(
         self,
@@ -394,6 +396,43 @@ class NotificationStateTests(unittest.TestCase):
         notifications.STORE_PATH.write_text("not json", encoding="utf-8")
         with self.assertRaises(notifications.NotificationStoreError):
             notifications.list_notifications()
+
+    def test_validated_store_is_read_once_until_file_identity_changes(self) -> None:
+        with notifications._STORE_LOCK:
+            notifications._write_unlocked(notifications._default_state())
+            notifications._state_cache = None
+
+        with mock.patch.object(
+            notifications,
+            "_read_store_bytes",
+            wraps=notifications._read_store_bytes,
+        ) as read_store:
+            first = notifications._read()
+            first["etag"] = "caller-mutation"
+            self.assertIsNone(notifications._read()["etag"])
+            self.assertEqual(read_store.call_count, 1)
+
+            rotated = notifications._default_state()
+            rotated["etag"] = '"rotated"'
+            notifications.STORE_PATH.write_text(
+                json.dumps(rotated, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            self.assertEqual(notifications._read()["etag"], '"rotated"')
+
+        self.assertEqual(read_store.call_count, 2)
+
+    def test_atomic_store_write_refreshes_cache_without_a_followup_read(self) -> None:
+        with mock.patch.object(
+            notifications,
+            "_read_store_bytes",
+            wraps=notifications._read_store_bytes,
+        ) as read_store:
+            with notifications._STORE_LOCK:
+                notifications._write_unlocked(notifications._default_state())
+            self.assertEqual(notifications._read(), notifications._default_state())
+
+        read_store.assert_not_called()
 
 
 async def _asgi_request(admin_app, method: str, path: str, *, token: str = ""):
