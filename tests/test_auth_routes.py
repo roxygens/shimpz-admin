@@ -103,16 +103,45 @@ class AuthRouteTests(unittest.TestCase):
         self.assertFalse(self.admin_app.adminstore.is_initialized())
 
     def test_retired_environment_does_not_change_password_setup(self) -> None:
-        response = asyncio.run(
-            self.admin_app.admin_setup(
-                self._request("/api/admin/setup"),
-                {"password": "correct horse battery staple"},
+        password = "correct horse battery staple"
+        with mock.patch.object(self.admin_app.asyncio, "to_thread", wraps=asyncio.to_thread) as to_thread:
+            response = asyncio.run(
+                self.admin_app.admin_setup(
+                    self._request("/api/admin/setup"),
+                    {"password": password},
+                )
             )
-        )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("set-cookie", response.headers)
         self.assertTrue(self.admin_app.adminstore.is_initialized())
+        to_thread.assert_awaited_once_with(self.admin_app.adminstore.set_password, password)
+
+    def test_login_verifies_the_password_off_the_event_loop(self) -> None:
+        password = "correct horse battery staple"
+        asyncio.run(
+            self.admin_app.admin_setup(
+                self._request("/api/admin/setup"),
+                {"password": password},
+            )
+        )
+        record = self.admin_app.adminstore.get()
+
+        with mock.patch.object(self.admin_app.asyncio, "to_thread", wraps=asyncio.to_thread) as to_thread:
+            response = asyncio.run(
+                self.admin_app.login(
+                    self._request("/api/login"),
+                    {"password": password},
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        to_thread.assert_awaited_once_with(
+            self.admin_app.auth.verify_password,
+            password,
+            record["salt"],
+            record["password_hash"],
+        )
 
 
 if __name__ == "__main__":

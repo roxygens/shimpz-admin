@@ -46,6 +46,7 @@ OAUTH_COOKIE = "shimpz_oauth_binding"
 OAUTH_COOKIE_PATH = "/api/oauth/cloudflare"
 OAUTH_COOKIE_TTL = 300
 OAUTH_START_PATH = "/api/oauth/cloudflare/start"
+_ADMIN_SETUP_LOCK = asyncio.Lock()
 
 
 def _configured_loopback_port() -> int:
@@ -162,7 +163,13 @@ async def login(request: Request, payload: dict):
     if not adminstore.is_initialized():
         raise HTTPException(status_code=409, detail="no admin password set yet — create one first")
     rec = adminstore.get()
-    if not auth.verify_password(str(payload.get("password", "")), rec.get("salt", ""), rec.get("password_hash", "")):
+    password_ok = await asyncio.to_thread(
+        auth.verify_password,
+        str(payload.get("password", "")),
+        rec.get("salt", ""),
+        rec.get("password_hash", ""),
+    )
+    if not password_ok:
         log.info("login failed")  # never the password
         raise HTTPException(status_code=401, detail="wrong password")
     resp = JSONResponse({"ok": True})
@@ -184,12 +191,13 @@ async def logout(request: Request):
 
 @app.post("/api/admin/setup")
 async def admin_setup(request: Request, payload: dict):
-    if adminstore.is_initialized():
-        raise HTTPException(status_code=409, detail="admin password already set")
-    password = str(payload.get("password", ""))
-    if len(password) < MIN_PASSWORD_LEN:
-        raise HTTPException(status_code=400, detail=f"password must be at least {MIN_PASSWORD_LEN} characters")
-    adminstore.set_password(password)
+    async with _ADMIN_SETUP_LOCK:
+        if adminstore.is_initialized():
+            raise HTTPException(status_code=409, detail="admin password already set")
+        password = str(payload.get("password", ""))
+        if len(password) < MIN_PASSWORD_LEN:
+            raise HTTPException(status_code=400, detail=f"password must be at least {MIN_PASSWORD_LEN} characters")
+        await asyncio.to_thread(adminstore.set_password, password)
     resp = JSONResponse({"ok": True})
     _set_session(resp, request, auth.issue_session(adminstore.get()["session_secret"]))
     log.info("admin password created")
