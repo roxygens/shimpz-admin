@@ -6,6 +6,7 @@ import http.client
 import json
 import logging
 import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -30,6 +31,42 @@ class TeamRequestError(ValueError):
 class DriverResponse:
     status: int
     body: dict[str, object]
+
+
+@dataclass(frozen=True)
+class _TokenCache:
+    path: Path
+    identity: tuple[int, int, int, int]
+    token: str
+
+
+_token_cache_lock = threading.Lock()
+_token_cache: _TokenCache | None = None
+
+
+def _token_identity(path: Path) -> tuple[int, int, int, int]:
+    stat = path.stat()
+    return stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_size
+
+
+def _read_token_file(path: Path) -> str:
+    return path.read_text(encoding="utf-8").strip()
+
+
+def _driver_token() -> str:
+    global _token_cache
+    path = Path(TOKEN_FILE)
+    identity = _token_identity(path)
+    with _token_cache_lock:
+        if _token_cache is not None and (_token_cache.path, _token_cache.identity) == (path, identity):
+            return _token_cache.token
+        token = _read_token_file(path)
+        if not token:
+            raise OSError("empty team-driver bearer")
+        if _token_identity(path) != identity:
+            raise OSError("team-driver bearer changed while reading")
+        _token_cache = _TokenCache(path, identity, token)
+        return token
 
 
 def _encode_payload(payload: object | None, *, max_bytes: int = MAX_JSON_BODY_BYTES) -> bytes | None:
@@ -115,9 +152,7 @@ def _call(
     connection = None
     try:
         host, port = _endpoint()
-        token = Path(TOKEN_FILE).read_text(encoding="utf-8").strip()
-        if not token:
-            raise OSError("empty team-driver bearer")
+        token = _driver_token()
         headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
         if body is not None:
             headers["Content-Type"] = "application/json"
@@ -134,6 +169,9 @@ def _call(
             # input, never enter a Team payload, and are never included in this module's logs.
             headers["X-Shimpz-Model-Provider"] = provider
             headers["X-Shimpz-Model-Api-Key"] = api_key
+        # Deliberately request-scoped: Admin calls can run concurrently, while a shared HTTP/1.1
+        # socket would require serialization and could retain an authenticated connection across
+        # bearer rotation. The local bridge avoids a TLS handshake, so isolation wins over pooling.
         connection = http.client.HTTPConnection(host, port, timeout=timeout)
         connection.request(method, path, body=body, headers=headers)
         response = connection.getresponse()
