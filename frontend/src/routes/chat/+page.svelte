@@ -190,14 +190,7 @@
     return copy.requestFailed;
   }
 
-  function closeSocket() {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = undefined;
-    }
-    const current = socket;
-    socket = null;
-    socketReady = false;
+  function resetChallengeState({ includeInventory = false } = {}) {
     secretChallenge = undefined;
     secretsDialogOpen = false;
     approvalChallenge = undefined;
@@ -210,6 +203,23 @@
     rotationOpen = false;
     rotationAssistant = undefined;
     approvalsReady = false;
+    if (includeInventory) {
+      accounts = [];
+      secretInventory = [];
+      rememberedApprovals = [];
+      approvalsLoading = false;
+    }
+  }
+
+  function closeSocket() {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = undefined;
+    }
+    const current = socket;
+    socket = null;
+    socketReady = false;
+    resetChallengeState();
     current?.close(1000, 'Team changed');
   }
 
@@ -347,14 +357,7 @@
         socketReady = false;
         busy = false;
         stopping = false;
-        secretChallenge = undefined;
-        secretsDialogOpen = false;
-        approvalChallenge = undefined;
-        approvalDialogOpen = false;
-        accountChallenge = undefined;
-        accountsDialogOpen = false;
-        accountWorking = '';
-        secretInventoryReady = false;
+        resetChallengeState();
         setError(copy.protocolError);
         active.close(1002, 'Invalid chat event');
         return;
@@ -362,13 +365,7 @@
 
       busy = false;
       stopping = false;
-      secretChallenge = undefined;
-      secretsDialogOpen = false;
-      approvalChallenge = undefined;
-      approvalDialogOpen = false;
-      accountChallenge = undefined;
-      accountsDialogOpen = false;
-      accountWorking = '';
+      resetChallengeState();
       if (incoming.type === 'done') {
         turns = [...turns, { role: 'assistant', text: incoming.reply, author: incoming.team_name }];
         void revealLatestTurn();
@@ -388,15 +385,7 @@
       socketReady = false;
       stopping = false;
       if (busy) busy = false;
-      secretChallenge = undefined;
-      secretsDialogOpen = false;
-      approvalChallenge = undefined;
-      approvalDialogOpen = false;
-      accountChallenge = undefined;
-      accountsDialogOpen = false;
-      accountsReady = false;
-      accountWorking = '';
-      secretInventoryReady = false;
+      resetChallengeState();
       setError(copy.disconnected);
       scheduleReconnect(expectedTeamId);
     };
@@ -414,22 +403,7 @@
     helpOpen = false;
     secretsOpen = false;
     accountsOpen = false;
-    secretsDialogOpen = false;
-    secretChallenge = undefined;
-    approvalDialogOpen = false;
-    approvalChallenge = undefined;
-    accountsDialogOpen = false;
-    accountChallenge = undefined;
-    accounts = [];
-    accountsReady = false;
-    accountWorking = '';
-    secretInventory = [];
-    secretInventoryReady = false;
-    rotationOpen = false;
-    rotationAssistant = undefined;
-    rememberedApprovals = [];
-    approvalsReady = false;
-    approvalsLoading = false;
+    resetChallengeState({ includeInventory: true });
     clearError();
     if (nextTeamId) connectSocket(nextTeamId);
   }
