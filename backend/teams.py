@@ -13,6 +13,7 @@ import re
 
 import accounts_oauth
 import chat_payloads
+import chat_ws_common
 import driver_client
 import modelproviders
 import team_driver_contract
@@ -33,7 +34,6 @@ MAX_FILE_UPLOAD_BYTES = team_driver_contract.MAX_FILE_UPLOAD_BYTES
 
 ASSISTANT_HELP_LOCALES = frozenset({"en", "pt", "es", "zh", "fr", "de", "ja", "ar"})
 _FILE_ID_RE = team_driver_contract.FILE_ID_RE
-_TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 MAX_TEAMS = 128
 MAX_TEAM_NAME_CHARS = team_driver_contract.MAX_TEAM_NAME_CHARS
 
@@ -41,12 +41,6 @@ MAX_TEAM_NAME_CHARS = team_driver_contract.MAX_TEAM_NAME_CHARS
 def to_team_id(team_name: object) -> str:
     """A Team name -> the Docker/Postgres-safe id used by team-driver."""
     return re.sub(r"[^a-z0-9_]+", "_", str(team_name).lower()).strip("_")[:40]
-
-
-def _canonical_id(value: object, *, field: str, pattern: re.Pattern[str], maximum: int) -> str:
-    if not isinstance(value, str) or not value or len(value) > maximum or not pattern.fullmatch(value):
-        raise TeamRequestError(f"{field} must be a canonical lowercase identifier")
-    return value
 
 
 def canonical_team_id(value: object) -> str:
@@ -115,7 +109,7 @@ def _authoritative_team_name(response: DriverResponse, team_id: str) -> DriverRe
         if "trace_id" in response.body:
             allowed_envelope.add("trace_id")
             trace_id = response.body["trace_id"]
-            if not isinstance(trace_id, str) or _TRACE_ID_RE.fullmatch(trace_id) is None:
+            if not isinstance(trace_id, str) or chat_ws_common.HEX_ID_RE.fullmatch(trace_id) is None:
                 raise ValueError("invalid trace id")
         if set(response.body) != allowed_envelope:
             raise ValueError("unexpected inventory fields")
@@ -178,7 +172,7 @@ def _project_inference_response(
             or provider != selected_provider
             or model != selected_model
             or not isinstance(trace_id, str)
-            or _TRACE_ID_RE.fullmatch(trace_id) is None
+            or chat_ws_common.HEX_ID_RE.fullmatch(trace_id) is None
         ):
             raise ValueError("non-canonical inference metadata")
         if expected is not None and (selected_provider, selected_model) != expected:
@@ -423,7 +417,7 @@ def _files_path(team_id: object, file_id: object | None = None) -> str:
     base = f"/v1/teams/{canonical_id}/files"
     if file_id is None:
         return base
-    return f"{base}/{_canonical_id(file_id, field='file id', pattern=_FILE_ID_RE, maximum=32)}"
+    return f"{base}/{chat_payloads._canonical_id(file_id, field='file id', pattern=_FILE_ID_RE, maximum=32)}"
 
 
 def _project_storage_response(
@@ -481,7 +475,7 @@ def list_files(team_id: object) -> DriverResponse:
 
 def delete_file(team_id: object, file_id: object) -> DriverResponse:
     canonical_id = canonical_team_id(team_id)
-    canonical_file_id = _canonical_id(file_id, field="file id", pattern=_FILE_ID_RE, maximum=32)
+    canonical_file_id = chat_payloads._canonical_id(file_id, field="file id", pattern=_FILE_ID_RE, maximum=32)
     response = _call("DELETE", _files_path(canonical_id, canonical_file_id))
     return _project_storage_response(
         response,

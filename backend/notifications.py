@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+import chat_ws_common
 import teams
 
 log = logging.getLogger("shimpz-admin")
@@ -43,8 +44,6 @@ MAX_ETAG_CHARS = 256
 MAX_SEQUENCE = (1 << 63) - 1
 MAX_SYNC_WORKERS = 8
 
-_TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
-_NOTIFICATION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 _EXECUTABLE_REFERENCE_RE = re.compile(
     r"(?:sha256:[0-9a-f]{64}|\bdocker\s+(?:pull|run|compose)\b|"
@@ -204,7 +203,7 @@ def _canonical_notification(value: object) -> dict[str, object]:
     notification_id = value["id"]
     if (
         not isinstance(notification_id, str)
-        or _NOTIFICATION_ID_RE.fullmatch(notification_id) is None
+        or chat_ws_common.HEX_ID_RE.fullmatch(notification_id) is None
         or notification_id != _notification_id(str(release["assistant_id"]), int(release["sequence"]))
     ):
         raise ValueError("invalid notification id")
@@ -417,7 +416,7 @@ def _allowed_envelope(body: object, field: str) -> object:
     if "trace_id" in body:
         allowed.add("trace_id")
         trace_id = body["trace_id"]
-        if not isinstance(trace_id, str) or _TRACE_ID_RE.fullmatch(trace_id) is None:
+        if not isinstance(trace_id, str) or chat_ws_common.HEX_ID_RE.fullmatch(trace_id) is None:
             raise ValueError("invalid controller trace id")
     if set(body) != allowed:
         raise ValueError("invalid controller response")
@@ -474,7 +473,7 @@ def _upgrade(team_id: str, assistant_id: str) -> bool:
         if "trace_id" in response.body:
             allowed.add("trace_id")
             trace_id = response.body["trace_id"]
-            if not isinstance(trace_id, str) or _TRACE_ID_RE.fullmatch(trace_id) is None:
+            if not isinstance(trace_id, str) or chat_ws_common.HEX_ID_RE.fullmatch(trace_id) is None:
                 raise ValueError("invalid trace id")
         if (
             set(response.body) != allowed
@@ -678,7 +677,7 @@ def sync() -> dict[str, object]:
 
 
 def mark_read(notification_id: object) -> dict[str, object]:
-    if not isinstance(notification_id, str) or _NOTIFICATION_ID_RE.fullmatch(notification_id) is None:
+    if not isinstance(notification_id, str) or chat_ws_common.HEX_ID_RE.fullmatch(notification_id) is None:
         raise KeyError("notification not found")
     with _STORE_LOCK:
         state = _read_unlocked()

@@ -23,7 +23,6 @@ import teams
 _MISSING_RUNTIME_STATUSES = frozenset({HTTPStatus.NOT_FOUND, HTTPStatus.METHOD_NOT_ALLOWED, HTTPStatus.NOT_IMPLEMENTED})
 MAX_REPLY_CHARS = 64 * 1024
 MAX_TEAM_NAME_CHARS = 80
-_TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _ERROR_CODE_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _TURN_RESPONSE_FIELDS = frozenset({"team_id", "team_name", "reply", "trace_id"})
 _STOP_RESPONSE_FIELDS = frozenset({"team_id", "requested", "accepted", "confirmed", "forced_restart", "trace_id"})
@@ -204,18 +203,6 @@ def _model_credential(team_id: str) -> tuple[str, str] | teams.DriverResponse:
     return provider, api_key
 
 
-def _clean_public_text(value: object, maximum: int) -> str:
-    if (
-        not isinstance(value, str)
-        or not value
-        or value != value.strip()
-        or len(value) > maximum
-        or not value.isprintable()
-    ):
-        raise ValueError("invalid public text")
-    return value
-
-
 def _challenge_envelope(
     response: teams.DriverResponse,
     team_id: str,
@@ -262,7 +249,7 @@ def _project_challenge(response: teams.DriverResponse, team_id: str) -> teams.Dr
             if assistant_id in seen_assistants:
                 raise ValueError("duplicate Assistant")
             seen_assistants.add(assistant_id)
-            assistant_name = _clean_public_text(raw["assistant_name"], MAX_SECRET_LABEL_CHARS)
+            assistant_name = chat_ws_common.public_text(raw["assistant_name"], MAX_SECRET_LABEL_CHARS)
             power_ids = raw["power_ids"]
             raw_secrets = raw["secrets"]
             if not isinstance(power_ids, list) or not power_ids or not isinstance(raw_secrets, list) or not raw_secrets:
@@ -282,8 +269,8 @@ def _project_challenge(response: teams.DriverResponse, team_id: str) -> teams.Dr
                 projected_secrets.append(
                     {
                         "id": secret_id,
-                        "name": _clean_public_text(secret["name"], MAX_SECRET_LABEL_CHARS),
-                        "summary": _clean_public_text(secret["summary"], MAX_SECRET_SUMMARY_CHARS),
+                        "name": chat_ws_common.public_text(secret["name"], MAX_SECRET_LABEL_CHARS),
+                        "summary": chat_ws_common.public_text(secret["summary"], MAX_SECRET_SUMMARY_CHARS),
                     }
                 )
             total_secrets += len(projected_secrets)
@@ -340,14 +327,14 @@ def _project_approval_challenge(response: teams.DriverResponse, team_id: str) ->
                 raise ValueError("invalid approval policy")
             docs = raw["docs"]
             if docs is not None:
-                docs = _clean_public_text(docs, 2048)
+                docs = chat_ws_common.public_text(docs, 2048)
             requirements.append(
                 {
                     "assistant_id": assistant_id,
-                    "assistant_name": _clean_public_text(raw["assistant_name"], MAX_SECRET_LABEL_CHARS),
+                    "assistant_name": chat_ws_common.public_text(raw["assistant_name"], MAX_SECRET_LABEL_CHARS),
                     "power_id": power_id,
-                    "title": _clean_public_text(raw["title"], MAX_SECRET_LABEL_CHARS),
-                    "summary": _clean_public_text(raw["summary"], 240),
+                    "title": chat_ws_common.public_text(raw["title"], MAX_SECRET_LABEL_CHARS),
+                    "summary": chat_ws_common.public_text(raw["summary"], 240),
                     "docs": docs,
                     "approval": raw["approval"],
                 }
@@ -400,11 +387,11 @@ def _project_input_challenge(response: teams.DriverResponse, team_id: str) -> te
             raise ValueError("invalid primitive input options")
         docs = request["docs"]
         if docs is not None:
-            docs = _clean_public_text(docs, 2048)
+            docs = chat_ws_common.public_text(docs, 2048)
         projected = {
             "type": request_type,
-            "title": _clean_public_text(request["title"], 80),
-            "summary": _clean_public_text(request["summary"], 240),
+            "title": chat_ws_common.public_text(request["title"], 80),
+            "summary": chat_ws_common.public_text(request["summary"], 240),
             "docs": docs,
             "options": list(options),
         }
@@ -472,7 +459,7 @@ def _project_account_challenge(response: teams.DriverResponse, team_id: str) -> 
                 or not 1 <= len(raw_powers) <= MAX_ACCOUNT_POWERS
             ):
                 raise ValueError("invalid account capabilities")
-            scopes = [_clean_public_text(scope, MAX_ACCOUNT_SCOPE_CHARS) for scope in raw_scopes]
+            scopes = [chat_ws_common.public_text(scope, MAX_ACCOUNT_SCOPE_CHARS) for scope in raw_scopes]
             if len(set(scopes)) != len(scopes):
                 raise ValueError("duplicate account scope")
 
@@ -488,18 +475,18 @@ def _project_account_challenge(response: teams.DriverResponse, team_id: str) -> 
                 powers.append(
                     {
                         "id": power_id,
-                        "name": _clean_public_text(raw_power["name"], MAX_SECRET_LABEL_CHARS),
-                        "summary": _clean_public_text(raw_power["summary"], MAX_SECRET_SUMMARY_CHARS),
+                        "name": chat_ws_common.public_text(raw_power["name"], MAX_SECRET_LABEL_CHARS),
+                        "summary": chat_ws_common.public_text(raw_power["summary"], MAX_SECRET_SUMMARY_CHARS),
                     }
                 )
             requirements.append(
                 {
                     "assistant_id": assistant_id,
-                    "assistant_name": _clean_public_text(raw["assistant_name"], MAX_SECRET_LABEL_CHARS),
+                    "assistant_name": chat_ws_common.public_text(raw["assistant_name"], MAX_SECRET_LABEL_CHARS),
                     "account_id": account_id,
                     "provider": teams.canonical_assistant_id(raw["provider"]),
-                    "name": _clean_public_text(raw["name"], MAX_SECRET_LABEL_CHARS),
-                    "summary": _clean_public_text(raw["summary"], MAX_SECRET_SUMMARY_CHARS),
+                    "name": chat_ws_common.public_text(raw["name"], MAX_SECRET_LABEL_CHARS),
+                    "summary": chat_ws_common.public_text(raw["summary"], MAX_SECRET_SUMMARY_CHARS),
                     "scopes": scopes,
                     "powers": powers,
                 }
@@ -554,8 +541,8 @@ def _project_inventory_secret(secret: object, seen_secrets: set[str]) -> dict[st
     seen_secrets.add(secret_id)
     return {
         "id": secret_id,
-        "name": _clean_public_text(secret["name"], MAX_SECRET_LABEL_CHARS),
-        "summary": _clean_public_text(secret["summary"], MAX_SECRET_SUMMARY_CHARS),
+        "name": chat_ws_common.public_text(secret["name"], MAX_SECRET_LABEL_CHARS),
+        "summary": chat_ws_common.public_text(secret["summary"], MAX_SECRET_SUMMARY_CHARS),
         "configured": configured,
         "mask": mask,
     }
@@ -591,7 +578,7 @@ def _project_inventory(response: teams.DriverResponse, team_id: str) -> teams.Dr
             assistants.append(
                 {
                     "id": assistant_id,
-                    "name": _clean_public_text(raw["name"], MAX_SECRET_LABEL_CHARS),
+                    "name": chat_ws_common.public_text(raw["name"], MAX_SECRET_LABEL_CHARS),
                     "secrets": secrets,
                 }
             )
@@ -836,7 +823,7 @@ def _valid_team_name(value: object) -> bool:
 
 
 def _valid_trace_id(value: object) -> bool:
-    return isinstance(value, str) and _TRACE_ID_RE.fullmatch(value) is not None
+    return isinstance(value, str) and chat_ws_common.HEX_ID_RE.fullmatch(value) is not None
 
 
 def stop(team_id: object) -> teams.DriverResponse:

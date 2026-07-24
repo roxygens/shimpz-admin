@@ -5,11 +5,11 @@ from __future__ import annotations
 import math
 import re
 
+import chat_ws_common
 import team_driver_contract
 from driver_client import TeamRequestError
 
 _FILE_ID_RE = team_driver_contract.FILE_ID_RE
-_CHALLENGE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 MAX_CHAT_MESSAGE_CHARS = team_driver_contract.MAX_CHAT_MESSAGE_CHARS
 MAX_CHAT_FILES = team_driver_contract.MAX_CHAT_FILES
 MAX_CHAT_ASSISTANTS = team_driver_contract.MAX_CHAT_ASSISTANTS
@@ -25,7 +25,7 @@ def canonical_assistant_id(value: object) -> str:
 
 
 def canonical_challenge_id(value: object) -> str:
-    if not isinstance(value, str) or _CHALLENGE_ID_RE.fullmatch(value) is None:
+    if not isinstance(value, str) or chat_ws_common.CHALLENGE_ID_RE.fullmatch(value) is None:
         raise TeamRequestError("OAuth challenge is invalid")
     return value
 
@@ -70,7 +70,7 @@ def canonical_secret_submission(payload: object) -> dict[str, object]:
         raise TeamRequestError("secret submission requires challenge_id and values")
     challenge_id = payload["challenge_id"]
     values = payload["values"]
-    if not isinstance(challenge_id, str) or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None:
+    if not isinstance(challenge_id, str) or chat_ws_common.CHALLENGE_ID_RE.fullmatch(challenge_id) is None:
         raise TeamRequestError("secret challenge is invalid")
     if not isinstance(values, list) or not 1 <= len(values) <= MAX_SECRET_SUBMISSIONS:
         raise TeamRequestError("secret values exceed their fixed limit")
@@ -133,7 +133,7 @@ def canonical_approval_submission(payload: object) -> dict[str, object]:
     if not isinstance(payload, dict) or set(payload) != {"challenge_id", "approved"}:
         raise TeamRequestError("approval submission requires challenge_id and approved")
     challenge_id = payload["challenge_id"]
-    if not isinstance(challenge_id, str) or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None:
+    if not isinstance(challenge_id, str) or chat_ws_common.CHALLENGE_ID_RE.fullmatch(challenge_id) is None:
         raise TeamRequestError("approval challenge is invalid")
     if payload["approved"] is not True:
         raise TeamRequestError("approval must be explicit")
@@ -145,7 +145,7 @@ def canonical_input_submission(payload: object) -> dict[str, object]:
     if not isinstance(payload, dict) or set(payload) != {"challenge_id", "answer"}:
         raise TeamRequestError("input submission requires challenge_id and answer")
     challenge_id = payload["challenge_id"]
-    if not isinstance(challenge_id, str) or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None:
+    if not isinstance(challenge_id, str) or chat_ws_common.CHALLENGE_ID_RE.fullmatch(challenge_id) is None:
         raise TeamRequestError("input challenge is invalid")
     answer = payload["answer"]
     if isinstance(answer, str):

@@ -8,6 +8,7 @@ from datetime import datetime
 from urllib.parse import parse_qsl, urlparse
 
 import chat_payloads
+import chat_ws_common
 import driver_client
 import team_driver_contract
 
@@ -19,7 +20,6 @@ TeamRequestError = driver_client.TeamRequestError
 MAX_ASSISTANT_ACCOUNTS = 512
 MAX_ACCOUNT_SCOPES = 32
 
-_TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _OAUTH_BINDING_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")
 _OAUTH_CLAIM_RE = re.compile(r"^[0-9a-f]{64}$")
 _OAUTH_SCOPE_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
@@ -46,18 +46,6 @@ def canonical_oauth_claim(value: object) -> str:
     return value
 
 
-def _public_text(value: object, *, field: str, maximum: int) -> str:
-    if (
-        not isinstance(value, str)
-        or not value
-        or value != value.strip()
-        or len(value) > maximum
-        or any(ord(character) < 32 or ord(character) == 127 for character in value)
-    ):
-        raise ValueError(f"invalid {field}")
-    return value
-
-
 def _account_scopes(value: object) -> list[str]:
     if not isinstance(value, list) or not 1 <= len(value) <= MAX_ACCOUNT_SCOPES:
         raise ValueError("invalid OAuth scopes")
@@ -76,12 +64,12 @@ def _account_identity(value: object) -> dict[str, str | None] | None:
         return None
     if not isinstance(value, dict) or set(value) != {"id", "name", "username"}:
         raise ValueError("invalid OAuth account")
-    account_id = _public_text(value["id"], field="OAuth account id", maximum=128)
+    account_id = chat_ws_common.public_text(value["id"], 128, field="OAuth account id")
     result: dict[str, str | None] = {"id": account_id, "name": None, "username": None}
     for field in ("name", "username"):
         item = value[field]
         if item is not None:
-            result[field] = _public_text(item, field=f"OAuth account {field}", maximum=128)
+            result[field] = chat_ws_common.public_text(item, 128, field=f"OAuth account {field}")
     return result
 
 
@@ -108,7 +96,7 @@ def _project_account_inventory(response: DriverResponse, team_id: str) -> Driver
             set(response.body) != {"team_id", "accounts", "trace_id"}
             or response.body["team_id"] != team_id
             or not isinstance(response.body["trace_id"], str)
-            or _TRACE_ID_RE.fullmatch(response.body["trace_id"]) is None
+            or chat_ws_common.HEX_ID_RE.fullmatch(response.body["trace_id"]) is None
         ):
             raise ValueError("invalid Team account envelope")
         raw_accounts = response.body["accounts"]
@@ -142,11 +130,11 @@ def _project_account_inventory(response: DriverResponse, team_id: str) -> Driver
             accounts.append(
                 {
                     "assistant_id": assistant_id,
-                    "assistant_name": _public_text(item["assistant_name"], field="Assistant name", maximum=80),
+                    "assistant_name": chat_ws_common.public_text(item["assistant_name"], 80, field="Assistant name"),
                     "id": account_id,
                     "provider": chat_payloads.canonical_assistant_id(item["provider"]),
-                    "name": _public_text(item["name"], field="account name", maximum=80),
-                    "summary": _public_text(item["summary"], field="account summary", maximum=160),
+                    "name": chat_ws_common.public_text(item["name"], 80, field="account name"),
+                    "summary": chat_ws_common.public_text(item["summary"], 160, field="account summary"),
                     "scopes": _account_scopes(item["scopes"]),
                     "status": status,
                     "account": _account_identity(item["account"]),
@@ -231,7 +219,7 @@ def start_assistant_account_authorization(
         if (
             set(response.body) != {"authorization_url", "trace_id"}
             or not isinstance(response.body["trace_id"], str)
-            or _TRACE_ID_RE.fullmatch(response.body["trace_id"]) is None
+            or chat_ws_common.HEX_ID_RE.fullmatch(response.body["trace_id"]) is None
         ):
             raise ValueError("invalid OAuth authorization response")
         authorization_url = _trusted_cloudflare_authorization_url(response.body["authorization_url"], callback_mode)
@@ -260,7 +248,7 @@ def disconnect_assistant_account(
         or set(response.body) != {"disconnected", "trace_id"}
         or type(response.body["disconnected"]) is not bool
         or not isinstance(response.body["trace_id"], str)
-        or _TRACE_ID_RE.fullmatch(response.body["trace_id"]) is None
+        or chat_ws_common.HEX_ID_RE.fullmatch(response.body["trace_id"]) is None
     ):
         log.warning("team-driver returned an invalid OAuth disconnect response")
         return DriverResponse(502, {"detail": "OAuth disconnect response is invalid."})
@@ -284,7 +272,7 @@ def complete_cloudflare_oauth_callback(*, state: object, claim: object, session_
         if (
             response.body["connected"] is not True
             or not isinstance(response.body["trace_id"], str)
-            or _TRACE_ID_RE.fullmatch(response.body["trace_id"]) is None
+            or chat_ws_common.HEX_ID_RE.fullmatch(response.body["trace_id"]) is None
         ):
             raise ValueError("invalid OAuth callback response")
         body = {

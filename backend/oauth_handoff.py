@@ -23,11 +23,12 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import chat_ws_common
+
 HANDOFF_TTL_SECONDS = 90
 HANDOFF_CAPACITY = 256
 
 _TEAM_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
-_CHALLENGE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _HANDOFF_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -69,7 +70,7 @@ def _team_id(value: object) -> str:
 
 
 def _challenge_id(value: object) -> str:
-    if not isinstance(value, str) or _CHALLENGE_ID_RE.fullmatch(value) is None:
+    if not isinstance(value, str) or chat_ws_common.CHALLENGE_ID_RE.fullmatch(value) is None:
         raise OAuthHandoffError("OAuth challenge is invalid")
     return value
 
