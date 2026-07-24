@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from http import HTTPStatus
 
+import chat_ws_common
 import modelproviders
 import teams
 
@@ -32,7 +33,6 @@ _ACCOUNT_CHALLENGE_RESPONSE_FIELDS = frozenset(
     {"team_id", "status", "turn_id", "challenge_id", "expires_in", "requirements", "trace_id"}
 )
 _INVENTORY_RESPONSE_FIELDS = frozenset({"team_id", "assistants", "trace_id"})
-_CHALLENGE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 MAX_SECRET_REQUIREMENTS = 16
 MAX_SECRETS_PER_CHALLENGE = 64
 MAX_SECRET_LABEL_CHARS = 80
@@ -230,16 +230,10 @@ def _challenge_envelope(
         or not _valid_trace_id(response.body["trace_id"])
     ):
         raise ValueError("invalid challenge identity")
-    challenge_id = response.body["challenge_id"]
-    turn_id = response.body["turn_id"]
-    if (
-        not isinstance(challenge_id, str)
-        or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None
-        or not isinstance(turn_id, str)
-        or _CHALLENGE_ID_RE.fullmatch(turn_id) is None
-    ):
+    identity = chat_ws_common.challenge_identity(response.body, team_id)
+    if identity is None:
         raise ValueError("invalid challenge metadata")
-    return challenge_id, turn_id
+    return identity
 
 
 def _project_challenge(response: teams.DriverResponse, team_id: str) -> teams.DriverResponse:

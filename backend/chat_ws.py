@@ -10,14 +10,11 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import contextlib
-import json
 import os
-import re
-import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from urllib.parse import urlparse
 
+import chat_ws_common
 import localchat
 import teams
 from fastapi import WebSocket, WebSocketDisconnect
@@ -26,43 +23,9 @@ CHAT_SUBPROTOCOL = "shimpz.chat.v3"
 MAX_FRAME_BYTES = 512 * 1024
 MAX_PUBLIC_ERROR_CHARS = 800
 _DEFAULT_ORIGINS = "http://127.0.0.1:7777,http://localhost:7777"
-_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
-
-
-class FrameError(ValueError):
-    def __init__(self, status: int, detail: str, close_code: int = 1007) -> None:
-        super().__init__(detail)
-        self.status = status
-        self.detail = detail
-        self.close_code = close_code
-
-
-class ExecutorSaturatedError(RuntimeError):
-    """The fixed worker and queue budget has no free admission slot."""
-
-
-class BoundedExecutor:
-    """A ThreadPoolExecutor with non-blocking admission in front of its otherwise unbounded queue."""
-
-    def __init__(self, *, workers: int, outstanding: int, name: str) -> None:
-        if workers < 1 or outstanding < workers:
-            raise ValueError("invalid bounded executor capacity")
-        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=workers, thread_name_prefix=name)
-        self._slots = threading.BoundedSemaphore(outstanding)
-
-    def submit(self, function: Callable, /, *args) -> concurrent.futures.Future:
-        if not self._slots.acquire(blocking=False):
-            raise ExecutorSaturatedError("chat worker capacity reached")
-        try:
-            future = self._executor.submit(function, *args)
-        except BaseException:
-            self._slots.release()
-            raise
-        future.add_done_callback(lambda _completed: self._slots.release())
-        return future
-
-    def shutdown(self) -> None:
-        self._executor.shutdown(wait=True, cancel_futures=True)
+FrameError = chat_ws_common.FrameError
+ExecutorSaturatedError = chat_ws_common.ExecutorSaturatedError
+BoundedExecutor = chat_ws_common.BoundedExecutor
 
 
 # Turns and cancellation use separate bounded lanes: a slow provider can never consume the worker
@@ -72,27 +35,7 @@ _STOP_EXECUTOR = BoundedExecutor(workers=2, outstanding=4, name="shimpz-chat-sto
 _SYNC_EXECUTOR = BoundedExecutor(workers=2, outstanding=4, name="shimpz-chat-sync")
 
 
-def canonical_origin(value: str | None) -> str | None:
-    """Return one exact HTTP(S) Origin, preserving an explicitly supplied port."""
-    if not value or value == "null":
-        return None
-    try:
-        parsed = urlparse(value)
-        _ = parsed.port
-    except ValueError:
-        return None
-    if (
-        parsed.scheme.lower() not in {"http", "https"}
-        or not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.path
-        or parsed.params
-        or parsed.query
-        or parsed.fragment
-    ):
-        return None
-    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+canonical_origin = chat_ws_common.canonical_origin
 
 
 def _configured_origins() -> frozenset[str]:
@@ -103,57 +46,24 @@ def _configured_origins() -> frozenset[str]:
 ALLOWED_ORIGINS = _configured_origins()
 
 
-def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate JSON field")
-        result[key] = value
-    return result
-
-
-def _reject_json_constant(_value: str) -> None:
-    raise ValueError("non-finite JSON number")
-
-
 async def receive_bounded_json(websocket: WebSocket) -> dict[str, object]:
     message = await websocket.receive()
     if message["type"] == "websocket.disconnect":
         raise WebSocketDisconnect(message.get("code", 1000))
-    if message["type"] != "websocket.receive":
-        raise FrameError(400, "invalid WebSocket frame")
-
-    text = message.get("text")
-    if text is None or message.get("bytes") is not None:
-        raise FrameError(415, "WebSocket frame must be text JSON", 1003)
-    try:
-        encoded = text.encode("utf-8")
-    except UnicodeError as exc:
-        raise FrameError(400, "WebSocket frame must be UTF-8 JSON") from exc
-    if len(encoded) > MAX_FRAME_BYTES:
-        raise FrameError(413, "WebSocket frame too large", 1009)
-    raw = text
-
-    try:
-        value = json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_reject_json_constant)
-    except json.JSONDecodeError, UnicodeError, ValueError, RecursionError:
-        raise FrameError(400, "WebSocket frame must be valid unique-key JSON") from None
-    if not isinstance(value, dict):
-        raise FrameError(400, "WebSocket JSON must be an object")
-    return value
+    return chat_ws_common.decode_bounded_json_frame(message, MAX_FRAME_BYTES)
 
 
 def _safe_status(value: object, fallback: int = 502) -> int:
-    return value if isinstance(value, int) and not isinstance(value, bool) and 400 <= value <= 599 else fallback
+    return chat_ws_common.safe_status(value, fallback)
 
 
 def _error_terminal(status: object, detail: str = "local chat request failed") -> dict[str, object]:
-    safe_detail = (
-        detail
-        if 0 < len(detail) <= MAX_PUBLIC_ERROR_CHARS and _CONTROL_RE.search(detail) is None
-        else "local chat request failed"
+    return chat_ws_common.error_terminal(
+        status,
+        detail,
+        fallback_detail="local chat request failed",
+        max_detail_chars=MAX_PUBLIC_ERROR_CHARS,
     )
-    return {"type": "error", "status": _safe_status(status), "detail": safe_detail}
 
 
 def _projected_event(
